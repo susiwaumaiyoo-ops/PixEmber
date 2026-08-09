@@ -1,0 +1,68 @@
+Analyzing 2 items...                                            
+
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\screens\home_screen.dart:241:15 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\screens\home_screen.dart:242:15 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\screens\home_screen.dart:319:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\screens\home_screen.dart:336:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\screens\home_screen.dart:337:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\screens\home_screen.dart:338:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\screens\home_screen.dart:364:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\screens\home_screen.dart:365:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\screens\home_screen.dart:366:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\screens\home_screen.dart:371:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\screens\home_screen.dart:372:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\screens\home_screen.dart:407:13 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\screens\home_screen.dart:413:9 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\screens\home_screen.dart:414:9 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\screens\home_screen.dart:415:9 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\screens\home_screen.dart:421:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\screens\home_screen.dart:422:7 - avoid_print
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor instead. This feature was deprecated after v3.31.0-2.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\home_screen.dart:1402:25 - deprecated_member_use
+   info - Unnecessary braces in a string interpolation. Try removing the braces - lib\screens\home_screen.dart:2973:27 - unnecessary_brace_in_string_interps
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext - lib\screens\home_screen.dart:3644:27 - use_build_context_synchronously
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:46:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:47:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:81:9 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:82:9 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:83:9 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:89:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:90:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:116:5 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:118:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:127:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:130:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:131:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:283:9 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:284:9 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:288:5 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:323:9 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:324:9 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:419:9 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:420:9 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:424:5 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:455:9 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:456:9 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:517:5 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:613:5 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:644:5 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:660:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:665:5 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:683:5 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:698:5 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:705:5 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:714:5 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:749:5 - avoid_print
+   info - Angle brackets will be interpreted as HTML. Try using backticks around the content with angle brackets, or try replacing `<` with `&lt;` and `>` with `&gt;` - lib\services\pixiv_api_service.dart:987:19 - unintended_html_in_doc_comment
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:1008:5 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:1009:5 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:1076:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:1077:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:1081:3 - avoid_print
+   info - Angle brackets will be interpreted as HTML. Try using backticks around the content with angle brackets, or try replacing `<` with `&lt;` and `>` with `&gt;` - lib\services\pixiv_api_service.dart:1088:19 - unintended_html_in_doc_comment
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:1109:5 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:1110:5 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:1169:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:1170:7 - avoid_print
+   info - Don't invoke 'print' in production code. Try using a logging framework - lib\services\pixiv_api_service.dart:1174:3 - avoid_print
+
+64 issues found. (ran in 1.8s)

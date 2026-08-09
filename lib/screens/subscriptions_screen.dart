@@ -111,10 +111,11 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
     } catch (e) {
       _showSnackBar('通信エラーが発生しました: $e');
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 

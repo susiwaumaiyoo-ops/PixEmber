@@ -1,0 +1,23 @@
+Analyzing pixiv_viewer...
+
+  error - lib\screens\home_ui_components.dart:484:40 - The argument type 'String' can't be assigned to the parameter type 'int'.  - argument_type_not_assignable
+warning - lib\screens\home_screen_state.dart:121:14 - The value of the field '_isLoadingMore' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:605:26 - The declaration '_getSeriesLengthThreshold' isn't referenced. Try removing the declaration of '_getSeriesLengthThreshold'. - unused_element
+warning - lib\screens\home_screen_state.dart:680:10 - The declaration '_buildFilterSectionTitle' isn't referenced. Try removing the declaration of '_buildFilterSectionTitle'. - unused_element
+warning - lib\screens\home_screen_state.dart:685:10 - The declaration '_buildChoiceChip' isn't referenced. Try removing the declaration of '_buildChoiceChip'. - unused_element
+warning - lib\screens\home_screen_state.dart:832:10 - The declaration '_formatNumber' isn't referenced. Try removing the declaration of '_formatNumber'. - unused_element
+warning - lib\screens\home_screen_state.dart:840:17 - The declaration '_fetchNovelForResume' isn't referenced. Try removing the declaration of '_fetchNovelForResume'. - unused_element
+warning - lib\screens\home_sync_handler.dart:13:16 - The declaration '_initializeDriveSync' isn't referenced. Try removing the declaration of '_initializeDriveSync'. - unused_element
+warning - lib\screens\home_ui_components.dart:482:13 - Unnecessary type check; the result is always 'true'. Try correcting the type check, or removing the type check. - unnecessary_type_check
+warning - lib\screens\home_ui_components.dart:484:51 - The receiver can't be null, so the null-aware operator '?.' is unnecessary. Try replacing the operator '?.' with '.'. - invalid_null_aware_operator
+warning - lib\screens\home_ui_components.dart:1297:10 - The declaration '_formatNumber' isn't referenced. Try removing the declaration of '_formatNumber'. - unused_element
+warning - lib\screens\novel_reader_screen.dart:42:16 - The value of the field '_letterSpacing' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:43:16 - The value of the field '_paragraphSpacing' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:44:14 - The value of the field '_isBold' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:45:14 - The value of the field '_tapZonesEnabled' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:48:13 - The value of the field '_readingStartTime' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:49:13 - The value of the field '_readingElapsedSeconds' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:50:10 - The value of the field '_readingTimer' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:51:31 - The value of the field '_readingTimeNotifier' isn't used. Try removing the field, or using it. - unused_field
+
+19 issues found.

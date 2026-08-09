@@ -121,8 +121,9 @@ class Illust {
     'image_urls': urls.toJson(),
     'page_count': pageCount,
     'meta_pages': metaPages.map((p) => p.toJson()).toList(),
-    'meta_single_page':
-        urls.original != null ? {'original_image_url': urls.original} : {},
+    'meta_single_page': urls.original != null
+        ? {'original_image_url': urls.original}
+        : {},
     'width': width,
     'height': height,
     'total_view': totalView,

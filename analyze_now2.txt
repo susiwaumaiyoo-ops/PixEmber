@@ -1,0 +1,67 @@
+Analyzing pixiv_viewer...
+
+warning - lib\screens\home_screen_state.dart:27:11 - The value of the field '_loggedInEmail' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:36:11 - The value of the field '_lastSyncTimestamp' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:37:8 - The value of the field '_isBackingUp' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:38:8 - The value of the field '_isRestoring' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:39:21 - The value of the field '_lastSyncSummary' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:51:16 - The value of the field '_selectedWorkType' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:53:16 - The value of the field '_selectedDuration' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:62:16 - The value of the field '_selectedNovelTextLengthLimit' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:76:16 - The value of the field '_selectedNovelAiFilter' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:78:14 - The value of the field '_novelSeriesOnly' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:80:22 - The value of the field '_novelExcludeTags' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:83:16 - The value of the field '_novelDensityMode' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:107:14 - The value of the field '_isLoadingMore' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:122:35 - The value of the field '_illustRankModes' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:133:35 - The value of the field '_novelRankModes' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:142:16 - The value of the field '_searchHistory' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:146:26 - The value of the field '_searchHandler' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:213:16 - The declaration '_deleteSearchHistoryItem' isn't referenced. Try removing the declaration of '_deleteSearchHistoryItem'. - unused_element
+warning - lib\screens\home_screen_state.dart:224:16 - The declaration '_clearAllSearchHistory' isn't referenced. Try removing the declaration of '_clearAllSearchHistory'. - unused_element
+warning - lib\screens\home_screen_state.dart:250:8 - The declaration '_onHistoryItemTap' isn't referenced. Try removing the declaration of '_onHistoryItemTap'. - unused_element
+warning - lib\screens\home_screen_state.dart:271:8 - The declaration '_onTagSelected' isn't referenced. Try removing the declaration of '_onTagSelected'. - unused_element
+warning - lib\screens\home_screen_state.dart:565:26 - The declaration '_getSeriesLengthThreshold' isn't referenced. Try removing the declaration of '_getSeriesLengthThreshold'. - unused_element
+warning - lib\screens\home_screen_state.dart:640:10 - The declaration '_buildFilterSectionTitle' isn't referenced. Try removing the declaration of '_buildFilterSectionTitle'. - unused_element
+warning - lib\screens\home_screen_state.dart:645:10 - The declaration '_buildChoiceChip' isn't referenced. Try removing the declaration of '_buildChoiceChip'. - unused_element
+warning - lib\screens\home_screen_state.dart:690:16 - The declaration '_handleGoogleBackup' isn't referenced. Try removing the declaration of '_handleGoogleBackup'. - unused_element
+warning - lib\screens\home_screen_state.dart:718:16 - The declaration '_handleGoogleRestore' isn't referenced. Try removing the declaration of '_handleGoogleRestore'. - unused_element
+warning - lib\screens\home_screen_state.dart:750:16 - The declaration '_handleGoogleLogin' isn't referenced. Try removing the declaration of '_handleGoogleLogin'. - unused_element
+warning - lib\screens\home_screen_state.dart:786:16 - The declaration '_handleGoogleLogout' isn't referenced. Try removing the declaration of '_handleGoogleLogout'. - unused_element
+warning - lib\screens\home_screen_state.dart:796:10 - The declaration '_formatNumber' isn't referenced. Try removing the declaration of '_formatNumber'. - unused_element
+warning - lib\screens\home_screen_state.dart:804:17 - The declaration '_fetchNovelForResume' isn't referenced. Try removing the declaration of '_fetchNovelForResume'. - unused_element
+warning - lib\screens\home_screen_state.dart:833:38 - The declaration '_getRecentBookmarks' isn't referenced. Try removing the declaration of '_getRecentBookmarks'. - unused_element
+warning - lib\screens\home_search_handler.dart:22:26 - The declaration '_getSeriesLengthThreshold' isn't referenced. Try removing the declaration of '_getSeriesLengthThreshold'. - unused_element
+warning - lib\screens\home_search_handler.dart:135:8 - The declaration '_onHistoryItemTap' isn't referenced. Try removing the declaration of '_onHistoryItemTap'. - unused_element
+warning - lib\screens\home_search_handler.dart:141:8 - The declaration '_resetSearch' isn't referenced. Try removing the declaration of '_resetSearch'. - unused_element
+warning - lib\screens\home_search_handler.dart:156:8 - The declaration '_onTagSelected' isn't referenced. Try removing the declaration of '_onTagSelected'. - unused_element
+warning - lib\screens\home_search_handler.dart:171:8 - The declaration '_changeTab' isn't referenced. Try removing the declaration of '_changeTab'. - unused_element
+warning - lib\screens\home_search_handler.dart:216:16 - The declaration '_deleteSearchHistoryItem' isn't referenced. Try removing the declaration of '_deleteSearchHistoryItem'. - unused_element
+warning - lib\screens\home_search_handler.dart:234:16 - The declaration '_clearAllSearchHistory' isn't referenced. Try removing the declaration of '_clearAllSearchHistory'. - unused_element
+warning - lib\screens\home_search_handler.dart:321:16 - The declaration '_fetchNextPage' isn't referenced. Try removing the declaration of '_fetchNextPage'. - unused_element
+warning - lib\screens\home_sync_handler.dart:12:16 - The declaration '_initializeDriveSync' isn't referenced. Try removing the declaration of '_initializeDriveSync'. - unused_element
+warning - lib\screens\home_ui_components.dart:1302:10 - The declaration '_formatNumber' isn't referenced. Try removing the declaration of '_formatNumber'. - unused_element
+warning - lib\screens\illust_detail_state.dart:34:48 - The member 'setState' can only be used within instance members of subclasses of 'State'. - invalid_use_of_protected_member
+warning - lib\screens\novel_reader_screen.dart:42:16 - The value of the field '_letterSpacing' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:43:16 - The value of the field '_paragraphSpacing' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:44:14 - The value of the field '_isBold' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:45:14 - The value of the field '_tapZonesEnabled' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:48:13 - The value of the field '_readingStartTime' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:49:13 - The value of the field '_readingElapsedSeconds' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:50:10 - The value of the field '_readingTimer' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:51:31 - The value of the field '_readingTimeNotifier' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\services\embedding_service.dart:308:11 - The value of the local variable 'padToken' isn't used. Try removing the variable or using it. - unused_local_variable
+warning - lib\services\embedding_service.dart:316:11 - The value of the local variable 'maskToken' isn't used. Try removing the variable or using it. - unused_local_variable
+warning - lib\services\pixiv_api_auth.dart:20:7 - The declaration '_MuteFilter' isn't referenced. Try removing the declaration of '_MuteFilter'. - unused_element
+warning - lib\services\pixiv_api_auth.dart:47:25 - The value of the field '_dbService' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\services\pixiv_api_auth.dart:129:18 - The declaration '_get' isn't referenced. Try removing the declaration of '_get'. - unused_element
+warning - lib\services\pixiv_api_auth.dart:165:32 - The declaration '_post' isn't referenced. Try removing the declaration of '_post'. - unused_element
+   info - lib\screens\home_screen_state.dart:703:11 - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check. - use_build_context_synchronously
+   info - lib\screens\home_screen_state.dart:735:11 - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check. - use_build_context_synchronously
+   info - lib\screens\illust_detail_handler.dart:261:31 - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check. - use_build_context_synchronously
+   info - lib\screens\illust_detail_state.dart:51:20 - Invalid use of a private type in a public API. Try making the private type public, or making the API that uses the private type also be private. - library_private_types_in_public_api
+   info - lib\screens\subscriptions_screen.dart:114:21 - Use of 'return' in a 'finally' clause. Try restructuring the code. - control_flow_in_finally
+   info - lib\services\pixiv_api_service.dart:1136:19 - Angle brackets will be interpreted as HTML. Try using backticks around the content with angle brackets, or try replacing `<` with `&lt;` and `>` with `&gt;`. - unintended_html_in_doc_comment
+   info - lib\services\pixiv_api_service.dart:1237:19 - Angle brackets will be interpreted as HTML. Try using backticks around the content with angle brackets, or try replacing `<` with `&lt;` and `>` with `&gt;`. - unintended_html_in_doc_comment
+
+63 issues found.

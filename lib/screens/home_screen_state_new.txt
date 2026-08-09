@@ -1,0 +1,4512 @@
+class _PixivViewerHomeState extends State<PixivViewerHome> {
+  final GoogleDriveService _driveService = GoogleDriveService();
+  final PixivApiService _pixivApiService = PixivApiService();
+  String? _loggedInEmail;
+  bool _isLoggedIn = false;
+
+// サブスクリプション同期用の状態変数
+  Map<String, dynamic>? _syncProgress;
+  Timer? _syncTimer;
+  final bool _isSyncing = false;
+
+  // Google Drive同期用の状態変数
+  String? _lastSyncTimestamp;
+  bool _isBackingUp = false;
+  bool _isRestoring = false;
+  Map<String, int>? _lastSyncSummary;
+
+  late final TextEditingController _searchController;
+  final FocusNode _searchFocusNode = FocusNode();
+
+  // 共有される検索条件State�E�カチE��リを跨ぁE��保持されます！E
+  String _currentSearchWord = '';
+  String _selectedSearchTarget =
+      'partial_match_for_tags'; // partial_match_for_tags, exact_match_for_tags, title_and_caption
+  String _selectedSort = 'date_desc'; // date_desc, date_asc, popular_desc
+
+  // 高度な検索フィルター設宁E
+  String _selectedWorkType = 'all'; // all, illust, manga, ugoira, novel
+  String _selectedAgeLimit = 'all'; // all, safe, r18
+  String _selectedDuration =
+      'all'; // all, within_last_day, within_last_week, within_last_month
+  int _selectedBookmarkFilter = 0; // 0, 100, 500, 1000, 5000, 10000
+
+  // 小説専用の検索フィルター設宁E
+  String _selectedNovelSearchTarget =
+      'all_text'; // all_text(全斁E��索: タグ+本斁E, partial_match_for_tags, exact_match_for_tags, text
+  String _selectedNovelAgeLimit = 'all'; // all, safe, r18
+  int _selectedNovelBookmarkFilter = 0; // 0, 100, 300, 500, 1000, 5000
+  String _selectedNovelTextLengthLimit = 'all'; // all, short, medium, long
+  // カスタム斁E��数フィルター用
+  TextEditingController? _minTextLengthController;
+  TextEditingController? _maxTextLengthController;
+  // シリーズ統計文字数フィルター (シリーズ全体�E合計文字数で絞り込み)
+  String _selectedNovelSeriesTextLengthLimit =
+      'all'; // all, short, medium, long, custom
+  TextEditingController? _minSeriesTextLengthController;
+  TextEditingController? _maxSeriesTextLengthController;
+  // シリーズID -> シリーズ全体�E合計文字数 のキャチE��ュ (getNovelSeries で雁E��E
+  final Map<int, int> _seriesTotalTextLengthCache = {};
+
+  // 追加の小説フィルター�E�アプリ冁E��ーカルで適用�E�E
+  // AI作品: 'all'=制限なぁE 'hide'=AI以夁E 'only'=AIのみ
+  String _selectedNovelAiFilter = 'all';
+  // シリーズ作品のみ表示するぁE
+  bool _novelSeriesOnly = false;
+  // 除外タグ�E�これらのタグを含む作品を除外！E
+  List<String> _novelExcludeTags = [];
+  TextEditingController? _excludeTagController;
+  // 表示寁E��: 'comfortable'=可読性重要E/ 'compact'=惁E��寁E��重要E
+  String _novelDensityMode = 'comfortable';
+
+// ボトムナビゲーション用 (0: イラスチE 1: 小説, 2: フィーリング発掁E
+  int _currentIndex = 0;
+  static const int _illustIndex = 0;
+  static const int _novelIndex = 1;
+  static const int _feelingDiscoveryIndex = 2;
+
+  // イラストタブ�Eのサブ表示モーチE(0: おすすめ, 1: 検索結果, 2: ランキング)
+  int _illustSubMode = 0;
+  // 小説タブ�Eのサブ表示モーチE(0: おすすめ, 1: 検索結果, 2: ランキング)
+  int _novelSubMode = 0;
+
+  // チE�EタリスチE
+  List<Illust> _illusts = [];
+  List<Novel> _novels = [];
+
+  // 百科事�EチE�Eタ
+  SearchItem? _searchItem;
+
+  // 全斁E��索用のペ�Eジング状態！Ell_text モード時のみ使用�E�E
+  AllTextSearchState? _allTextSearchState;
+
+bool _isLoading = false;
+  bool _isLoadingMore = false;
+  bool _isFetchingNextPage = false;
+  String? _errorMessage;
+  bool _rateLimited = false;
+
+  // ペ�Eジング用
+  int? _nextOffset;
+
+  // スクロールコントローラー�E�無限スクロール用�E�E
+  late final ScrollController _scrollController;
+
+  // ランキング用のアクチE��ブモード設宁E
+  String _selectedIllustRankMode = 'day';
+  String _selectedNovelRankMode = 'day';
+
+  final List<Map<String, String>> _illustRankModes = [
+    {'value': 'day', 'label': 'チE��リー'},
+    {'value': 'week', 'label': 'ウィークリー'},
+    {'value': 'month', 'label': 'マンスリー'},
+    {'value': 'male', 'label': '男性人氁E},
+    {'value': 'female', 'label': '女性人氁E},
+  ];
+
+  final List<Map<String, String>> _novelRankModes = [
+    {'value': 'day', 'label': 'チE��リー'},
+    {'value': 'week', 'label': 'ウィークリー'},
+  ];
+
+  // 検索履歴リスチE
+  List<String> _searchHistory = [];
+  bool _showHistoryList = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+    _scrollController = ScrollController();
+    _minTextLengthController = TextEditingController();
+    _maxTextLengthController = TextEditingController();
+    _minSeriesTextLengthController = TextEditingController();
+    _maxSeriesTextLengthController = TextEditingController();
+    _excludeTagController = TextEditingController();
+
+    // 小説フィルターをSharedPreferencesから復允E
+    _loadNovelFilterPrefs();
+
+    _scrollController.addListener(_onScroll);
+    _searchFocusNode.addListener(() {
+      setState(() {
+        _showHistoryList =
+            _searchFocusNode.hasFocus && _searchHistory.isNotEmpty;
+      });
+    });
+
+    _loadSearchHistory();
+    _checkLoginAndInitialize();
+  }
+
+  /// 起動時のログインチェチE��と初期化�E琁E
+  Future<void> _checkLoginAndInitialize() async {
+    final prefs = await SharedPreferences.getInstance();
+    final refreshToken = prefs.getString('PIXIV_REFRESH_TOKEN');
+
+    if (refreshToken != null && refreshToken.isNotEmpty) {
+      // ト�Eクンがある場吁E バックグラウンドでAPIサービスを�E期化してチE�Eタ取征E
+      setState(() {
+        _isLoggedIn = true;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _fetchData();
+        _initializeDriveSync();
+      });
+    } else {
+      // ト�EクンがなぁE��合（�E回起動！E チE�Eタ取得をスキチE�Eし、Eフレーム目描画後にログインダイアログを表示
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showPKCELoginDialog();
+      });
+    }
+  }
+
+  /// PKCE認証フローでPixivログインダイアログを表示�E�アプリ冁E��WebViewによる全自動ログイン�E�E
+  ///
+  /// 外部ブラウザへの遷移・URLの手動コピ�Eを廁E��し、アプリ冁E�E [WebViewWidget] に
+  /// Pixivログイン画面を直接描画する。ログイン完亁E��のリダイレクト�EURLめE
+  /// [NavigationDelegate] で自動横取りし、認可コーチEcode)を�E自動抽出して
+  /// ト�Eクン交換API�E�E_exchangeCodeForToken]�E�を呼び出す、E
+  Future<void> _showPKCELoginDialog() async {
+    // PKCEコード�Eリファイアとチャレンジを生戁E
+    final codeVerifier = _generateCodeVerifier();
+    final codeChallenge = _generateCodeChallenge(codeVerifier);
+
+    // 認証開始URL�E�正しいエントリURL�E�を構篁E
+    // 中継用の裏URL�E�E../auth/pixiv/start�E�ではなく、ログイン画面へ直接遷移する
+    // エントリポイント！Eweb/v1/login�E�を持E��する、E
+    // Uri が�E動でパラメータめEURL エンコードするため、code_challenge はそ�Eまま埋め込む、E
+    final authUrl = Uri.https('app-api.pixiv.net', '/web/v1/login', {
+      'code_challenge': codeChallenge,
+      'code_challenge_method': 'S256',
+      'client': 'pixiv-android',
+    });
+
+    // バックグラウンドでアプリがリセチE��されてめEcode_verifier ぁE
+    // 消失しなぁE��ぁE��ダイアログ表示「直前」に SharedPreferences へ退避
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('temp_login_code_verifier', codeVerifier);
+
+    if (!mounted) return;
+
+    // WebViewコントローラーを生成し、Pixivログイン画面を読み込む
+    final controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          // 全ての遷移を監視し、コールバックURLを�E動横取りする
+          onNavigationRequest: (NavigationRequest request) async {
+            final url = request.url;
+
+            // リダイレクト�EがコールバックURLで始まる場合、code を�E動抽出
+            if (url.startsWith(
+              'https://app-api.pixiv.net/web/v1/users/auth/pixiv/callback',
+            )) {
+              String? code;
+
+              // 1. クエリパラメータから code を抽出
+              try {
+                final uri = Uri.parse(url);
+                code = uri.queryParameters['code'];
+                // フラグメント�Eに code が含まれる場合も老E�E
+                if (code == null && uri.fragment.contains('code=')) {
+                  code = Uri.parse(
+                    'pixiv://x?${uri.fragment}',
+                  ).queryParameters['code'];
+                }
+              } catch (e) {
+                // 2. パ�Eスエラー時�Eフォールバック�E�正規表現�E�E
+                final regExp = RegExp(r'code=([^&]+)');
+                final match = regExp.firstMatch(url);
+                if (match != null) {
+                  code = match.group(1);
+                }
+              }
+
+              print('[WebView Hook] コールバックURLを検知: $url');
+              print('[WebView Hook] 抽出した code: $code');
+
+              if (code != null && code.isNotEmpty) {
+                // SharedPreferences から code_verifier を復允E��て利用
+                final restoredVerifier = prefs.getString(
+                  'temp_login_code_verifier',
+                );
+                if (restoredVerifier != null && restoredVerifier.isNotEmpty) {
+                  // ダイアログを�Eログラムで自動的に閉じめE
+                  if (mounted) {
+                    Navigator.of(context).pop();
+                  }
+                  // 抽出した code と code_verifier でト�Eクン交換APIを�E動実衁E
+                  _exchangeCodeForToken(code, restoredVerifier);
+                } else {
+                  // code_verifier が消失してぁE��場合�Eユーザーへ通知
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('認証セチE��ョンが�EれてぁE��す。�E度ログインし直してください、E),
+                      ),
+                    );
+                  }
+                }
+              }
+              // コールバックURL自体�E読み込みは防止�E�エラー画面を�EさなぁE��E
+              return NavigationDecision.prevent;
+            }
+
+            // それ以外�E遷移は許可�E�ログイン画面冁E�E通常遷移�E�E
+            return NavigationDecision.navigate;
+          },
+        ),
+      )
+      ..loadRequest(authUrl);
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Pixiv にログイン'),
+          contentPadding: EdgeInsets.zero,
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 500,
+            child: WebViewWidget(controller: controller),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('キャンセル'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// PKCEコード�Eリファイアを生成！EFC7636 準拠: 32バイト乱数 -> Base64URL・パディング無�E�E
+  String _generateCodeVerifier() {
+    final random = Random.secure();
+    final values = List<int>.generate(32, (i) => random.nextInt(256));
+    return base64Url.encode(values).replaceAll('=', '');
+  }
+
+  /// PKCEコードチャレンジを生成！EHA-256 -> Base64URL・パディング無�E�E
+  String _generateCodeChallenge(String verifier) {
+    final bytes = utf8.encode(verifier);
+    final digest = sha256.convert(bytes);
+    return base64Url.encode(digest.bytes).replaceAll('=', '');
+  }
+
+  Future<void> _exchangeCodeForToken(String code, String codeVerifier) async {
+    try {
+      print("========== [OAuth] ト�Eクン交換フェーズ開姁E==========");
+
+      // 1. ミリ秒を完�Eに排除した ISO 8601 UTC 時刻を�E律生戁E
+      final now = DateTime.now().toUtc();
+      final clientTime =
+          "${now.year.toString().padLeft(4, '0')}-"
+          "${now.month.toString().padLeft(2, '0')}-"
+          "${now.day.toString().padLeft(2, '0')}T"
+          "${now.hour.toString().padLeft(2, '0')}:"
+          "${now.minute.toString().padLeft(2, '0')}:"
+          "${now.second.toString().padLeft(2, '0')}+00:00";
+
+      // 2. 署名�E計箁E
+      final salt = "2821213q311543184o13o121o131o1o3";
+      final input = clientTime + salt;
+      final clientHash = md5.convert(utf8.encode(input)).toString();
+
+      print("[OAuth DEBUG] Client Time: $clientTime");
+      print("[OAuth DEBUG] Client Hash: $clientHash");
+      print("[OAuth DEBUG] Code Verifier: $codeVerifier");
+
+      final url = Uri.parse("https://oauth.secure.pixiv.net/auth/token");
+      final headers = {
+        "User-Agent": "PixivAndroidApp/5.0.234 (Android 11.0; Pixel 5)",
+        "App-OS": "android",
+        "App-OS-Version": "11.0",
+        "App-Version": "5.0.234",
+        "X-Client-Time": clientTime,
+        "X-Client-Hash": clientHash,
+        "Accept-Language": "ja_JP",
+        "Content-Type": "application/x-www-form-urlencoded",
+      };
+
+      final data = {
+        "client_id": "MOBrBDS8blbauoSck0ZfDbtuzpyT",
+        "client_secret": "lsACyCD94FhDUtGTXi3QzcFE2uU1hqtDaKeqrdwj",
+        "grant_type": "authorization_code",
+        "code": code,
+        "code_verifier": codeVerifier,
+        "redirect_uri":
+            "https://app-api.pixiv.net/web/v1/users/auth/pixiv/callback",
+        "include_policy": "true",
+      };
+
+      // === 送信リクエスト�E徹底可視化�E�デバッグ用�E�E===
+      print("🌐 [OAuth REQUEST] URL: ${url.toString()}");
+      print("🌐 [OAuth REQUEST] Headers: $headers");
+      print("🌐 [OAuth REQUEST] Body: $data");
+
+      final response = await http.post(url, headers: headers, body: data);
+
+      // === サーバ�Eからのレスポンス可視化 ===
+      print("📥 [OAuth RESPONSE] Status Code: ${response.statusCode}");
+      print("📥 [OAuth RESPONSE] Body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        final resData = jsonDecode(response.body);
+        final responsePayload = resData['response'];
+        if (responsePayload != null) {
+          final newRefreshToken = responsePayload['refresh_token'];
+          final userJson = responsePayload['user'];
+          final userName = userJson != null ? userJson['name'] : 'Unknown';
+
+          if (newRefreshToken != null) {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('PIXIV_REFRESH_TOKEN', newRefreshToken);
+
+            // 認証惁E��を登録しログイン
+            _pixivApiService.setRefreshToken(newRefreshToken);
+            await _pixivApiService.login();
+
+            // ログイン成功により一時退避キーを削除
+            final loginPrefs = await SharedPreferences.getInstance();
+            await loginPrefs.remove('temp_login_code_verifier');
+
+            if (!mounted) return;
+            setState(() {
+              _isLoggedIn = true;
+            });
+
+            _fetchData();
+            _initializeDriveSync();
+
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('ログインに成功しました�E�Eユーザー: $userName')),
+              );
+            }
+            print("[OAuth SUCCESS] ト�Eクン交換完亁E��ログイン成功しました�E�E);
+            return;
+          }
+        }
+        throw Exception("レスポンス冁E�� refresh_token が見つかりませんでした、E);
+      } else {
+        print("❌❌❁E[OAuth ERROR] Pixivト�Eクン交換サーバ�Eがエラーを返却しました ❌❌❁E);
+        print("スチE�EタスコーチE ${response.statusCode}");
+        print("レスポンス冁E��: ${response.body}");
+        throw Exception(
+          "Pixiv Token API HTTP ${response.statusCode}: ${response.body}",
+        );
+      }
+    } catch (e, stack) {
+      print("❁E[OAuth CRITICAL] 例外が発生しました: $e");
+      print(stack); // スタチE��トレースをコンソールに出劁E
+      if (mounted) {
+        // サーバ�Eから返されたエラー(JSON筁Eを画面にわかりやすく表示し、デバッグ可能にする
+        final message = e.toString().length > 300
+            ? '${e.toString().substring(0, 300)}...�E�詳細はコンソールログを確認！E
+            : e.toString();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('ログインに失敗しました:\n$message'),
+            duration: const Duration(seconds: 8),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('PIXIV_ACCESS_TOKEN');
+    await prefs.remove('PIXIV_REFRESH_TOKEN');
+
+    if (mounted) {
+      setState(() {
+        _isLoggedIn = false;
+        _illusts = [];
+        _novels = [];
+        _errorMessage = 'ログアウトしました。�E度ログインしてください、E;
+      });
+      _showPKCELoginDialog();
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    _scrollController.dispose();
+    _minTextLengthController?.dispose();
+    _maxTextLengthController?.dispose();
+    _minSeriesTextLengthController?.dispose();
+    _maxSeriesTextLengthController?.dispose();
+    _excludeTagController?.dispose();
+    _syncTimer?.cancel();
+    super.dispose();
+  }
+
+  /// 小説フィルター設定をSharedPreferencesに保孁E
+  Future<void> _saveNovelFilterPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('novel_filter_ai', _selectedNovelAiFilter);
+      await prefs.setBool('novel_filter_series_only', _novelSeriesOnly);
+      await prefs.setStringList('novel_filter_exclude_tags', _novelExcludeTags);
+      await prefs.setString('novel_filter_density', _novelDensityMode);
+      await prefs.setString(
+        'novel_filter_search_target',
+        _selectedNovelSearchTarget,
+      );
+      await prefs.setString('novel_filter_age_limit', _selectedNovelAgeLimit);
+      await prefs.setInt('novel_filter_bookmark', _selectedNovelBookmarkFilter);
+      await prefs.setString(
+        'novel_filter_text_length',
+        _selectedNovelTextLengthLimit,
+      );
+      if (_minTextLengthController?.text != null) {
+        await prefs.setString(
+          'novel_filter_min_text',
+          _minTextLengthController!.text,
+        );
+      }
+      if (_maxTextLengthController?.text != null) {
+        await prefs.setString(
+          'novel_filter_max_text',
+          _maxTextLengthController!.text,
+        );
+      }
+      await prefs.setString(
+        'novel_filter_series_text_length',
+        _selectedNovelSeriesTextLengthLimit,
+      );
+      if (_minSeriesTextLengthController?.text != null) {
+        await prefs.setString(
+          'novel_filter_series_min_text',
+          _minSeriesTextLengthController!.text,
+        );
+      }
+      if (_maxSeriesTextLengthController?.text != null) {
+        await prefs.setString(
+          'novel_filter_series_max_text',
+          _maxSeriesTextLengthController!.text,
+        );
+      }
+    } catch (e) {
+      debugPrint('小説フィルター設定�E保存に失敁E $e');
+    }
+  }
+
+  /// 小説フィルター設定をSharedPreferencesから復允E
+  Future<void> _loadNovelFilterPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      setState(() {
+        _selectedNovelAiFilter = prefs.getString('novel_filter_ai') ?? 'all';
+        _novelSeriesOnly = prefs.getBool('novel_filter_series_only') ?? false;
+        _novelExcludeTags =
+            prefs.getStringList('novel_filter_exclude_tags') ?? [];
+        _novelDensityMode =
+            prefs.getString('novel_filter_density') ?? 'comfortable';
+        _selectedNovelSearchTarget =
+            prefs.getString('novel_filter_search_target') ?? 'all_text';
+        _selectedNovelAgeLimit =
+            prefs.getString('novel_filter_age_limit') ?? 'all';
+        _selectedNovelBookmarkFilter =
+            prefs.getInt('novel_filter_bookmark') ?? 0;
+        _selectedNovelTextLengthLimit =
+            prefs.getString('novel_filter_text_length') ?? 'all';
+        final minTxt = prefs.getString('novel_filter_min_text');
+        final maxTxt = prefs.getString('novel_filter_max_text');
+        if (minTxt != null && minTxt.isNotEmpty) {
+          _minTextLengthController?.text = minTxt;
+        }
+        if (maxTxt != null && maxTxt.isNotEmpty) {
+          _maxTextLengthController?.text = maxTxt;
+        }
+        _selectedNovelSeriesTextLengthLimit =
+            prefs.getString('novel_filter_series_text_length') ?? 'all';
+        final seriesMinTxt = prefs.getString('novel_filter_series_min_text');
+        final seriesMaxTxt = prefs.getString('novel_filter_series_max_text');
+        if (seriesMinTxt != null && seriesMinTxt.isNotEmpty) {
+          _minSeriesTextLengthController?.text = seriesMinTxt;
+        }
+        if (seriesMaxTxt != null && seriesMaxTxt.isNotEmpty) {
+          _maxSeriesTextLengthController?.text = seriesMaxTxt;
+        }
+      });
+    } catch (e) {
+      debugPrint('小説フィルター設定�E復允E��失敁E $e');
+    }
+  }
+
+  // --- 検索履歴ローカル保存�E琁E(shared_preferences) ---
+  Future<void> _loadSearchHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() {
+        _searchHistory = prefs.getStringList('search_history') ?? [];
+      });
+    } catch (e) {
+      debugPrint('Error loading search history: $e');
+    }
+  }
+
+  Future<void> _saveSearchHistory(String word) async {
+    if (word.trim().isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      final list = List<String>.from(_searchHistory);
+      list.remove(word); // 重褁E��削除
+      list.insert(0, word); // 先頭に挿入
+      if (list.length > 15) {
+        list.removeLast(); // 最大15件
+      }
+      setState(() {
+        _searchHistory = list;
+        _showHistoryList =
+            _searchFocusNode.hasFocus && _searchHistory.isNotEmpty;
+      });
+      await prefs.setStringList('search_history', list);
+    } catch (e) {
+      debugPrint('Error saving search history: $e');
+    }
+  }
+
+  Future<void> _deleteSearchHistoryItem(String word) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      final list = List<String>.from(_searchHistory);
+      list.remove(word);
+      setState(() {
+        _searchHistory = list;
+        _showHistoryList =
+            _searchFocusNode.hasFocus && _searchHistory.isNotEmpty;
+      });
+      await prefs.setStringList('search_history', list);
+    } catch (e) {
+      debugPrint('Error deleting search history item: $e');
+    }
+  }
+
+  Future<void> _clearAllSearchHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() {
+        _searchHistory = [];
+        _showHistoryList = false;
+      });
+      await prefs.remove('search_history');
+    } catch (e) {
+      debugPrint('Error clearing search history: $e');
+    }
+  }
+
+// --- 無限スクロール検知 ---
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+
+    // 最下部手前200pxに達したら次ペ�Eジ読み込み
+    if (maxScroll - currentScroll <= 200) {
+      if (!_isLoading && !_isLoadingMore && !_isFetchingNextPage && _nextOffset != null && !_rateLimited) {
+        _isFetchingNextPage = true;
+        _fetchNextPage().then((_) {
+          if (mounted) {
+            setState(() {
+              _isFetchingNextPage = false;
+            });
+          }
+        });
+      }
+    }
+  }
+
+// チE�Eタ新規取征E
+  Future<void> _fetchData() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _nextOffset = null;
+      _searchItem = null;
+      _allTextSearchState = null; // 全斁E��索用の状態をリセチE��
+      _illusts = [];
+      _novels = [];
+    });
+
+    final activeSubMode = _currentIndex == _illustIndex ? _illustSubMode : _novelSubMode;
+
+    try {
+      if (_currentIndex == _illustIndex) {
+        // --- イラストデータ取征E(PixivApiService 直接呼び出ぁE ---
+        final result = await _fetchIllusts(activeSubMode, 0);
+        if (!mounted) return;
+        setState(() {
+          _illusts = result.items;
+          _nextOffset = result.nextOffset; // API の next_url から安�Eに抽出
+          _searchItem = result.searchItem; // 検索時�EみセチE��
+          _isLoading = false;
+        });
+      } else if (_currentIndex == _novelIndex) {
+        // --- 小説チE�Eタ取征E(PixivApiService 直接呼び出ぁE ---
+        final result = await _fetchNovels(activeSubMode, 0);
+        if (!mounted) return;
+        setState(() {
+          _novels = result.items;
+          _nextOffset = result.nextOffset;
+          _searchItem = result.searchItem;
+          _isLoading = false;
+        });
+        // シリーズ統計文字数フィルターが有効なら非同期で合計文字数を集訁E
+        await _computeSeriesTextLengths(result.items);
+      } else {
+        // フィーリング発掘タチE ローカルDBからの読み込みのため特別な処琁E�E不要E
+        // FeelingDiscoveryScreen が�E前でチE�Eタを取征E
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final errorStr = e.toString();
+      if (errorStr.contains('429') || errorStr.contains('rate limit') || errorStr.contains('レート制陁E)) {
+        setState(() {
+          _errorMessage = 'Pixivのアクセス制限（レート制限）が発生しました。しばらく時間を置ぁE��から再試行してください、E;
+          _isLoading = false;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Pixivのアクセス制限（レート制限）が発生しました。しばらく時間を置ぁE��から再試行してください、E),
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+      } else {
+        setState(() {
+          _errorMessage = 'チE�Eタの取得に失敗しました、En詳細: $e';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+// 次ペ�Eジ追加読み込み (無限スクロール)
+  Future<void> _fetchNextPage() async {
+    if (_nextOffset == null) return;
+    // フィーリング発掘タブでは無限スクロールなぁE
+    if (_currentIndex == _feelingDiscoveryIndex) return;
+
+    setState(() {
+      _isLoadingMore = true;
+      _rateLimited = false;
+    });
+
+    final activeSubMode = _currentIndex == _illustIndex ? _illustSubMode : _novelSubMode;
+
+    try {
+      if (_currentIndex == _illustIndex) {
+        // --- イラスト次ペ�Eジ ---
+        final result = await _fetchIllusts(activeSubMode, _nextOffset!);
+        if (!mounted) return;
+        setState(() {
+          _illusts.addAll(result.items);
+          _nextOffset = result.nextOffset; // さらに次があれ�E更新、なければ null
+          _isLoadingMore = false;
+        });
+      } else if (_currentIndex == _novelIndex) {
+        // --- 小説次ペ�Eジ ---
+        final result = await _fetchNovels(activeSubMode, _nextOffset!);
+        if (!mounted) return;
+        // 全斁E��索は褁E��ターゲチE��を統合するため、既存IDと重褁E��る作品を除外して全件を確実に取征E
+        final existingIds = _novels.map((n) => n.id).toSet();
+        final newItems = result.items
+            .where((n) => !existingIds.contains(n.id))
+            .toList();
+        setState(() {
+          _novels.addAll(newItems);
+          _nextOffset = result.nextOffset;
+          _isLoadingMore = false;
+        });
+        // 新たに追加された�Eのシリーズ合計文字数を集訁E
+        await _computeSeriesTextLengths(result.items);
+      }
+    } catch (e) {
+      debugPrint('Error fetching next page: $e');
+      final errorStr = e.toString();
+      if (errorStr.contains('429') || errorStr.contains('rate limit') || errorStr.contains('レート制陁E)) {
+        if (!mounted) return;
+        setState(() {
+          _rateLimited = true;
+          _isLoadingMore = false;
+        });
+        // SnackBar通知
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Pixivのアクセス制限（レート制限）が発生しました。しばらく時間を置ぁE��から再試行してください、E),
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+      } else {
+        if (!mounted) return;
+        setState(() {
+          _isLoadingMore = false;
+        });
+      }
+    }
+  }
+
+  // PixivApiService を呼び出してイラスト一覧を取征E(サーバ�Eレス)
+  Future<FetchResult<Illust>> _fetchIllusts(int subMode, int offset) async {
+    if (subMode == 0) {
+      return _pixivApiService.getRecommend(offset: offset);
+    } else if (subMode == 1) {
+      return _pixivApiService.searchIllust(
+        _currentSearchWord,
+        _selectedSearchTarget,
+        _selectedSort,
+        offset,
+        _selectedAgeLimit,
+        bookmarkFilter: _selectedBookmarkFilter,
+        workType: _selectedWorkType,
+      );
+    } else {
+      return _pixivApiService.getRanking(
+        _selectedIllustRankMode,
+        offset: offset,
+      );
+    }
+  }
+
+  // PixivApiService を呼び出して小説一覧を取征E(サーバ�Eレス)
+  Future<FetchResult<Novel>> _fetchNovels(int subMode, int offset) async {
+    // 斁E��数フィルタ�E�Ehort/medium/long/custom�E�を minLen/maxLen に正規化、E
+    // 検索モードだけでなくおすすめ�Eランキングでもサーバ�Eサイドに渡す、E
+    int? minLen;
+    int? maxLen;
+    if (_selectedNovelTextLengthLimit == 'short') {
+      maxLen = 5000;
+    } else if (_selectedNovelTextLengthLimit == 'medium') {
+      minLen = 5000;
+      maxLen = 20000;
+    } else if (_selectedNovelTextLengthLimit == 'long') {
+      minLen = 20000;
+    } else if (_selectedNovelTextLengthLimit == 'custom') {
+      minLen = int.tryParse(_minTextLengthController?.text ?? '');
+      maxLen = int.tryParse(_maxTextLengthController?.text ?? '');
+    }
+
+    if (subMode == 0) {
+      return _pixivApiService.getNovelRecommend(
+        offset: offset,
+        startTextLength: minLen,
+        endTextLength: maxLen,
+      );
+    } else if (subMode == 1) {
+      if (_selectedNovelSearchTarget == 'all_text') {
+        // 全斁E��索モーチE AllTextSearchState を使って個別のペ�Eジングを管琁E
+        final state = _allTextSearchState;
+        final result = await _pixivApiService.searchNovelAllText(
+          _currentSearchWord,
+          _selectedSort,
+          _selectedNovelAgeLimit,
+          minLen,
+          maxLen,
+          bookmarkFilter: _selectedNovelBookmarkFilter,
+          state: state,
+        );
+        // 更新された状態を保孁E
+        _allTextSearchState = result.state;
+        return result.result;
+      }
+      return _pixivApiService.searchNovel(
+        _currentSearchWord,
+        _selectedNovelSearchTarget,
+        _selectedSort,
+        offset,
+        _selectedNovelAgeLimit,
+        minLen,
+        maxLen,
+        bookmarkFilter: _selectedNovelBookmarkFilter,
+      );
+    } else {
+      return _pixivApiService.getNovelRanking(
+        _selectedNovelRankMode,
+        offset: offset,
+        startTextLength: minLen,
+        endTextLength: maxLen,
+      );
+    }
+  }
+
+  // シリーズ統計文字数フィルター用: 吁E��説の seriesId からシリーズ全話の
+  // textLength を合算し _seriesTotalTextLengthCache にキャチE��ュする、E
+  // すでにキャチE��ュ済みの seriesId はスキチE�Eする (N+1 呼び出し抑制)、E
+  Future<void> _computeSeriesTextLengths(List<Novel> novels) async {
+    if (_selectedNovelSeriesTextLengthLimit == 'all') return;
+    final targets = novels
+        .where(
+          (n) =>
+              n.series != null &&
+              n.series!.id != 0 &&
+              !_seriesTotalTextLengthCache.containsKey(n.series!.id),
+        )
+        .toList();
+    if (targets.isEmpty) return;
+
+    final newValues = <int, int>{};
+    for (final novel in targets) {
+      final seriesId = novel.series!.id;
+      try {
+        final episodes = await _pixivApiService.getNovelSeriesAll(seriesId);
+        final total = episodes.fold<int>(0, (sum, ep) => sum + ep.textLength);
+        newValues[seriesId] = total;
+      } catch (e) {
+        debugPrint('シリーズ統計文字数の雁E��に失敁E(seriesId=$seriesId): $e');
+        // 失敗時は 0 として扱ぁE���E試行しなぁE��ぁE��ャチE��ュしておく
+        newValues[seriesId] = 0;
+      }
+    }
+
+    if (!mounted) return;
+    // 雁E��結果を一度に結合してから setState で再描画�E��E度再描画を避ける�E�E
+    final merged = {..._seriesTotalTextLengthCache, ...newValues};
+    setState(() {
+      _seriesTotalTextLengthCache
+        ..clear()
+        ..addAll(merged);
+    });
+  }
+
+  // シリーズ統計文字数フィルターの閾値を取征E(short/medium/long/custom 対忁E
+  _SeriesLengthThreshold _getSeriesLengthThreshold() {
+    int? minLen;
+    int? maxLen;
+    if (_selectedNovelSeriesTextLengthLimit == 'short') {
+      maxLen = 5000;
+    } else if (_selectedNovelSeriesTextLengthLimit == 'medium') {
+      minLen = 5000;
+      maxLen = 20000;
+    } else if (_selectedNovelSeriesTextLengthLimit == 'long') {
+      minLen = 20000;
+    } else if (_selectedNovelSeriesTextLengthLimit == 'custom') {
+      minLen = int.tryParse(_minSeriesTextLengthController?.text ?? '');
+      maxLen = int.tryParse(_maxSeriesTextLengthController?.text ?? '');
+    }
+    return _SeriesLengthThreshold(minLen: minLen, maxLen: maxLen);
+  }
+
+  // 検索実衁E
+  void _onSearchSubmit(String query) {
+    if (query.trim().isEmpty) return;
+    _searchFocusNode.unfocus();
+    _saveSearchHistory(query.trim());
+    setState(() {
+      _currentSearchWord = query.trim();
+      if (_currentIndex == _illustIndex) {
+        _illustSubMode = 1; // イラスト検索結果
+      } else if (_currentIndex == _novelIndex) {
+        _novelSubMode = 1; // 小説検索結果
+      }
+      // フィーリング発掘タブでは検索モードなぁE
+    });
+    _fetchData();
+  }
+
+  // 検索履歴タチE�E
+  void _onHistoryItemTap(String query) {
+    _searchController.text = query;
+    _onSearchSubmit(query);
+  }
+
+  // 検索リセチE��
+  void _resetSearch() {
+    _searchController.clear();
+    _searchFocusNode.unfocus();
+    setState(() {
+      _currentSearchWord = '';
+      if (_currentIndex == _illustIndex) {
+        _illustSubMode = 0; // おすすめに戻めE
+      } else if (_currentIndex == _novelIndex) {
+        _novelSubMode = 0; // おすすめに戻めE
+      }
+      // フィーリング発掘タブでは検索リセチE��なぁE
+    });
+    _fetchData();
+  }
+
+  // 検索タグ連勁E
+  void _onTagSelected(String tag) {
+    _searchController.text = tag;
+    _saveSearchHistory(tag);
+    setState(() {
+      _currentSearchWord = tag;
+      if (_currentIndex == _illustIndex) {
+        _illustSubMode = 1;
+      } else if (_currentIndex == _novelIndex) {
+        _novelSubMode = 1;
+      }
+      // フィーリング発掘タブでは検索モードなぁE
+    });
+    _fetchData();
+  }
+
+// タブ�Eり替え（検索条件を引き継ぐ�E�E
+  void _changeTab(int index) {
+    if (_currentIndex == index) return;
+    setState(() {
+      _currentIndex = index;
+
+      // 検索ワードが空でなければ、�Eり替え�Eでも�E動で検索モードにする
+      // フィーリング発掘タブでは検索モード�E概念がなぁE��めスキチE�E
+      if (_currentSearchWord.isNotEmpty && _currentIndex != _feelingDiscoveryIndex) {
+        if (_currentIndex == _illustIndex) {
+          _illustSubMode = 1;
+        } else if (_currentIndex == _novelIndex) {
+          _novelSubMode = 1;
+        }
+      } else if (_currentIndex != _feelingDiscoveryIndex) {
+        if (_currentIndex == _illustIndex) {
+          _illustSubMode = 0;
+        } else if (_currentIndex == _novelIndex) {
+          _novelSubMode = 0;
+        }
+      }
+    });
+    _fetchData();
+  }
+
+  // 小説専用検索フィルターボトムシート�E表示
+  void _showNovelFilterBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF161616),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        String target = _selectedNovelSearchTarget;
+        String sortVal = _selectedSort; // ソート頁E�E共送E
+        String ageLimitVal = _selectedNovelAgeLimit;
+        int bookmarkFilterVal = _selectedNovelBookmarkFilter;
+        String textLengthLimitVal = _selectedNovelTextLengthLimit;
+        String aiFilterVal = _selectedNovelAiFilter;
+        bool seriesOnlyVal = _novelSeriesOnly;
+        List<String> excludeTagsVal = List<String>.from(_novelExcludeTags);
+        String densityVal = _novelDensityMode;
+        // シリーズ統計文字数フィルター用ローカル状慁E
+        String seriesTextLengthLimitVal = _selectedNovelSeriesTextLengthLimit;
+        // カスタム斁E��数フィルター用コントローラー
+        final minController = TextEditingController(
+          text: _minTextLengthController?.text ?? '',
+        );
+        final maxController = TextEditingController(
+          text: _maxTextLengthController?.text ?? '',
+        );
+        final seriesMinController = TextEditingController(
+          text: _minSeriesTextLengthController?.text ?? '',
+        );
+        final seriesMaxController = TextEditingController(
+          text: _maxSeriesTextLengthController?.text ?? '',
+        );
+        final excludeTagInputController = TextEditingController();
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return DraggableScrollableSheet(
+              initialChildSize: 0.85,
+              minChildSize: 0.5,
+              maxChildSize: 0.95,
+              expand: false,
+              builder: (context, scrollController) {
+                return SingleChildScrollView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[800],
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.menu_book,
+                            color: Colors.tealAccent,
+                            size: 24,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            '小説専用検索フィルター',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () {
+                              setModalState(() {
+                                target = 'all_text';
+                                sortVal = 'date_desc';
+                                ageLimitVal = 'all';
+                                bookmarkFilterVal = 0;
+                                textLengthLimitVal = 'all';
+                                aiFilterVal = 'all';
+                                seriesOnlyVal = false;
+                                excludeTagsVal = [];
+                                densityVal = 'comfortable';
+                                minController.clear();
+                                maxController.clear();
+                                seriesTextLengthLimitVal = 'all';
+                                seriesMinController.clear();
+                                seriesMaxController.clear();
+                              });
+                            },
+                            child: const Text(
+                              'リセチE��',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(color: Colors.grey),
+                      const SizedBox(height: 12),
+
+                      // 1. 検索対象
+                      _buildFilterSectionTitle('🔍 検索対象'),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          _buildChoiceChip(
+                            label: 'タグの部刁E��致',
+                            selected: target == 'partial_match_for_tags',
+                            onSelected: () => setModalState(
+                              () => target = 'partial_match_for_tags',
+                            ),
+                          ),
+                          _buildChoiceChip(
+                            label: 'タグの完�E一致',
+                            selected: target == 'exact_match_for_tags',
+                            onSelected: () => setModalState(
+                              () => target = 'exact_match_for_tags',
+                            ),
+                          ),
+                          _buildChoiceChip(
+                            label: '全斁E��索�E�タグ�E�本斁E��E,
+                            selected: target == 'all_text',
+                            onSelected: () =>
+                                setModalState(() => target = 'all_text'),
+                          ),
+                          _buildChoiceChip(
+                            label: 'タグの部刁E��致',
+                            selected: target == 'partial_match_for_tags',
+                            onSelected: () => setModalState(
+                              () => target = 'partial_match_for_tags',
+                            ),
+                          ),
+                          _buildChoiceChip(
+                            label: 'タグの完�E一致',
+                            selected: target == 'exact_match_for_tags',
+                            onSelected: () => setModalState(
+                              () => target = 'exact_match_for_tags',
+                            ),
+                          ),
+                          _buildChoiceChip(
+                            label: '本斁E��検索',
+                            selected: target == 'text',
+                            onSelected: () =>
+                                setModalState(() => target = 'text'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // 2. ソート頁E
+                      _buildFilterSectionTitle('↕︁Eソート頁E),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          _buildChoiceChip(
+                            label: '新しい頁E(降頁E',
+                            selected: sortVal == 'date_desc',
+                            onSelected: () =>
+                                setModalState(() => sortVal = 'date_desc'),
+                          ),
+                          _buildChoiceChip(
+                            label: '古ぁE��E(昁E��E',
+                            selected: sortVal == 'date_asc',
+                            onSelected: () =>
+                                setModalState(() => sortVal = 'date_asc'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // 3. 年齢制陁E
+                      _buildFilterSectionTitle('🔞 年齢制陁E(アプリ側でフィルタリング)'),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          _buildChoiceChip(
+                            label: '制限なぁE,
+                            selected: ageLimitVal == 'all',
+                            onSelected: () =>
+                                setModalState(() => ageLimitVal = 'all'),
+                          ),
+                          _buildChoiceChip(
+                            label: '全年齢のみ (Safe)',
+                            selected: ageLimitVal == 'safe',
+                            onSelected: () =>
+                                setModalState(() => ageLimitVal = 'safe'),
+                          ),
+                          _buildChoiceChip(
+                            label: 'R-18のみ',
+                            selected: ageLimitVal == 'r18',
+                            onSelected: () =>
+                                setModalState(() => ageLimitVal = 'r18'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // 4. 人気フィルター (users入めE
+                      _buildFilterSectionTitle('⭁E人気フィルター (小説用 users入り裏ワザ)'),
+                      const SizedBox(height: 4),
+                      const Text(
+                        '検索ワード�E末尾に「○○users入り」を自動付加することで、人気作品に絞り込む裏ワザです、E,
+                        style: TextStyle(color: Colors.grey, fontSize: 11),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          _buildChoiceChip(
+                            label: '制限なぁE,
+                            selected: bookmarkFilterVal == 0,
+                            onSelected: () =>
+                                setModalState(() => bookmarkFilterVal = 0),
+                          ),
+                          _buildChoiceChip(
+                            label: '100+ users',
+                            selected: bookmarkFilterVal == 100,
+                            onSelected: () =>
+                                setModalState(() => bookmarkFilterVal = 100),
+                          ),
+                          _buildChoiceChip(
+                            label: '300+ users',
+                            selected: bookmarkFilterVal == 300,
+                            onSelected: () =>
+                                setModalState(() => bookmarkFilterVal = 300),
+                          ),
+                          _buildChoiceChip(
+                            label: '500+ users',
+                            selected: bookmarkFilterVal == 500,
+                            onSelected: () =>
+                                setModalState(() => bookmarkFilterVal = 500),
+                          ),
+                          _buildChoiceChip(
+                            label: '1000+ users',
+                            selected: bookmarkFilterVal == 1000,
+                            onSelected: () =>
+                                setModalState(() => bookmarkFilterVal = 1000),
+                          ),
+                          _buildChoiceChip(
+                            label: '5000+ users',
+                            selected: bookmarkFilterVal == 5000,
+                            onSelected: () =>
+                                setModalState(() => bookmarkFilterVal = 5000),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // 5. 本斁E�E長ぁE
+                      _buildFilterSectionTitle('✍︁E本斁E�E長ぁE(サーバ�E自動巡回フィルター)'),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          _buildChoiceChip(
+                            label: 'すべて (制限なぁE',
+                            selected: textLengthLimitVal == 'all',
+                            onSelected: () =>
+                                setModalState(() => textLengthLimitVal = 'all'),
+                          ),
+                          _buildChoiceChip(
+                            label: '短編 (、E,000斁E��E',
+                            selected: textLengthLimitVal == 'short',
+                            onSelected: () => setModalState(
+                              () => textLengthLimitVal = 'short',
+                            ),
+                          ),
+                          _buildChoiceChip(
+                            label: '中編 (5,000、E0,000斁E��E',
+                            selected: textLengthLimitVal == 'medium',
+                            onSelected: () => setModalState(
+                              () => textLengthLimitVal = 'medium',
+                            ),
+                          ),
+                          _buildChoiceChip(
+                            label: '長編 (20,000斁E��以丁E',
+                            selected: textLengthLimitVal == 'long',
+                            onSelected: () => setModalState(
+                              () => textLengthLimitVal = 'long',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      // カスタム斁E��数篁E��持E��E
+                      _buildFilterSectionTitle('🔢 カスタム斁E��数篁E��持E��E),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _minTextLengthController,
+                              keyboardType: TextInputType.number,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                labelText: '最小文字数',
+                                labelStyle: const TextStyle(color: Colors.grey),
+                                filled: true,
+                                fillColor: Colors.grey[900],
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide.none,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: _maxTextLengthController,
+                              keyboardType: TextInputType.number,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                labelText: '最大斁E��数',
+                                labelStyle: const TextStyle(color: Colors.grey),
+                                filled: true,
+                                fillColor: Colors.grey[900],
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide.none,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // 5.5 シリーズ統計文字数 (シリーズ全体�E合計文字数)
+                      _buildFilterSectionTitle('📚 シリーズ統計文字数 (全体�E合計文字数で絞り込み)'),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'シリーズに属する�Eエピソード�E斁E��数を合計した値で絞り込みます、E
+                        'シリーズでなぁE��品は非表示になります（アプリ冁E��ローカル適用�E�、E,
+                        style: TextStyle(color: Colors.grey, fontSize: 11),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          _buildChoiceChip(
+                            label: 'すべて (制限なぁE',
+                            selected: seriesTextLengthLimitVal == 'all',
+                            onSelected: () => setModalState(
+                              () => seriesTextLengthLimitVal = 'all',
+                            ),
+                          ),
+                          _buildChoiceChip(
+                            label: '短編 (、E,000斁E��E',
+                            selected: seriesTextLengthLimitVal == 'short',
+                            onSelected: () => setModalState(
+                              () => seriesTextLengthLimitVal = 'short',
+                            ),
+                          ),
+                          _buildChoiceChip(
+                            label: '中編 (5,000、E0,000斁E��E',
+                            selected: seriesTextLengthLimitVal == 'medium',
+                            onSelected: () => setModalState(
+                              () => seriesTextLengthLimitVal = 'medium',
+                            ),
+                          ),
+                          _buildChoiceChip(
+                            label: '長編 (20,000斁E��以丁E',
+                            selected: seriesTextLengthLimitVal == 'long',
+                            onSelected: () => setModalState(
+                              () => seriesTextLengthLimitVal = 'long',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _buildFilterSectionTitle('🔢 カスタムシリーズ斁E��数篁E��'),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: seriesMinController,
+                              keyboardType: TextInputType.number,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                labelText: '最小文字数',
+                                labelStyle: const TextStyle(color: Colors.grey),
+                                filled: true,
+                                fillColor: Colors.grey[900],
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide.none,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: seriesMaxController,
+                              keyboardType: TextInputType.number,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                labelText: '最大斁E��数',
+                                labelStyle: const TextStyle(color: Colors.grey),
+                                filled: true,
+                                fillColor: Colors.grey[900],
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide.none,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // 6. AI作品フィルター
+                      _buildFilterSectionTitle('🤁EAI作品フィルター'),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'novel_ai_type に基づき、AI生�E作品の表示を制御します（アプリ冁E��ローカル適用�E�、E,
+                        style: TextStyle(color: Colors.grey, fontSize: 11),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          _buildChoiceChip(
+                            label: 'すべて',
+                            selected: aiFilterVal == 'all',
+                            onSelected: () =>
+                                setModalState(() => aiFilterVal = 'all'),
+                          ),
+                          _buildChoiceChip(
+                            label: 'AI以外�Eみ',
+                            selected: aiFilterVal == 'hide',
+                            onSelected: () =>
+                                setModalState(() => aiFilterVal = 'hide'),
+                          ),
+                          _buildChoiceChip(
+                            label: 'AI作品のみ',
+                            selected: aiFilterVal == 'only',
+                            onSelected: () =>
+                                setModalState(() => aiFilterVal = 'only'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // 7. シリーズ作品のみ
+                      _buildFilterSectionTitle('📚 シリーズ作品のみ表示'),
+                      const SizedBox(height: 8),
+                      SwitchListTile(
+                        value: seriesOnlyVal,
+                        onChanged: (v) =>
+                            setModalState(() => seriesOnlyVal = v),
+                        title: const Text(
+                          'シリーズに属する作品のみ表示する',
+                          style: TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                        activeColor: Colors.pinkAccent,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      const SizedBox(height: 12),
+
+                      // 8. 除外タグ
+                      _buildFilterSectionTitle('🚫 除外タグ'),
+                      const SizedBox(height: 4),
+                      const Text(
+                        '持E��したタグを含む作品を除外します（「Enter」で追加、タチE�Eで削除�E�、E,
+                        style: TextStyle(color: Colors.grey, fontSize: 11),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: excludeTagInputController,
+                              keyboardType: TextInputType.text,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                labelText: '除外タグを追加',
+                                labelStyle: const TextStyle(color: Colors.grey),
+                                filled: true,
+                                fillColor: Colors.grey[900],
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide.none,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                suffixIcon: IconButton(
+                                  icon: const Icon(
+                                    Icons.add_circle,
+                                    color: Colors.pinkAccent,
+                                  ),
+                                  onPressed: () {
+                                    final tag = excludeTagInputController.text
+                                        .trim();
+                                    if (tag.isEmpty) return;
+                                    if (!excludeTagsVal.contains(tag)) {
+                                      setModalState(() {
+                                        excludeTagsVal.add(tag);
+                                      });
+                                    }
+                                    excludeTagInputController.clear();
+                                  },
+                                ),
+                              ),
+                              onSubmitted: (value) {
+                                final tag = value.trim();
+                                if (tag.isEmpty) return;
+                                if (!excludeTagsVal.contains(tag)) {
+                                  setModalState(() {
+                                    excludeTagsVal.add(tag);
+                                  });
+                                }
+                                excludeTagInputController.clear();
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (excludeTagsVal.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: excludeTagsVal.map((tag) {
+                            return Chip(
+                              label: Text(
+                                tag,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              backgroundColor: Colors.redAccent.withValues(
+                                alpha: 0.2,
+                              ),
+                              side: BorderSide(
+                                color: Colors.redAccent.withValues(alpha: 0.5),
+                                width: 0.5,
+                              ),
+                              deleteIcon: const Icon(
+                                Icons.close,
+                                size: 14,
+                                color: Colors.redAccent,
+                              ),
+                              onDeleted: () {
+                                setModalState(() {
+                                  excludeTagsVal.remove(tag);
+                                });
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+
+                      // 9. 表示寁E��
+                      _buildFilterSectionTitle('🔲 表示寁E��'),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          _buildChoiceChip(
+                            label: '可読性重要E(135px)',
+                            selected: densityVal == 'comfortable',
+                            onSelected: () =>
+                                setModalState(() => densityVal = 'comfortable'),
+                          ),
+                          _buildChoiceChip(
+                            label: '惁E��寁E�� (95px)',
+                            selected: densityVal == 'compact',
+                            onSelected: () =>
+                                setModalState(() => densityVal = 'compact'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 32),
+
+                      // 適用ボタン
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            // カスタム斁E��数篁E��をコントローラーに保孁E
+                            if (minController.text.isNotEmpty ||
+                                maxController.text.isNotEmpty) {
+                              _minTextLengthController!.text =
+                                  minController.text;
+                              _maxTextLengthController!.text =
+                                  maxController.text;
+                              textLengthLimitVal = 'custom';
+                            }
+                            // カスタムシリーズ斁E��数篁E��をコントローラーに保孁E
+                            if (seriesMinController.text.isNotEmpty ||
+                                seriesMaxController.text.isNotEmpty) {
+                              _minSeriesTextLengthController!.text =
+                                  seriesMinController.text;
+                              _maxSeriesTextLengthController!.text =
+                                  seriesMaxController.text;
+                              seriesTextLengthLimitVal = 'custom';
+                            }
+                            setState(() {
+                              _selectedNovelSearchTarget = target;
+                              _selectedSort = sortVal;
+                              _selectedNovelAgeLimit = ageLimitVal;
+                              _selectedNovelBookmarkFilter = bookmarkFilterVal;
+                              _selectedNovelTextLengthLimit =
+                                  textLengthLimitVal;
+                              _selectedNovelSeriesTextLengthLimit =
+                                  seriesTextLengthLimitVal;
+                              _selectedNovelAiFilter = aiFilterVal;
+                              _novelSeriesOnly = seriesOnlyVal;
+                              _novelExcludeTags = excludeTagsVal;
+                              _novelDensityMode = densityVal;
+                              // フィルタ変更に伴ぁE��リーズ合計文字数キャチE��ュをリセチE��
+                              _seriesTotalTextLengthCache.clear();
+                            });
+                            _saveNovelFilterPrefs();
+                            Navigator.pop(context);
+                            _fetchData();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.teal,
+                            foregroundColor: Colors.white,
+                            elevation: 5,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text(
+                            '小説フィルターを適用',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // フィルターボトムシート�E表示
+  void _showFilterBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        String target = _selectedSearchTarget;
+        String sortVal = _selectedSort;
+        String workTypeVal = _selectedWorkType;
+        String ageLimitVal = _selectedAgeLimit;
+        String durationVal = _selectedDuration;
+        int bookmarkFilterVal = _selectedBookmarkFilter;
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return DraggableScrollableSheet(
+              initialChildSize: 0.85,
+              minChildSize: 0.5,
+              maxChildSize: 0.95,
+              expand: false,
+              builder: (context, scrollController) {
+                return SingleChildScrollView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[700],
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.tune,
+                            color: Colors.pinkAccent,
+                            size: 24,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            '高度な検索フィルター',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () {
+                              setModalState(() {
+                                target = 'partial_match_for_tags';
+                                sortVal = 'date_desc';
+                                workTypeVal = 'all';
+                                ageLimitVal = 'all';
+                                durationVal = 'all';
+                                bookmarkFilterVal = 0;
+                              });
+                            },
+                            child: const Text(
+                              'リセチE��',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(color: Colors.grey),
+                      const SizedBox(height: 12),
+
+                      // 1. 検索対象
+                      _buildFilterSectionTitle('🔍 検索対象'),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          _buildChoiceChip(
+                            label: 'タグの部刁E��致',
+                            selected: target == 'partial_match_for_tags',
+                            onSelected: () => setModalState(
+                              () => target = 'partial_match_for_tags',
+                            ),
+                          ),
+                          _buildChoiceChip(
+                            label: 'タグの完�E一致',
+                            selected: target == 'exact_match_for_tags',
+                            onSelected: () => setModalState(
+                              () => target = 'exact_match_for_tags',
+                            ),
+                          ),
+                          _buildChoiceChip(
+                            label: 'タイトル・本斁E,
+                            selected: target == 'title_and_caption',
+                            onSelected: () => setModalState(
+                              () => target = 'title_and_caption',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // 2. ソート頁E
+                      _buildFilterSectionTitle('↕︁Eソート頁E),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          _buildChoiceChip(
+                            label: '新しい頁E(降頁E',
+                            selected: sortVal == 'date_desc',
+                            onSelected: () =>
+                                setModalState(() => sortVal = 'date_desc'),
+                          ),
+                          _buildChoiceChip(
+                            label: '古ぁE��E(昁E��E',
+                            selected: sortVal == 'date_asc',
+                            onSelected: () =>
+                                setModalState(() => sortVal = 'date_asc'),
+                          ),
+                          _buildChoiceChip(
+                            label: '人気頁E(要�Eレミアム) ⚠�E�E,
+                            selected: sortVal == 'popular_desc',
+                            onSelected: () {
+                              setModalState(() => sortVal = 'popular_desc');
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    '人気頁E�Eアカウントが非�Eレミアムの場合、サーバ�Eエラーになる可能性があります、E,
+                                  ),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // 3. 作品タイチE
+                      _buildFilterSectionTitle('🎨 作品タイチE),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          _buildChoiceChip(
+                            label: 'すべて',
+                            selected: workTypeVal == 'all',
+                            onSelected: () =>
+                                setModalState(() => workTypeVal = 'all'),
+                          ),
+                          _buildChoiceChip(
+                            label: 'イラスチE,
+                            selected: workTypeVal == 'illust',
+                            onSelected: () =>
+                                setModalState(() => workTypeVal = 'illust'),
+                          ),
+                          _buildChoiceChip(
+                            label: 'マンガ',
+                            selected: workTypeVal == 'manga',
+                            onSelected: () =>
+                                setModalState(() => workTypeVal = 'manga'),
+                          ),
+                          _buildChoiceChip(
+                            label: 'ぁE��イラ',
+                            selected: workTypeVal == 'ugoira',
+                            onSelected: () =>
+                                setModalState(() => workTypeVal = 'ugoira'),
+                          ),
+                          _buildChoiceChip(
+                            label: '小説',
+                            selected: workTypeVal == 'novel',
+                            onSelected: () =>
+                                setModalState(() => workTypeVal = 'novel'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // 4. 年齢制陁E
+                      _buildFilterSectionTitle('🔞 年齢制陁E),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          _buildChoiceChip(
+                            label: '制限なぁE,
+                            selected: ageLimitVal == 'all',
+                            onSelected: () =>
+                                setModalState(() => ageLimitVal = 'all'),
+                          ),
+                          _buildChoiceChip(
+                            label: '全年齢 (Safe)',
+                            selected: ageLimitVal == 'safe',
+                            onSelected: () =>
+                                setModalState(() => ageLimitVal = 'safe'),
+                          ),
+                          _buildChoiceChip(
+                            label: 'R-18 (成人向け)',
+                            selected: ageLimitVal == 'r18',
+                            onSelected: () =>
+                                setModalState(() => ageLimitVal = 'r18'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // 5. 投稿期間
+                      _buildFilterSectionTitle('📅 投稿期間'),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          _buildChoiceChip(
+                            label: '持E��なぁE,
+                            selected: durationVal == 'all',
+                            onSelected: () =>
+                                setModalState(() => durationVal = 'all'),
+                          ),
+                          _buildChoiceChip(
+                            label: '1日以冁E,
+                            selected: durationVal == 'within_last_day',
+                            onSelected: () => setModalState(
+                              () => durationVal = 'within_last_day',
+                            ),
+                          ),
+                          _buildChoiceChip(
+                            label: '1週間以冁E,
+                            selected: durationVal == 'within_last_week',
+                            onSelected: () => setModalState(
+                              () => durationVal = 'within_last_week',
+                            ),
+                          ),
+                          _buildChoiceChip(
+                            label: '1ヶ月以冁E,
+                            selected: durationVal == 'within_last_month',
+                            onSelected: () => setModalState(
+                              () => durationVal = 'within_last_month',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // 6. 人気フィルター (users入めE
+                      _buildFilterSectionTitle('⭁E人気フィルター (非会員向け人気頁E��ワザ)'),
+                      const SizedBox(height: 4),
+                      const Text(
+                        '検索ワード�E末尾に「○○users入り」を自動付加することで、E��プレミアムでもブクマ数一定以上�E人気作に絞り込む裏ワザです、E,
+                        style: TextStyle(color: Colors.grey, fontSize: 11),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          _buildChoiceChip(
+                            label: '制限なぁE,
+                            selected: bookmarkFilterVal == 0,
+                            onSelected: () =>
+                                setModalState(() => bookmarkFilterVal = 0),
+                          ),
+                          _buildChoiceChip(
+                            label: '100+ users',
+                            selected: bookmarkFilterVal == 100,
+                            onSelected: () =>
+                                setModalState(() => bookmarkFilterVal = 100),
+                          ),
+                          _buildChoiceChip(
+                            label: '500+ users',
+                            selected: bookmarkFilterVal == 500,
+                            onSelected: () =>
+                                setModalState(() => bookmarkFilterVal = 500),
+                          ),
+                          _buildChoiceChip(
+                            label: '1000+ users',
+                            selected: bookmarkFilterVal == 1000,
+                            onSelected: () =>
+                                setModalState(() => bookmarkFilterVal = 1000),
+                          ),
+                          _buildChoiceChip(
+                            label: '5000+ users',
+                            selected: bookmarkFilterVal == 5000,
+                            onSelected: () =>
+                                setModalState(() => bookmarkFilterVal = 5000),
+                          ),
+                          _buildChoiceChip(
+                            label: '10000+ users',
+                            selected: bookmarkFilterVal == 10000,
+                            onSelected: () =>
+                                setModalState(() => bookmarkFilterVal = 10000),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 32),
+
+                      // 適用ボタン
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _selectedSearchTarget = target;
+                              _selectedSort = sortVal;
+                              _selectedWorkType = workTypeVal;
+                              _selectedAgeLimit = ageLimitVal;
+                              _selectedDuration = durationVal;
+                              _selectedBookmarkFilter = bookmarkFilterVal;
+                            });
+                            Navigator.pop(context);
+                            _fetchData();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.pinkAccent,
+                            foregroundColor: Colors.white,
+                            elevation: 5,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text(
+                            '検索フィルターを適用',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ボトムシートセクションタイトルビルダー
+  Widget _buildFilterSectionTitle(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+        fontSize: 13,
+      ),
+    );
+  }
+
+  // ChoiceChipのカスタムスタイルビルダー
+  Widget _buildChoiceChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onSelected,
+  }) {
+    return ChoiceChip(
+      label: Text(
+        label,
+        style: TextStyle(
+          color: selected ? Colors.white : Colors.grey[400],
+          fontSize: 12,
+          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
+      selected: selected,
+      selectedColor: Colors.pinkAccent.withValues(alpha: 0.8),
+      backgroundColor: const Color(0xFF2E2E2E),
+      elevation: selected ? 2 : 0,
+      pressElevation: 4,
+      onSelected: (_) => onSelected(),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: selected ? Colors.pinkAccent : Colors.transparent,
+          width: 1,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    int crossAxisCount = 2;
+    if (screenWidth > 1200) {
+      crossAxisCount = 5;
+    } else if (screenWidth > 800) {
+      crossAxisCount = 4;
+    } else if (screenWidth > 500) {
+      crossAxisCount = 3;
+    }
+
+    final activeSubMode = _currentIndex == _illustIndex ? _illustSubMode : _novelSubMode;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(
+          children: [
+            Icon(
+              _currentIndex == _illustIndex
+                  ? Icons.palette
+                  : _currentIndex == _novelIndex
+                      ? Icons.menu_book
+                      : Icons.auto_awesome,
+              color: Colors.pinkAccent,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              _currentIndex == _illustIndex
+                  ? 'Pixiv Illusts'
+                  : _currentIndex == _novelIndex
+                      ? 'Pixiv Novels'
+                      : 'フィーリング発掁E,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _isLoading ? null : _fetchData,
+            tooltip: '更新',
+          ),
+        ],
+      ),
+      drawer: Drawer(
+        backgroundColor: const Color(0xFF1A1A1A),
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            const DrawerHeader(
+              decoration: BoxDecoration(color: Colors.pink),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    'PixEmber',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    'Ultimate State v3.1.0',
+                    style: TextStyle(color: Colors.white70, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.image, color: Colors.pinkAccent),
+              title: const Text('イラスチE(Illusts)'),
+              onTap: () {
+                Navigator.pop(context);
+                _changeTab(_illustIndex);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.menu_book, color: Colors.pinkAccent),
+              title: const Text('小説 (Novels)'),
+              onTap: () {
+                Navigator.pop(context);
+                _changeTab(_novelIndex); // スムーズな刁E��替え連勁E
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.auto_awesome, color: Colors.pinkAccent),
+              title: const Text('フィーリング発掁E),
+              onTap: () {
+                Navigator.pop(context);
+                _changeTab(_feelingDiscoveryIndex);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.bookmark, color: Colors.pinkAccent),
+              title: const Text('しおり一覧'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const BookmarkListScreen(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.history, color: Colors.pinkAccent),
+              title: const Text('閲覧履歴 (History)'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const HistoryScreen(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder, color: Colors.pinkAccent),
+              title: const Text('お気に入りフォルダ'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const FolderListScreen(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.block, color: Colors.pinkAccent),
+              title: const Text('ミュート（ブラチE��リスト）管琁E),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const MuteSettingsScreen(),
+                  ),
+                );
+              },
+            ),
+            // ログイン/ログアウト�Eタン
+            ListTile(
+              leading: Icon(
+                _isLoggedIn ? Icons.logout : Icons.login,
+                color: Colors.pinkAccent,
+              ),
+              title: Text(_isLoggedIn ? 'ログアウチE : 'アカウント連携�E�ログイン�E�E),
+              onTap: () {
+                Navigator.pop(context);
+                if (_isLoggedIn) {
+                  _logout();
+                } else {
+                  _showPKCELoginDialog();
+                }
+              },
+            ),
+            const Divider(height: 1, color: Colors.grey),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Text(
+                'Google ドライブ同朁E,
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            _buildGoogleDriveSyncSection(),
+          ],
+        ),
+      ),
+      body: Stack(
+        children: [
+          Column(
+            children: [
+              // 検索バ�E (フィルターオプションボタン付き)
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        focusNode: _searchFocusNode,
+                        decoration: InputDecoration(
+              hintText: _currentIndex == _illustIndex
+                              ? 'イラスト、タグ、キーワードを検索...'
+                              : _currentIndex == _novelIndex
+                                  ? '小説、タグ、キーワードを検索...'
+                                  : '気�EめE��ーワードを入劁E..',
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          suffixIcon: _searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  onPressed: _resetSearch,
+                                )
+                              : null,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          filled: true,
+                          fillColor: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest
+                              .withValues(alpha: 0.4),
+                          isDense: true,
+                        ),
+                        textInputAction: TextInputAction.search,
+                        onSubmitted: _onSearchSubmit,
+                        onChanged: (val) {
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: Icon(
+                        Icons.tune,
+                        color: _currentIndex == _illustIndex
+                            ? Colors.pinkAccent
+                            : _currentIndex == _novelIndex
+                                ? Colors.tealAccent
+                                : Colors.amberAccent,
+                      ),
+                      onPressed: () {
+                        FocusScope.of(context).unfocus();
+                        if (_currentIndex == _illustIndex) {
+                          _showFilterBottomSheet();
+                        } else if (_currentIndex == _novelIndex) {
+                          _showNovelFilterBottomSheet();
+                        }
+                        // フィーリング発掘タブではフィルターなぁE
+                      },
+                      tooltip: _currentIndex == _illustIndex
+                          ? '検索フィルター'
+                          : _currentIndex == _novelIndex
+                              ? '小説検索フィルター'
+                              : 'フィルターなぁE,
+                    ),
+                  ],
+                ),
+              ),
+
+              // 3. サブモードセレクター (おすすめ / ランキング)。※検索結果時�Eサブタブ�E表示しません、E
+              // フィーリング発掘タブでは非表示
+              if (_currentIndex != _feelingDiscoveryIndex && activeSubMode != 1)
+                _buildSubModeSelector(),
+
+              // 4. ランキング時�Eモード�E替
+              // フィーリング発掘タブでは非表示
+              if (_currentIndex != _feelingDiscoveryIndex)
+                _buildRankingFilterBar(),
+
+              // 5. 百科事�EカーチE(検索モード時のみ)
+              if (_currentIndex != _feelingDiscoveryIndex && activeSubMode == 1 && _searchItem != null)
+                _buildEncyclopediaCard(),
+
+              // 読書中�E�しおり�E��E小説セクション (小説タブかつ非検索時に表示)
+              if (_currentIndex == _novelIndex && activeSubMode != 1)
+                _buildRecentBookmarksSection(),
+
+              // 6. メインチE�EタコンチE��チE
+              Expanded(
+                child: _isLoading
+                    ? const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(color: Colors.pinkAccent),
+                            SizedBox(height: 16),
+                            Text(
+                              'PixivからチE�Eタを取得中...',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      )
+                    : _errorMessage != null
+                    ? _buildErrorWidget()
+                    : _currentIndex == _illustIndex
+                        ? _buildIllustGrid(crossAxisCount)
+                        : _currentIndex == _novelIndex
+                            ? _buildNovelList()
+                            : const FeelingDiscoveryScreen(),
+              ),
+            ],
+          ),
+
+          // 🔍 検索履歴候補オーバ�EレイリスチE
+          if (_showHistoryList) _buildSearchHistoryOverlay(),
+
+          // 🔄 サブスクリプション同期プログレス HUD
+          if (_isSyncing && _syncProgress != null) _buildSyncProgressHUD(),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: _changeTab,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.image_outlined),
+            selectedIcon: Icon(Icons.image, color: Colors.pinkAccent),
+            label: 'イラスチE,
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.book_outlined),
+            selectedIcon: Icon(Icons.book, color: Colors.pinkAccent),
+            label: '小説',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.auto_awesome_outlined),
+            selectedIcon: Icon(Icons.auto_awesome, color: Colors.pinkAccent),
+            label: 'フィーリング発掁E,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 百科事�EカーチE
+  Widget _buildEncyclopediaCard() {
+    if (_searchItem == null) return const SizedBox.shrink();
+    final item = _searchItem!;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    width: 50,
+                    height: 50,
+                    color: Colors.black,
+                    child: item.iconUrl != null && item.iconUrl!.isNotEmpty
+                        ? PixivImage(
+                            url: item.iconUrl ?? '',
+                            isThumbnail: true,
+                            fit: BoxFit.cover,
+                          )
+                        : const Icon(
+                            Icons.bookmark_border,
+                            color: Colors.pinkAccent,
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '#${item.name}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Colors.pinkAccent,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '作品数: ${item.wordCount}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (item.summary.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                item.summary,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.white70,
+                  height: 1.4,
+                ),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+            if (item.dicUrl.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: InkWell(
+                  onTap: () async {
+                    final uri = Uri.parse(item.dicUrl);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(
+                        uri,
+                        mode: LaunchMode.externalApplication,
+                      );
+                    }
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                    child: Text(
+                      'ピクシブ百科事�Eで見る ↁE,
+                      style: TextStyle(
+                        color: Colors.blueAccent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 検索履歴オーバ�Eレイ
+  Widget _buildSearchHistoryOverlay() {
+    return Positioned(
+      top: 110, // 設定�E検索欁E�E丁E
+      left: 8,
+      right: 8,
+      child: Card(
+        color: const Color(0xFF1E1E1E),
+        elevation: 8,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 300),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12.0,
+                  vertical: 8.0,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      '最近�E検索履歴',
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _clearAllSearchHistory,
+                      child: const Text(
+                        'すべてクリア',
+                        style: TextStyle(
+                          color: Colors.pinkAccent,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, color: Colors.grey),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  padding: EdgeInsets.zero,
+                  itemCount: _searchHistory.length,
+                  itemBuilder: (context, idx) {
+                    final word = _searchHistory[idx];
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(
+                        Icons.history,
+                        size: 16,
+                        color: Colors.grey,
+                      ),
+                      title: Text(
+                        word,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                        ),
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(
+                          Icons.close,
+                          size: 14,
+                          color: Colors.grey,
+                        ),
+                        onPressed: () => _deleteSearchHistoryItem(word),
+                      ),
+                      onTap: () => _onHistoryItemTap(word),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // おすすめ/ランキングのサブタブ�Eり替ぁE
+  Widget _buildSubModeSelector() {
+    // フィーリング発掘タブでは呼び出されなぁE��、安�EのためガーチE
+    if (_currentIndex == _feelingDiscoveryIndex) return const SizedBox.shrink();
+    final activeSubMode = _currentIndex == _illustIndex ? _illustSubMode : _novelSubMode;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
+      child: Row(
+        children: [
+          _buildSubTabButton(
+            label: 'おすすめ',
+            isActive: activeSubMode == 0,
+            onTap: () {
+              setState(() {
+                _currentSearchWord = '';
+                _searchController.clear();
+                if (_currentIndex == _illustIndex) {
+                  _illustSubMode = 0;
+                } else if (_currentIndex == _novelIndex) {
+                  _novelSubMode = 0;
+                }
+              });
+              _fetchData();
+            },
+          ),
+          const SizedBox(width: 8),
+          _buildSubTabButton(
+            label: 'ランキング',
+            isActive: activeSubMode == 2,
+            onTap: () {
+              setState(() {
+                _currentSearchWord = '';
+                _searchController.clear();
+                if (_currentIndex == _illustIndex) {
+                  _illustSubMode = 2;
+                } else if (_currentIndex == _novelIndex) {
+                  _novelSubMode = 2;
+                }
+              });
+              _fetchData();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubTabButton({
+    required String label,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isActive
+                ? Colors.pink.withValues(alpha: 0.15)
+                : Colors.transparent,
+            border: Border.all(
+              color: isActive
+                  ? Colors.pinkAccent
+                  : Colors.grey.withValues(alpha: 0.3),
+              width: 1,
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: isActive ? Colors.pinkAccent : Colors.grey,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ランキング時�Eフィルター
+  Widget _buildRankingFilterBar() {
+    // フィーリング発掘タブでは呼び出されなぁE��、安�EのためガーチE
+    if (_currentIndex == _feelingDiscoveryIndex) return const SizedBox.shrink();
+    final activeSubMode = _currentIndex == _illustIndex ? _illustSubMode : _novelSubMode;
+    if (activeSubMode != 2) return const SizedBox.shrink();
+
+    final modes = _currentIndex == _illustIndex ? _illustRankModes : _novelRankModes;
+    final selected = _currentIndex == _illustIndex
+        ? _selectedIllustRankMode
+        : _selectedNovelRankMode;
+
+    return Container(
+      height: 42,
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        itemCount: modes.length,
+        itemBuilder: (context, idx) {
+          final m = modes[idx];
+          final isSel = m['value'] == selected;
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
+            child: ChoiceChip(
+              label: Text(m['label']!, style: const TextStyle(fontSize: 11)),
+              selected: isSel,
+              selectedColor: Colors.pink.withValues(alpha: 0.3),
+              checkmarkColor: Colors.pinkAccent,
+              onSelected: (selectedBool) {
+                if (selectedBool) {
+                  setState(() {
+                    if (_currentIndex == _illustIndex) {
+                      _selectedIllustRankMode = m['value']!;
+                    } else if (_currentIndex == _novelIndex) {
+                      _selectedNovelRankMode = m['value']!;
+                    }
+                  });
+                  _fetchData();
+                }
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // エラー表示ウィジェチE��
+  Widget _buildErrorWidget() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.cloud_off, size: 64, color: Colors.pinkAccent),
+            const SizedBox(height: 16),
+            Text(
+              _errorMessage!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _fetchData,
+              icon: const Icon(Icons.refresh),
+              label: const Text('再読み込みする'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.pinkAccent,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ==========================================
+  // 🎨 イラストグリチE��表示
+  // ==========================================
+  Widget _buildIllustGrid(int crossAxisCount) {
+    final filteredIllusts = _illusts.where((illust) {
+      // 1. 作品種別フィルター
+      if (_selectedWorkType != 'all') {
+        if (_selectedWorkType == 'illust' && illust.type != 'illust') {
+          return false;
+        }
+        if (_selectedWorkType == 'manga' && illust.type != 'manga') {
+          return false;
+        }
+        if (_selectedWorkType == 'ugoira' && illust.type != 'ugoira') {
+          return false;
+        }
+        if (_selectedWorkType == 'novel') {
+          return false;
+        }
+      }
+      // 2. 年齢制限フィルター
+      final hasR18Tag = illust.tags.any(
+        (t) =>
+            t.toLowerCase().contains('r-18') || t.toLowerCase().contains('r18'),
+      );
+      if (_selectedAgeLimit == 'safe' && hasR18Tag) return false;
+      if (_selectedAgeLimit == 'r18' && !hasR18Tag) return false;
+      return true;
+    }).toList();
+
+    if (filteredIllusts.isEmpty && _illusts.isNotEmpty) {
+      return const Center(
+        child: Text(
+          'フィルターに一致するイラストが見つかりませんでした、E,
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    if (_illusts.isEmpty) {
+      return const Center(
+        child: Text('イラストが見つかりませんでした、E, style: TextStyle(color: Colors.grey)),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _fetchData,
+      child: GridView.builder(
+        controller: _scrollController,
+        physics: const ClampingScrollPhysics(),
+        padding: const EdgeInsets.all(6.0),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: crossAxisCount,
+          crossAxisSpacing: 6.0,
+          mainAxisSpacing: 6.0,
+          childAspectRatio: 0.75,
+        ),
+itemCount: filteredIllusts.length + (_nextOffset != null ? 1 : 0),
+        itemBuilder: (context, index) {
+          // 最下部に到達した時のローチE��ング追加表示
+          if (index == filteredIllusts.length) {
+            if (_rateLimited) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'アクセス制限が発生しました',
+                        style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Pixivのアクセス制限（レート制限）が発生しました、Enし�Eらく時間を置ぁE��から再試行してください、E,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _fetchNextPage,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('再試衁E),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: CircularProgressIndicator(color: Colors.pinkAccent),
+              ),
+            );
+          }
+
+          final illust = filteredIllusts[index];
+          return Card(
+            clipBehavior: Clip.antiAlias,
+            elevation: 3,
+            child: InkWell(
+              onTap: () async {
+                // 詳細画面へ遷移
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => IllustDetailScreen(
+                      illust: illust,
+                      onTagTap: _onTagSelected,
+                      onBookmarkChanged: (newVal) {
+                        setState(() {
+                          illust.isBookmarked = newVal;
+                        });
+                      },
+                    ),
+                  ),
+                );
+                // 戻った際、状態整合性を保つため再描画
+                if (!mounted) return;
+                setState(() {});
+              },
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // 画像ローダー
+                  const Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                  // プレビュー画僁E
+                  if (illust.urls.preview != null)
+                    PixivImage(
+                      url: illust.urls.preview ?? '',
+                      isThumbnail: true,
+                      fit: BoxFit.cover,
+                    ),
+                  // ブックマ�Eク済みハ�EトバチE�� (左丁E
+                  if (illust.isBookmarked)
+                    Positioned(
+                      top: 6,
+                      left: 6,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.favorite,
+                          size: 16,
+                          color: Colors.pinkAccent,
+                        ),
+                      ),
+                    ),
+                  // 褁E��枚インジケータ (右丁E
+                  if (illust.pageCount > 1)
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${illust.pageCount}P',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  // タイトル & ユーザー名フチE��ー
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(6.0),
+                      color: Colors.black87,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            illust.title,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            '👤 ${illust.author.name}',
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 9,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ==========================================
+  // 📚 小説リスト表示�E�レスポンシチEGridView�E�E
+  // ==========================================
+  Widget _buildNovelList() {
+    final filteredNovels = _novels.where((novel) {
+      // 1. 年齢制限フィルター (小説専用)
+      final hasR18Tag = novel.tags.any(
+        (t) =>
+            t.toLowerCase().contains('r-18') || t.toLowerCase().contains('r18'),
+      );
+      if (_selectedNovelAgeLimit == 'safe' && hasR18Tag) {
+        return false;
+      }
+      if (_selectedNovelAgeLimit == 'r18' && !hasR18Tag) {
+        return false;
+      }
+
+      // 2. 本斁E�E長さフィルター (小説専用)
+      if (_selectedNovelTextLengthLimit == 'short' && novel.textLength > 5000) {
+        return false;
+      }
+      if (_selectedNovelTextLengthLimit == 'medium' &&
+          (novel.textLength <= 5000 || novel.textLength > 20000)) {
+        return false;
+      }
+      if (_selectedNovelTextLengthLimit == 'long' &&
+          novel.textLength <= 20000) {
+        return false;
+      }
+      if (_selectedNovelTextLengthLimit == 'custom') {
+        final minLen = int.tryParse(_minTextLengthController?.text ?? '');
+        final maxLen = int.tryParse(_maxTextLengthController?.text ?? '');
+        if (minLen != null && novel.textLength < minLen) {
+          return false;
+        }
+        if (maxLen != null && novel.textLength > maxLen) {
+          return false;
+        }
+      }
+
+      // 2.5 シリーズ統計文字数フィルター (シリーズ全体�E合計文字数)
+      if (_selectedNovelSeriesTextLengthLimit != 'all') {
+        // シリーズでなぁE��品は常に除夁E
+        if (novel.series == null || novel.series!.id == 0) {
+          return false;
+        }
+        final seriesTotal = _seriesTotalTextLengthCache[novel.series!.id];
+        if (seriesTotal != null) {
+          final threshold = _getSeriesLengthThreshold();
+          if (threshold.minLen != null && seriesTotal < threshold.minLen!) {
+            return false;
+          }
+          if (threshold.maxLen != null && seriesTotal > threshold.maxLen!) {
+            return false;
+          }
+        }
+        // 雁E��未完亁E(キャチE��ュ未存在) の場合�E一旦表示し、E
+        // _computeSeriesTextLengths の setState による再描画で正しく絞り込む、E
+        // (雁E��前に非表示にすると「キャチE��ュ済みのも�Eしか出てこなぁE��不�E合になめE
+      }
+
+      // 3. AI作品フィルター (アプリ冁E��ーカル)
+      // novel_ai_type ぁE2 の場合に AI生�E作品と判宁E
+      final bool isAi = novel.aiType == 2;
+      if (_selectedNovelAiFilter == 'hide' && isAi) {
+        return false;
+      }
+      if (_selectedNovelAiFilter == 'only' && !isAi) {
+        return false;
+      }
+
+      // 4. シリーズ作品のみフィルター (アプリ冁E��ーカル)
+      if (_novelSeriesOnly) {
+        final hasSeries = novel.series != null && novel.series!.id != 0;
+        if (!hasSeries) return false;
+      }
+
+      // 5. 除外タグフィルター (アプリ冁E��ーカル)
+      if (_novelExcludeTags.isNotEmpty) {
+        final lowerTags = novel.tags.map((t) => t.toLowerCase()).toSet();
+        for (final ex in _novelExcludeTags) {
+          if (lowerTags.contains(ex.toLowerCase())) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    }).toList();
+
+    // 表示寁E��の高さ�E�Eompact=95px / comfortable=135px�E�E
+    final int itemHeight = _novelDensityMode == 'compact' ? 95 : 135;
+    final int wideItemHeight = _novelDensityMode == 'compact' ? 105 : 145;
+
+    if (filteredNovels.isEmpty && _novels.isNotEmpty) {
+      return const Center(
+        child: Text(
+          'フィルターに一致する小説が見つかりませんでした、E,
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    if (_novels.isEmpty) {
+      return const Center(
+        child: Text('小説が見つかりませんでした、E, style: TextStyle(color: Colors.grey)),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _fetchData,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth > 700;
+
+          // 結果数とフィルター状態バナ�E
+          Widget buildHeader() {
+            final totalLabel = _nextOffset != null
+                ? '${filteredNovels.length}+ 件'
+                : '${filteredNovels.length} 件';
+            final labels = <String>[];
+            if (_selectedNovelSearchTarget == 'all_text') {
+              labels.add('全斁E��索');
+            }
+            if (_selectedNovelAgeLimit != 'all') {
+              labels.add(
+                _selectedNovelAgeLimit == 'safe' ? 'Safeのみ' : 'R-18のみ',
+              );
+            }
+            if (_selectedNovelBookmarkFilter > 0) {
+              labels.add('${_selectedNovelBookmarkFilter}+ users');
+            }
+            if (_selectedNovelTextLengthLimit != 'all') {
+              labels.add('斁E��数: $_selectedNovelTextLengthLimit');
+            }
+            if (_selectedNovelSeriesTextLengthLimit != 'all') {
+              labels.add('シリーズ斁E��数: $_selectedNovelSeriesTextLengthLimit');
+            }
+            if (_selectedNovelAiFilter != 'all') {
+              labels.add(_selectedNovelAiFilter == 'hide' ? 'AI以夁E : 'AIのみ');
+            }
+            if (_novelSeriesOnly) labels.add('シリーズのみ');
+            if (_novelExcludeTags.isNotEmpty) {
+              labels.add('除夁E{_novelExcludeTags.length}タグ');
+            }
+            labels.add(_novelDensityMode == 'compact' ? '高寁E��' : '可読性');
+
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12.0,
+                vertical: 6.0,
+              ),
+              color: Colors.black12,
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 2,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.library_books,
+                    size: 12,
+                    color: Colors.tealAccent,
+                  ),
+                  Text(
+                    totalLabel,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  ...labels.map(
+                    (l) => Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      child: Text(
+                        l,
+                        style: const TextStyle(
+                          fontSize: 9,
+                          color: Colors.tealAccent,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          if (isWide) {
+            // タブレチE��・PC: GridView めEListView 冁E�� shrinkWrap で置く（�EチE��ー付き�E�E
+            return ListView(
+              controller: _scrollController,
+              physics: const ClampingScrollPhysics(),
+              padding: const EdgeInsets.all(6.0),
+              children: [
+                buildHeader(),
+                GridView.builder(
+                  shrinkWrap: true,
+                  primary: false,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisExtent: wideItemHeight.toDouble(),
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                  ),
+itemCount:
+                      filteredNovels.length + (_nextOffset != null ? 1 : 0),
+                  itemBuilder: (context, idx) {
+                    if (idx == filteredNovels.length) {
+                      if (_rateLimited) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  'アクセス制限が発生しました',
+                                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Pixivのアクセス制限（レート制限）が発生しました、Enし�Eらく時間を置ぁE��から再試行してください、E,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton.icon(
+                                  onPressed: _fetchNextPage,
+                                  icon: const Icon(Icons.refresh),
+                                  label: const Text('再試衁E),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: CircularProgressIndicator(
+                            color: Colors.pinkAccent,
+                          ),
+                        ),
+                      );
+                    }
+                    final novel = filteredNovels[idx];
+                    return SizedBox(
+                      height: wideItemHeight.toDouble(),
+                      child: _buildNovelItemCard(novel),
+                    );
+                  },
+                ),
+              ],
+            );
+          }
+
+          // スマ�E: 標準的な縦スクロールリスト。�E頭は結果数バナー、E
+          final int totalItemCount =
+              1 /* header */ +
+              filteredNovels.length +
+              (_nextOffset != null ? 1 : 0);
+
+          Widget buildItem(BuildContext context, int index) {
+            if (index == 0) {
+              return buildHeader();
+            }
+            final realIndex = index - 1;
+// 最下部ローチE��ング表示
+            if (realIndex == filteredNovels.length) {
+              if (_rateLimited) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'アクセス制限が発生しました',
+                          style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Pixivのアクセス制限（レート制限）が発生しました、Enし�Eらく時間を置ぁE��から再試行してください、E,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: _fetchNextPage,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('再試衁E),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: CircularProgressIndicator(color: Colors.pinkAccent),
+                ),
+              );
+            }
+            final novel = filteredNovels[realIndex];
+            return SizedBox(
+              height: itemHeight.toDouble(),
+              child: _buildNovelItemCard(novel),
+            );
+          }
+
+          return ListView.builder(
+            controller: _scrollController,
+            physics: const ClampingScrollPhysics(),
+            padding: const EdgeInsets.all(6.0),
+            itemCount: totalItemCount,
+            itemBuilder: buildItem,
+          );
+        },
+      ),
+    );
+  }
+
+  // 小説カード（横長・固定高！E 左カバ�E + 右詳細カラム
+  Widget _buildNovelItemCard(Novel novel) {
+    final avatar = novel.author.avatar;
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      child: InkWell(
+        onTap: () async {
+          // 通常タチE�E�E�読み刁E��・シリーズ問わず、その話の小説詳細UIへ遷移、E
+          // シリーズの「話数の一覧」へは、カード�Eの「シリーズ」バチE��めE
+          // タチE�Eした場合にのみ遷移する�E�下記バチE��の GestureDetector 参�E�E�、E
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => NovelDetailScreen(
+                novel: novel,
+                onTagTap: _onTagSelected,
+                onBookmarkChanged: (newVal) {
+                  setState(() {
+                    novel.isBookmarked = newVal;
+                  });
+                },
+              ),
+            ),
+          );
+          if (!mounted) return;
+          setState(() {});
+        },
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 左側: 角丸カバ�E画像（幁E100px, 小説カバ�E標準�E縦長比率 2:3 を固定維持E��E
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(10),
+                bottomLeft: Radius.circular(10),
+              ),
+              child: SizedBox(
+                width: 100,
+                height: 150,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Container(
+                      color: Colors.grey[900],
+                      child: novel.coverUrl.isNotEmpty
+                          ? PixivImage(
+                              url: novel.coverUrl,
+                              isThumbnail: true,
+                              fit: BoxFit.cover,
+                            )
+                          : const Center(
+                              child: Icon(
+                                Icons.book,
+                                color: Colors.grey,
+                                size: 32,
+                              ),
+                            ),
+                    ),
+                    if (novel.isBookmarked)
+                      Positioned(
+                        top: 6,
+                        left: 6,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.black54,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.favorite,
+                            size: 14,
+                            color: Colors.pinkAccent,
+                          ),
+                        ),
+                      ),
+                    if (novel.pageCount > 1)
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.7),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${novel.pageCount} P',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    // 読み刁E�� / シリーズ 区刁E��チE��
+                    // シリーズの場合�EみバッジをタチE�E可能とし、「話数の一覧」へ遷移、E
+                    Positioned(
+                      bottom: 6,
+                      left: 6,
+                      child: GestureDetector(
+                        onTap: (novel.series != null && novel.series!.id != 0)
+                            ? () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        NovelSeriesEpisodesScreen(
+                                          series: novel.series!,
+                                          coverUrl: novel.coverUrl,
+                                          author: novel.author,
+                                        ),
+                                  ),
+                                );
+                              }
+                            : null,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: novel.series != null && novel.series!.id != 0
+                                ? Colors.purple.withValues(alpha: 0.85)
+                                : Colors.teal.withValues(alpha: 0.85),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                novel.series != null && novel.series!.id != 0
+                                    ? Icons.auto_stories
+                                    : Icons.menu_book,
+                                size: 9,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                novel.series != null && novel.series!.id != 0
+                                    ? 'シリーズ'
+                                    : '読み刁E��',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // 右側: 詳細惁E���E�Expanded�E�E
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10.0,
+                  vertical: 8.0,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // タイトル�E�太字�E最大2行！E
+                    Text(
+                      novel.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: Colors.white,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    // 作老E��報�E�丸アバター + 名前�E�E
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 7,
+                          backgroundImage: avatar != null && avatar.isNotEmpty
+                              ? NetworkImage(
+                                  avatar,
+                                  headers: const {
+                                    'Referer': 'https://app-api.pixiv.net/',
+                                  },
+                                )
+                              : null,
+                          child: (avatar == null || avatar.isEmpty)
+                              ? const Icon(Icons.person, size: 7)
+                              : null,
+                        ),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            novel.author.name,
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 10,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    // タグ一覧 (Wrap で折り返し表示)
+                    if (novel.tags.isNotEmpty)
+                      Expanded(
+                        child: SingleChildScrollView(
+                          physics: const ClampingScrollPhysics(),
+                          child: Wrap(
+                            spacing: 4,
+                            runSpacing: 2,
+                            children: novel.tags.map((tag) {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.pinkAccent.withValues(
+                                    alpha: 0.15,
+                                  ),
+                                  borderRadius: BorderRadius.circular(3),
+                                  border: Border.all(
+                                    color: Colors.pinkAccent.withValues(
+                                      alpha: 0.3,
+                                    ),
+                                    width: 0.5,
+                                  ),
+                                ),
+                                child: Text(
+                                  tag,
+                                  style: const TextStyle(
+                                    fontSize: 9,
+                                    color: Colors.pinkAccent,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                    const Spacer(),
+                    // 統計バチE��行（�Eージ数 / 斁E��数 / 進捗！E
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.teal.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.menu_book,
+                                size: 9,
+                                color: Colors.tealAccent,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                '${novel.pageCount} P',
+                                style: const TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.tealAccent,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blueAccent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.edit_note,
+                                size: 10,
+                                color: Colors.blueAccent,
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                '${_formatNumber(novel.textLength)} 斁E��E,
+                                style: const TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blueAccent,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        FutureBuilder<double?>(
+                          future: SharedPreferences.getInstance().then(
+                            (prefs) =>
+                                prefs.getDouble('novel_progress_${novel.id}'),
+                          ),
+                          builder: (context, snapshot) {
+                            final progress = snapshot.data;
+                            if (progress == null || progress <= 0.0) {
+                              return const SizedBox.shrink();
+                            }
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.pink.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.bookmark,
+                                    size: 9,
+                                    color: Colors.pinkAccent,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    '${progress.toStringAsFixed(0)}%',
+                                    style: const TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.pinkAccent,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 数値フォーマット�Eルパ�E (3桁カンマ区刁E��)
+  String _formatNumber(int? number) {
+    if (number == null) return '0';
+    final str = number.toString();
+    final reg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
+    return str.replaceAllMapped(reg, (Match m) => '${m[1]},');
+  }
+
+  // 読書再開用に実データを取得（オフライン/未ログイン時�E保存情報でダミ�Eを返す�E�E
+  Future<Novel> _fetchNovelForResume(
+    int id,
+    String title,
+    String author,
+  ) async {
+    try {
+      return await _pixivApiService.getNovelById(id);
+    } catch (e) {
+      debugPrint('しおりから�E実データ取得に失敗（保存情報で表示�E�E $e');
+      return Novel(
+        id: id,
+        title: title,
+        caption: '',
+        coverUrl: '',
+        createDate: '',
+        textCount: 0,
+        wordCount: 0,
+        textLength: 0,
+        pageCount: 0,
+        totalBookmarks: 0,
+        totalView: 0,
+        isBookmarked: false,
+        tags: [],
+        author: Author(id: 0, name: author, account: ''),
+      );
+    }
+  }
+
+  // 読書中�E�しおり�E��E小説の簡易情報を取得すめE
+  Future<List<Map<String, dynamic>>> _getRecentBookmarks() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final List<String> bookmarkedIds =
+          prefs.getStringList('novel_bookmark_ids') ?? [];
+      final List<Map<String, dynamic>> results = [];
+
+      for (final idStr in bookmarkedIds) {
+        final id = int.tryParse(idStr);
+        if (id == null) continue;
+
+        final title = prefs.getString('novel_title_$id');
+        final author = prefs.getString('novel_author_$id');
+        final progress = prefs.getDouble('novel_progress_$id') ?? 0.0;
+        final lastRead = prefs.getInt('novel_last_read_$id') ?? 0;
+
+        if (title != null && progress > 0.0 && progress < 100.0) {
+          // 読亁E100%)してぁE��ぁE��のを対象
+          results.add({
+            'id': id,
+            'title': title,
+            'author': author ?? '不�E',
+            'progress': progress,
+            'lastRead': lastRead,
+          });
+        }
+      }
+
+      // 最終読書日時！EastRead�E�が新しい頁E��ソーチE
+      results.sort((a, b) => b['lastRead'].compareTo(a['lastRead']));
+
+      return results.take(5).toList();
+    } catch (e) {
+      debugPrint('しおり履歴の取得失敁E $e');
+      return [];
+    }
+  }
+
+  // しおり履歴�E�読書中�E�セクションのビルチE
+  // ※ future は build ごとに再生成すると無限リビルド（親ルート�E setState ループ）を招くため、E
+  //  initState で一度だけ生成したインスタンスをキャチE��ュして再利用する、E
+  Future<List<Map<String, dynamic>>>? _recentBookmarksFuture;
+
+  Widget _buildRecentBookmarksSection() {
+    _recentBookmarksFuture ??= _getRecentBookmarks();
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _recentBookmarksFuture,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final list = snapshot.data!;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.bookmark_added,
+                    color: Colors.pinkAccent,
+                    size: 18,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    '読書中の小説 (しおり履歴)',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              height: 110,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                itemCount: list.length,
+                itemBuilder: (context, idx) {
+                  final item = list[idx];
+                  final id = item['id'] as int;
+                  final title = item['title'] as String;
+                  final author = item['author'] as String;
+                  final progress = item['progress'] as double;
+
+                  return Card(
+                    color: const Color(0xFF1E1E1E),
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 6.0,
+                      vertical: 4.0,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                      side: BorderSide(
+                        color: Colors.pinkAccent.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8.0),
+                      onTap: () async {
+                        // 保存情報からダミ�Eを作らず、実データを取得して詳細画面へ
+                        final novel = await _fetchNovelForResume(
+                          id,
+                          title,
+                          author,
+                        );
+                        if (!mounted) return;
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => NovelDetailScreen(
+                              novel: novel,
+                              onTagTap: _onTagSelected,
+                              onBookmarkChanged: (_) {},
+                            ),
+                          ),
+                        );
+                        // 戻ってきたら�E描画
+                        if (!mounted) return;
+                        setState(() {});
+                      },
+                      child: Container(
+                        width: 180,
+                        padding: const EdgeInsets.all(10.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'by $author',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      '進捁E,
+                                      style: TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 9,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${progress.toStringAsFixed(0)}%',
+                                      style: const TextStyle(
+                                        color: Colors.pinkAccent,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(2),
+                                  child: LinearProgressIndicator(
+                                    value: progress / 100.0,
+                                    backgroundColor: Colors.grey[800],
+                                    valueColor:
+                                        const AlwaysStoppedAnimation<Color>(
+                                          Colors.pinkAccent,
+                                        ),
+                                    minHeight: 4,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const Divider(color: Colors.grey, height: 16),
+          ],
+        );
+      },
+    );
+  }
+
+  // サブスクリプション同期進捁EHUD
+  Widget _buildSyncProgressHUD() {
+    final status = _syncProgress?['status'] as String? ?? 'unknown';
+    final message = _syncProgress?['message'] as String? ?? '';
+    final current = _syncProgress?['current'] as int? ?? 0;
+    final total = _syncProgress?['total'] as int? ?? 0;
+    final currentNovel = _syncProgress?['current_novel'] as String? ?? '';
+
+    double progress = 0.0;
+    if (total > 0) {
+      progress = current / total;
+    }
+
+    return Positioned(
+      top: MediaQuery.of(context).padding.top + 80,
+      left: 16,
+      right: 16,
+      child: Material(
+        elevation: 8,
+        borderRadius: BorderRadius.circular(12),
+        color: const Color(0xFF1E1E1E),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.tealAccent.withValues(alpha: 0.5),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.sync, color: Colors.tealAccent, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '小説サブスクリプション同期中',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (status == 'error')
+                    const Icon(Icons.error, color: Colors.redAccent, size: 20)
+                  else if (status == 'completed')
+                    const Icon(
+                      Icons.check_circle,
+                      color: Colors.greenAccent,
+                      size: 20,
+                    )
+                  else
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.tealAccent,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (currentNovel.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '同期中: $currentNovel',
+                  style: const TextStyle(
+                    color: Colors.tealAccent,
+                    fontSize: 11,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      backgroundColor: Colors.grey[800],
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        status == 'error'
+                            ? Colors.redAccent
+                            : Colors.tealAccent,
+                      ),
+                      minHeight: 6,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    total > 0
+                        ? '$current / $total (${(progress * 100).toStringAsFixed(0)}%)'
+                        : '準備中...',
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+Future<void> _initializeDriveSync() async {
+    await _driveService.signInSilently();
+    if (mounted && _driveService.isLoggedIn) {
+      setState(() {
+        _loggedInEmail = _driveService.signedInEmail;
+      });
+    }
+    // 最後�E同期タイムスタンプを読み込み
+    final prefs = await SharedPreferences.getInstance();
+    final timestamp = prefs.getString('GOOGLE_DRIVE_LAST_SYNC');
+    if (timestamp != null && mounted) {
+      setState(() {
+        _lastSyncTimestamp = timestamp;
+      });
+    }
+  }
+
+  void _showLoadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  void _hideLoadingDialog() {
+    Navigator.of(context, rootNavigator: true).pop();
+  }
+
+Future<void> _handleGoogleBackup() async {
+    setState(() => _isBackingUp = true);
+    _showLoadingDialog();
+    try {
+      final success = await _driveService.backupJSON();
+      _hideLoadingDialog();
+      setState(() => _isBackingUp = false);
+      if (success && mounted) {
+        final now = DateTime.now().toIso8601String();
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('GOOGLE_DRIVE_LAST_SYNC', now);
+        setState(() => _lastSyncTimestamp = now);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('バックアチE�E完亁E��ました�E�E)));
+      }
+    } catch (e) {
+      _hideLoadingDialog();
+      setState(() => _isBackingUp = false);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('バックアチE�E失敁E $e')));
+      }
+    }
+  }
+
+Future<void> _handleGoogleRestore() async {
+    setState(() => _isRestoring = true);
+    _showLoadingDialog();
+    try {
+      final summary = await _driveService.restoreJSON();
+      _hideLoadingDialog();
+      setState(() => _isRestoring = false);
+      if (summary != null && mounted) {
+        final now = DateTime.now().toIso8601String();
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('GOOGLE_DRIVE_LAST_SYNC', now);
+        setState(() {
+          _lastSyncTimestamp = now;
+          _lastSyncSummary = summary;
+        });
+        final totalAdded = summary.values.fold<int>(0, (sum, v) => sum + v);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('復允E��亁E��ました�E�追加/更新: $totalAdded 件')));
+      }
+    } catch (e) {
+      _hideLoadingDialog();
+      setState(() => _isRestoring = false);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('復允E��敁E $e')));
+      }
+    }
+  }
+
+  Future<void> _handleGoogleLogin() async {
+    try {
+      await _driveService.signIn();
+      if (mounted && _driveService.isLoggedIn) {
+        setState(() {
+          _loggedInEmail = _driveService.signedInEmail;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Google ドライブにログインしました')));
+        }
+      } else if (mounted) {
+        // signIn() ぁEnull/false を返した場合！EAuth クライアント未設定など�E��E
+        // 例外ではなく黙って失敗するため、原因を�E示する
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'ログインできませんでした、Eoogle Cloud Console で '
+              'OAuth クライアント（パチE��ージ吁Ecom.example.pixiv_viewer �E�E'
+              '署名鍵の SHA-1�E��E登録と Drive API の有効化が忁E��です、E,
+            ),
+            duration: Duration(seconds: 6),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('ログイン失敗！Ee')));
+      }
+    }
+  }
+
+  Future<void> _handleGoogleLogout() async {
+    await _driveService.signOut();
+    if (mounted) {
+      setState(() {
+        _loggedInEmail = null;
+      });
+    }
+  }
+
+Widget _buildGoogleDriveSyncSection() {
+    if (_loggedInEmail == null) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        decoration: BoxDecoration(
+          color: Colors.teal.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.tealAccent.withValues(alpha: 0.3)),
+        ),
+        child: ListTile(
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.teal.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.cloud_upload,
+              color: Colors.tealAccent,
+              size: 24,
+            ),
+          ),
+          title: const Text(
+            'Google ドライブ同期（パーソナルクラウド！E,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          subtitle: const Text(
+            '履歴・お気に入り�E購読チE�Eタをクラウドで管琁E,
+            style: TextStyle(color: Colors.white60, fontSize: 11),
+          ),
+          trailing: const Icon(
+            Icons.arrow_forward_ios,
+            color: Colors.white54,
+            size: 16,
+          ),
+          onTap: _handleGoogleLogin,
+        ),
+      );
+    }
+
+    // 最終同期日時�EフォーマッチE
+    String? lastSyncDisplay;
+    if (_lastSyncTimestamp != null) {
+      try {
+        final dt = DateTime.parse(_lastSyncTimestamp!).toLocal();
+        lastSyncDisplay = '最終同朁E ${dt.year}/${dt.month.toString().padLeft(2, '0')}/${dt.day.toString().padLeft(2, '0')} '
+            '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+      } catch (_) {
+        lastSyncDisplay = '最終同朁E $_lastSyncTimestamp';
+      }
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFF252525),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.tealAccent.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ヘッダー�E�アカウント情報
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.teal.withValues(alpha: 0.1),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                topRight: Radius.circular(12),
+              ),
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: Colors.teal.withValues(alpha: 0.2),
+                  child: const Icon(
+                    Icons.person,
+                    color: Colors.tealAccent,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'ログイン中',
+                        style: TextStyle(
+                          color: Colors.tealAccent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _loggedInEmail!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // 説明テキスチE+ 最終同期日晁E
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '履歴・フォルダ・購読タグめEGoogle ドライブ！EppDataFolder�E�と同期',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    fontSize: 11,
+                  ),
+                ),
+                if (lastSyncDisplay != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    lastSyncDisplay!,
+                    style: TextStyle(
+                      color: Colors.tealAccent.withValues(alpha: 0.8),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          // 前回の同期サマリー表示
+          if (_lastSyncSummary != null && _lastSyncSummary!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.tealAccent.withValues(alpha: 0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '前回の復允E��果',
+                      style: TextStyle(
+                        color: Colors.tealAccent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 4,
+                      children: _lastSyncSummary!.entries.map((e) {
+                        return Text(
+                          '${e.key}: +${e.value}',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 10,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 12),
+
+          // ボタン行：バチE��アチE�E / 復允E
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Row(
+              children: [
+                // クラウドにバックアチE�E�E�送信�E�E
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isBackingUp || _isRestoring ? null : _handleGoogleBackup,
+                    icon: _isBackingUp
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.cloud_upload, size: 18),
+                    label: Text(
+                      _isBackingUp ? 'バックアチE�E中...' : 'クラウドにバックアチE�E�E�送信�E�E,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _isBackingUp ? Colors.teal.withValues(alpha: 0.6) : Colors.teal,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      elevation: 2,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // クラウドから復允E��受信�E�E
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isBackingUp || _isRestoring ? null : _handleGoogleRestore,
+                    icon: _isRestoring
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.cloud_download, size: 18),
+                    label: Text(
+                      _isRestoring ? 'チE�Eタマ�Eジ中...' : 'クラウドから復允E��受信�E�E,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _isRestoring ? Colors.blue.withValues(alpha: 0.6) : Colors.blue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      elevation: 2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // ログアウト�Eタン
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: _isBackingUp || _isRestoring ? null : _handleGoogleLogout,
+                icon: const Icon(Icons.logout, color: Colors.white54, size: 18),
+                label: const Text(
+                  'ログアウチE,
+                  style: TextStyle(
+                    color: Colors.white54,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.1),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+}
+
+class _SeriesLengthThreshold {
+  final int? minLen;
+  final int? maxLen;
+  _SeriesLengthThreshold({this.minLen, this.maxLen});
+}
+

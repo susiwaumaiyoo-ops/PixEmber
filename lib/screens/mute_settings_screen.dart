@@ -40,7 +40,7 @@ class _MuteSettingsScreenState extends State<MuteSettingsScreen> {
     }
   }
 
-Future<void> _addMute(String type, String value, {String? label}) async {
+  Future<void> _addMute(String type, String value, {String? label}) async {
     try {
       final db = DatabaseService();
       await db.insertOrUpdateMute(
@@ -58,7 +58,7 @@ Future<void> _addMute(String type, String value, {String? label}) async {
     }
   }
 
-Future<void> _deleteMute(int id) async {
+  Future<void> _deleteMute(int id) async {
     try {
       final db = DatabaseService();
       await db.deleteMute(id);
@@ -72,7 +72,7 @@ Future<void> _deleteMute(int id) async {
     }
   }
 
-void _showAddMuteDialog() {
+  void _showAddMuteDialog() {
     final TextEditingController valController = TextEditingController();
     final TextEditingController labelController = TextEditingController();
     String selectType = 'tag';
@@ -199,7 +199,11 @@ void _showAddMuteDialog() {
                 if (value.isEmpty) return;
                 final label = labelController.text.trim();
                 Navigator.pop(context);
-                _addMute(selectType, value, label: label.isEmpty ? null : label);
+                _addMute(
+                  selectType,
+                  value,
+                  label: label.isEmpty ? null : label,
+                );
               },
               child: const Text('追加'),
             ),

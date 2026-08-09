@@ -3,7 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../novel_model.dart';
 import 'author_profile_screen.dart';
 import 'novel_reader_screen.dart';
+import 'novel_series_episodes_screen.dart';
 import '../services/database_service.dart';
+import '../services/embedding_service.dart';
 import '../services/pixiv_api_service.dart';
 import '../widgets/pixiv_image.dart';
 
@@ -31,16 +33,16 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
 
   @override
   void initState() {
-    print('📍 [DEBUG Detail] initState 開始: ${widget.novel.title}');
+    debugPrint('📍 [DEBUG Detail] initState 開始: ${widget.novel.title}');
     super.initState();
     _isBookmarked = widget.novel.isBookmarked;
     _loadReadingProgress();
     _recordHistory();
-    print('📍 [DEBUG Detail] initState 終了');
+    debugPrint('📍 [DEBUG Detail] initState 終了');
   }
 
   Future<void> _recordHistory() async {
-    print('📍 [DEBUG Detail] _recordHistory 開始 (SQLite書き込み前)');
+    debugPrint('📍 [DEBUG Detail] _recordHistory 開始 (SQLite書き込み前)');
     try {
       final db = DatabaseService();
       await db.insertOrUpdateHistory(
@@ -50,9 +52,23 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
         previewUrl: widget.novel.coverUrl,
         type: 'novel',
       );
-      print('📍 [DEBUG Detail] _recordHistory 終了 (SQLite書き込み成功)');
+      debugPrint('📍 [DEBUG Detail] _recordHistory 終了 (SQLite書き込み成功)');
+
+      // ベクトル生成・保存（キャプションを使用、バックグラウンドで実行）
+      try {
+        final embeddingService = EmbeddingService();
+        final textForEmbedding =
+            '${widget.novel.title}\n${widget.novel.caption}';
+        final embedding = await embeddingService.encode(textForEmbedding);
+        await DatabaseService().saveNovelEmbedding(
+          workId: widget.novel.id,
+          embedding: embedding,
+        );
+      } catch (e) {
+        debugPrint('ベクトル生成・保存に失敗しました（無視して続行）: $e');
+      }
     } catch (e) {
-      print("⚠️ [History Save Error] 履歴の保存に失敗しました（処理は続行します）: $e");
+      debugPrint("⚠️ [History Save Error] 履歴の保存に失敗しました（処理は続行します）: $e");
     }
   }
 
@@ -135,7 +151,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
       if (progress != null && progress > 0.0) {
         if (!mounted) return;
         setState(() {
-          _readingProgress = progress;
+          // 保存値はパーセント(0〜100)なので、表示用(0.0〜1.0)に変換
+          _readingProgress = progress / 100.0;
         });
       }
     } catch (e) {
@@ -242,7 +259,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    print('📍 [DEBUG Detail] build 開始');
+    debugPrint('📍 [DEBUG Detail] build 開始');
     final String caption = widget.novel.caption;
     final Widget result = Scaffold(
       backgroundColor: const Color(0xFF121212),
@@ -333,15 +350,17 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                                 radius: 12,
                                 backgroundImage:
                                     widget.novel.author.avatar != null &&
-                                            widget.novel.author.avatar!.isNotEmpty
-                                        ? NetworkImage(
-                                            widget.novel.author.avatar!,
-                                            headers: const {
-                                              'Referer': 'https://app-api.pixiv.net/',
-                                            },
-                                          )
-                                        : null,
-                                child: (widget.novel.author.avatar == null ||
+                                        widget.novel.author.avatar!.isNotEmpty
+                                    ? NetworkImage(
+                                        widget.novel.author.avatar!,
+                                        headers: const {
+                                          'Referer':
+                                              'https://app-api.pixiv.net/',
+                                        },
+                                      )
+                                    : null,
+                                child:
+                                    (widget.novel.author.avatar == null ||
                                         widget.novel.author.avatar!.isEmpty)
                                     ? const Icon(Icons.person, size: 12)
                                     : null,
@@ -434,6 +453,42 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             ),
                           ),
                         ),
+                        // シリーズ作品の場合のみ「話数の一覧」へ遷移するボタンを表示
+                        if (widget.novel.series != null &&
+                            widget.novel.series!.id != 0) ...[
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      NovelSeriesEpisodesScreen(
+                                        series: widget.novel.series!,
+                                        coverUrl: widget.novel.coverUrl,
+                                        author: widget.novel.author,
+                                      ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(
+                              Icons.format_list_bulleted,
+                              size: 16,
+                            ),
+                            label: const Text('話数の一覧を見る'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.pinkAccent,
+                              side: const BorderSide(color: Colors.pinkAccent),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -641,7 +696,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
         ),
       ),
     );
-    print('📍 [DEBUG Detail] build 終了');
+    debugPrint('📍 [DEBUG Detail] build 終了');
     return result;
   }
 

@@ -1,0 +1,72 @@
+147:  void initState() {
+160:    _scrollController.addListener(_onScroll);
+173:  Future<void> _checkLoginAndInitialize() async {
+200:  Future<void> _showPKCELoginDialog() async {
+293:    await showDialog<void>(
+332:  Future<void> _exchangeCodeForToken(String code, String codeVerifier) async {
+454:  Future<void> _logout() async {
+471:  void dispose() {
+485:  Future<void> _saveNovelFilterPrefs() async {
+536:  Future<void> _loadNovelFilterPrefs() async {
+579:  Future<void> _loadSearchHistory() async {
+591:  Future<void> _saveSearchHistory(String word) async {
+613:  Future<void> _deleteSearchHistoryItem(String word) async {
+630:  Future<void> _clearAllSearchHistory() async {
+645:  void _onScroll() {
+666:  Future<void> _fetchData() async {
+736:  Future<void> _fetchNextPage() async {
+888:  Future<void> _computeSeriesTextLengths(List<Novel> novels) async {
+943:  void _onSearchSubmit(String query) {
+960:  void _onHistoryItemTap(String query) {
+966:  void _resetSearch() {
+982:  void _onTagSelected(String tag) {
+998:  void _changeTab(int index) {
+1023:  void _showNovelFilterBottomSheet() {
+1712:  void _showFilterBottomSheet() {
+4102:Future<void> _initializeDriveSync() async {
+4119:  void _showLoadingDialog() {
+4127:  void _hideLoadingDialog() {
+4131:Future<void> _handleGoogleBackup() async {
+4158:Future<void> _handleGoogleRestore() async {
+4189:  Future<void> _handleGoogleLogin() async {
+4224:  Future<void> _handleGoogleLogout() async {
+147:  void initState() {
+173:  Future<void> _checkLoginAndInitialize() async {
+200:  Future<void> _showPKCELoginDialog() async {
+293:    await showDialog<void>(
+332:  Future<void> _exchangeCodeForToken(String code, String codeVerifier) async {
+454:  Future<void> _logout() async {
+471:  void dispose() {
+472:    _searchController.dispose();
+473:    _searchFocusNode.dispose();
+474:    _scrollController.dispose();
+475:    _minTextLengthController?.dispose();
+476:    _maxTextLengthController?.dispose();
+477:    _minSeriesTextLengthController?.dispose();
+478:    _maxSeriesTextLengthController?.dispose();
+479:    _excludeTagController?.dispose();
+481:    super.dispose();
+485:  Future<void> _saveNovelFilterPrefs() async {
+536:  Future<void> _loadNovelFilterPrefs() async {
+579:  Future<void> _loadSearchHistory() async {
+591:  Future<void> _saveSearchHistory(String word) async {
+613:  Future<void> _deleteSearchHistoryItem(String word) async {
+630:  Future<void> _clearAllSearchHistory() async {
+645:  void _onScroll() {
+666:  Future<void> _fetchData() async {
+736:  Future<void> _fetchNextPage() async {
+888:  Future<void> _computeSeriesTextLengths(List<Novel> novels) async {
+943:  void _onSearchSubmit(String query) {
+960:  void _onHistoryItemTap(String query) {
+966:  void _resetSearch() {
+982:  void _onTagSelected(String tag) {
+998:  void _changeTab(int index) {
+1023:  void _showNovelFilterBottomSheet() {
+1712:  void _showFilterBottomSheet() {
+4102:Future<void> _initializeDriveSync() async {
+4119:  void _showLoadingDialog() {
+4127:  void _hideLoadingDialog() {
+4131:Future<void> _handleGoogleBackup() async {
+4158:Future<void> _handleGoogleRestore() async {
+4189:  Future<void> _handleGoogleLogin() async {
+4224:  Future<void> _handleGoogleLogout() async {

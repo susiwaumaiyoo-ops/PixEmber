@@ -42,14 +42,16 @@ class _ZoomableImageState extends State<ZoomableImage> {
     return url;
   }
 
-void _handleDoubleTap() {
+  void _handleDoubleTap() {
     if (_transformationController.value != Matrix4.identity()) {
       _transformationController.value = Matrix4.identity();
       widget.onZoomChanged?.call(false);
     } else {
       final position = _doubleTapDetails?.localPosition ?? Offset.zero;
       _transformationController.value = Matrix4.identity()
-        ..translateByVector3(vector_math.Vector3(-position.dx * 1.5, -position.dy * 1.5, 0))
+        ..translateByVector3(
+          vector_math.Vector3(-position.dx * 1.5, -position.dy * 1.5, 0),
+        )
         ..scaleByVector3(vector_math.Vector3(2.5, 2.5, 1));
       widget.onZoomChanged?.call(true);
     }
@@ -107,7 +109,8 @@ void _handleDoubleTap() {
         },
         onInteractionEnd: (details) {
           // スケールが1.0に戻っていればズーム終了とする
-          final double scale = _transformationController.value.getMaxScaleOnAxis();
+          final double scale = _transformationController.value
+              .getMaxScaleOnAxis();
           if (scale <= 1.05) {
             widget.onZoomChanged?.call(false);
           }

@@ -51,7 +51,7 @@ app.*.map.json
 /android/key.properties
 **/*.keystore
 **/*.jks
-
+assets/models/**
 # Flutter/Dart 標準の除外設定
 .dart_tool/
 .flutter-plugins

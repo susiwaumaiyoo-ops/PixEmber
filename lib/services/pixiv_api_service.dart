@@ -1,11 +1,23 @@
 import 'dart:convert';
 import 'dart:isolate';
+import 'package:flutter/foundation.dart';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'database_service.dart';
 import '../illust_model.dart';
 import '../novel_model.dart';
+
+/// 429 Rate Limit エラー用のカスタム例外クラス
+class RateLimitException implements Exception {
+  final String message;
+  final int statusCode;
+
+  RateLimitException(this.message, {this.statusCode = 429});
+
+  @override
+  String toString() => 'RateLimitException: $message (Status: $statusCode)';
+}
 
 class PixivApiService {
   static final PixivApiService _instance = PixivApiService._internal();
@@ -43,8 +55,8 @@ class PixivApiService {
       final input = clientTime + salt;
       final clientHash = md5.convert(utf8.encode(input)).toString();
 
-      print("[DEBUG API SERVICE] Client Time: $clientTime");
-      print("[DEBUG API SERVICE] Client Hash: $clientHash");
+      debugPrint("[DEBUG API SERVICE] Client Time: $clientTime");
+      debugPrint("[DEBUG API SERVICE] Client Hash: $clientHash");
 
       final url = Uri.parse("https://oauth.secure.pixiv.net/auth/token");
       final headers = {
@@ -78,16 +90,16 @@ class PixivApiService {
         }
         throw Exception("レスポンス内に access_token が見つかりませんでした。");
       } else {
-        print("❌❌❌ [OAuth Refresh ERROR] Pixivトークンリフレッシュに失敗しました ❌❌❌");
-        print("ステータスコード: ${response.statusCode}");
-        print("レスポンス内容: ${response.body}");
+        debugPrint("❌❌❌ [OAuth Refresh ERROR] Pixivトークンリフレッシュに失敗しました ❌❌❌");
+        debugPrint("ステータスコード: ${response.statusCode}");
+        debugPrint("レスポンス内容: ${response.body}");
         throw Exception(
           "トークンのリフレッシュに失敗しました: ${response.statusCode}\n${response.body}",
         );
       }
     } catch (e, stack) {
-      print("❌ [OAuth Refresh CRITICAL] 例外が発生しました: $e");
-      print(stack);
+      debugPrint("❌ [OAuth Refresh CRITICAL] 例外が発生しました: $e");
+      debugPrint(stack.toString());
       rethrow;
     }
   }
@@ -113,9 +125,9 @@ class PixivApiService {
       uri = uri.replace(queryParameters: params);
     }
 
-    print('[API] GET $uri');
+    debugPrint('[API] GET $uri');
     if (params != null && params.isNotEmpty) {
-      print('[API] Params: $params');
+      debugPrint('[API] Params: $params');
     }
 
     final response = await http.get(
@@ -124,11 +136,20 @@ class PixivApiService {
     );
 
     if (response.statusCode == 200) {
-      print('[API] Status: 200, endpoint: $endpoint');
+      debugPrint('[API] Status: 200, endpoint: $endpoint');
       return response.body;
+    } else if (response.statusCode == 429) {
+      debugPrint('[API] ERROR Status: 429 (Rate Limited), endpoint: $endpoint');
+      debugPrint('[API] ERROR Body: ${response.body}');
+      throw RateLimitException(
+        'Pixiv APIのレート制限（429）に達しました。しばらく時間を置いてから再試行してください。',
+        statusCode: 429,
+      );
     } else {
-      print('[API] ERROR Status: ${response.statusCode}, endpoint: $endpoint');
-      print('[API] ERROR Body: ${response.body}');
+      debugPrint(
+        '[API] ERROR Status: ${response.statusCode}, endpoint: $endpoint',
+      );
+      debugPrint('[API] ERROR Body: ${response.body}');
       throw Exception('Pixiv APIエラー: ${response.statusCode}\n${response.body}');
     }
   }
@@ -280,12 +301,12 @@ class PixivApiService {
         final idStr = (item is Map && item['id'] != null)
             ? item['id'].toString()
             : 'unknown';
-        print('[API][PARSE ERROR] Illust id=$idStr, error=$e');
-        print(stack);
+        debugPrint('[API][PARSE ERROR] Illust id=$idStr, error=$e');
+        debugPrint(stack.toString());
       }
     }
 
-    print(
+    debugPrint(
       '[API] filterIllusts: input=${illustsJsonList.length}, output=${filtered.length}',
     );
     return filtered;
@@ -320,8 +341,8 @@ class PixivApiService {
         result.add(Illust.fromJson(m));
       } catch (e, stack) {
         final idStr = m['id']?.toString() ?? 'unknown';
-        print('[API][PARSE ERROR] Illust.fromJson id=$idStr, error=$e');
-        print(stack);
+        debugPrint('[API][PARSE ERROR] Illust.fromJson id=$idStr, error=$e');
+        debugPrint(stack.toString());
       }
     }
     return result;
@@ -416,12 +437,12 @@ class PixivApiService {
         final idStr = (item is Map && item['id'] != null)
             ? item['id'].toString()
             : 'unknown';
-        print('[API][PARSE ERROR] Novel id=$idStr, error=$e');
-        print(stack);
+        debugPrint('[API][PARSE ERROR] Novel id=$idStr, error=$e');
+        debugPrint(stack.toString());
       }
     }
 
-    print(
+    debugPrint(
       '[API] filterNovels: input=${novelsJsonList.length}, output=${filtered.length}',
     );
     return filtered;
@@ -452,8 +473,8 @@ class PixivApiService {
         result.add(Novel.fromJson(m));
       } catch (e, stack) {
         final idStr = m['id']?.toString() ?? 'unknown';
-        print('[API][PARSE ERROR] Novel.fromJson id=$idStr, error=$e');
-        print(stack);
+        debugPrint('[API][PARSE ERROR] Novel.fromJson id=$idStr, error=$e');
+        debugPrint(stack.toString());
       }
     }
     return result;
@@ -514,7 +535,7 @@ class PixivApiService {
     if (xRestrict.toLowerCase() == 'r18') {
       effectiveWord = '$effectiveWord R-18';
     }
-    print(
+    debugPrint(
       '[API] searchIllust: word="$effectiveWord" (original: "$word"), '
       'xRestrict=$xRestrict, bookmarkFilter=$bookmarkFilter, workType=$workType',
     );
@@ -563,21 +584,35 @@ class PixivApiService {
   Future<FetchResult<Novel>> getNovelRanking(
     String mode, {
     int offset = 0,
+    int? startTextLength,
+    int? endTextLength,
   }) async {
-    final body = await _get(
-      '/v1/novel/ranking',
-      params: {'mode': mode, 'offset': offset.toString()},
-    );
+    final params = {'mode': mode, 'offset': offset.toString()};
+    if (startTextLength != null) {
+      params['start_text_length'] = startTextLength.toString();
+    }
+    if (endTextLength != null) {
+      params['end_text_length'] = endTextLength.toString();
+    }
+    final body = await _get('/v1/novel/ranking', params: params);
     final items = await filterNovelsIsolated(body);
     return _wrap(items: items, rawBody: body);
   }
 
   /// 小説おすすめ取得
-  Future<FetchResult<Novel>> getNovelRecommend({int offset = 0}) async {
-    final body = await _get(
-      '/v1/novel/recommended',
-      params: {'offset': offset.toString()},
-    );
+  Future<FetchResult<Novel>> getNovelRecommend({
+    int offset = 0,
+    int? startTextLength,
+    int? endTextLength,
+  }) async {
+    final params = {'offset': offset.toString()};
+    if (startTextLength != null) {
+      params['start_text_length'] = startTextLength.toString();
+    }
+    if (endTextLength != null) {
+      params['end_text_length'] = endTextLength.toString();
+    }
+    final body = await _get('/v1/novel/recommended', params: params);
     final items = await filterNovelsIsolated(body);
     return _wrap(items: items, rawBody: body);
   }
@@ -601,7 +636,7 @@ class PixivApiService {
     if (xRestrict.toLowerCase() == 'r18') {
       effectiveWord = '$effectiveWord R-18';
     }
-    print(
+    debugPrint(
       '[API] searchNovel: word="$effectiveWord" (original: "$word"), '
       'xRestrict=$xRestrict, bookmarkFilter=$bookmarkFilter, '
       'minLength=$minLength, maxLength=$maxLength',
@@ -625,6 +660,90 @@ class PixivApiService {
     return _wrap(items: items, rawBody: body, searchItem: searchItem);
   }
 
+  /// 小説全文検索（自由な文字検索）。
+  ///
+  /// Pixiv の search_target は単一指定のため、「タグの部分一致」と「本文(text)」
+  /// を並行で検索し、結果をIDで統合して返す。これによりタイトル・タグ・本文の
+  /// いずれかに検索語を含む小説を漏れなく取得できる。
+  ///
+  /// ページングは [AllTextSearchState] で管理する。タグ検索と本文検索は独立した
+  /// ページング状態を持つため、それぞれの nextUrl/offset を別々に追跡する。
+  /// 重複除去は API 側で ID ベースで実施する。
+  /// 戻り値は [AllTextSearchResult] で、更新された検索状態も含む。
+  Future<AllTextSearchResult<Novel>> searchNovelAllText(
+    String word,
+    String sort,
+    String xRestrict,
+    int? minLength,
+    int? maxLength, {
+    int bookmarkFilter = 0,
+    AllTextSearchState? state,
+  }) async {
+    // 初回呼び出し時は空の状態から開始
+    state ??= AllTextSearchState.empty;
+
+    // タグ検索と本文検索をそれぞれの offset で並行実行
+    final tagOffset = state.tagNextOffset ?? 0;
+    final textOffset = state.textNextOffset ?? 0;
+
+    final results = await Future.wait([
+      searchNovel(
+        word,
+        'partial_match_for_tags',
+        sort,
+        tagOffset,
+        xRestrict,
+        minLength,
+        maxLength,
+        bookmarkFilter: bookmarkFilter,
+      ),
+      searchNovel(
+        word,
+        'text',
+        sort,
+        textOffset,
+        xRestrict,
+        minLength,
+        maxLength,
+        bookmarkFilter: bookmarkFilter,
+      ),
+    ]);
+
+    final tagResult = results[0];
+    final textResult = results[1];
+
+    // ID で統合しつつ重複除去（タグ側をベースに、本文側の未含のものを追加）
+    final Map<int, Novel> merged = {};
+    for (final n in tagResult.items) {
+      merged[n.id] = n;
+    }
+    for (final n in textResult.items) {
+      merged.putIfAbsent(n.id, () => n);
+    }
+    final items = merged.values.toList();
+
+    // 新しい状態を構築（それぞれの検索の nextUrl/offset を保持）
+    final newState = AllTextSearchState(
+      tagNextOffset: tagResult.nextOffset,
+      textNextOffset: textResult.nextOffset,
+      tagNextUrl: tagResult.nextUrl,
+      textNextUrl: textResult.nextUrl,
+      searchItem: tagResult.searchItem ?? textResult.searchItem,
+    );
+
+    // nextUrl は片方でもあれば継続可能（呼び出し側では state.hasNext で判定）
+    // 互換性のため、どちらかの nextUrl を代表として返す
+    final nextUrl = tagResult.nextUrl ?? textResult.nextUrl;
+
+    final fetchResult = FetchResult<Novel>(
+      items: items,
+      nextUrl: nextUrl,
+      searchItem: newState.searchItem,
+    );
+
+    return AllTextSearchResult<Novel>(result: fetchResult, state: newState);
+  }
+
   /// 小説本文の取得（NovelTextDataモデルへの変換）
   ///
   /// Pixiv は /v1/novel/text を廃止したため、HTML を返す
@@ -632,7 +751,7 @@ class PixivApiService {
   /// 埋め込み JSON（novel オブジェクト）を抽出し、その中の 'text' キーから
   /// 本文を取得する。
   Future<NovelTextData> getNovelText(int novelId) async {
-    print('📍 [DEBUG API] getNovelText リクエスト直前: novelId = $novelId');
+    debugPrint('📍 [DEBUG API] getNovelText リクエスト直前: novelId = $novelId');
     final token = await getAccessToken(await getRefreshToken());
 
     final uri = Uri.parse('$_baseUrl/webview/v2/novel').replace(
@@ -648,12 +767,12 @@ class PixivApiService {
     );
 
     if (response.statusCode != 200) {
-      print('📍 [DEBUG API] getNovelText HTTPエラー: ${response.statusCode}');
+      debugPrint('📍 [DEBUG API] getNovelText HTTPエラー: ${response.statusCode}');
       throw Exception('Pixiv APIエラー: ${response.statusCode}');
     }
 
     final String body = response.body;
-    print('📍 [DEBUG API] getNovelText 取得: body.length = ${body.length}');
+    debugPrint('📍 [DEBUG API] getNovelText 取得: body.length = ${body.length}');
 
     // 埋め込み JSON を抽出: window.preloadData = {...} 等の script 内から
     // `novel: {...}, isOwnWork` のパターンを探す。
@@ -671,7 +790,7 @@ class PixivApiService {
         jsonDecode(jsonStr) as Map<String, dynamic>;
 
     final String text = novelJson['text'] as String? ?? '';
-    print('📍 [DEBUG API] getNovelText 本文長: text.length = ${text.length}');
+    debugPrint('📍 [DEBUG API] getNovelText 本文長: text.length = ${text.length}');
 
     // 改ページ [newpage] でページを分割
     final List<String> pages = text.split('[newpage]');
@@ -686,15 +805,89 @@ class PixivApiService {
 
   /// 小説シリーズのエピソード一覧取得
   Future<List<Novel>> getNovelSeries(int seriesId, {int? lastOrder}) async {
-    print('📍 [DEBUG API] getNovelSeries リクエスト直前: seriesId = $seriesId');
+    debugPrint('📍 [DEBUG API] getNovelSeries リクエスト直前: seriesId = $seriesId');
     final params = {'series_id': seriesId.toString(), 'filter': 'for_android'};
     if (lastOrder != null) {
       params['last_order'] = lastOrder.toString();
     }
 
     final body = await _get('/v1/novel/series', params: params);
-    print('📍 [DEBUG API] getNovelSeries デコード直前');
+    debugPrint('📍 [DEBUG API] getNovelSeries デコード直前');
     return await filterNovelsIsolated(body);
+  }
+
+  /// 小説シリーズのエピソード一覧を全ページ取得する（ページネーション対応）。
+  /// /v1/novel/series は last_order によるページングを返すため、next_url が
+  /// なくなるまで繰り返し取得し、全エピソードを結合して返す。
+  /// シリーズ統計文字数検索で全話の文字数を合算するために使用する。
+  Future<List<Novel>> getNovelSeriesAll(int seriesId) async {
+    debugPrint('📍 [DEBUG API] getNovelSeriesAll 開始: seriesId = $seriesId');
+    final all = <Novel>[];
+    int? lastOrder;
+    const maxPages = 50; // 無限ループ防止
+    for (var page = 0; page < maxPages; page++) {
+      final params = {
+        'series_id': seriesId.toString(),
+        'filter': 'for_android',
+      };
+      if (lastOrder != null) {
+        params['last_order'] = lastOrder.toString();
+      }
+      final body = await _get('/v1/novel/series', params: params);
+      final episodes = await filterNovelsIsolated(body);
+      if (episodes.isEmpty) break;
+      all.addAll(episodes);
+      // next_url の有無で継続判定（_wrap と同様に抽出）
+      String? nextUrl;
+      try {
+        final data = jsonDecode(body) as Map<String, dynamic>;
+        nextUrl = data['next_url'] as String?;
+      } catch (_) {
+        nextUrl = null;
+      }
+      if (nextUrl == null || nextUrl.isEmpty) break;
+      // next_url 内の last_order を次ページの last_order として使用
+      try {
+        final uri = Uri.parse(nextUrl);
+        final orderStr =
+            uri.queryParameters['last_order'] ?? uri.queryParameters['offset'];
+        lastOrder = orderStr != null ? int.tryParse(orderStr) : null;
+      } catch (_) {
+        lastOrder = null;
+      }
+    }
+    debugPrint(
+      '📍 [DEBUG API] getNovelSeriesAll 完了: seriesId=$seriesId, count=${all.length}',
+    );
+    return all;
+  }
+
+  /// イラスト/マンガ/うごイラ単体取得（ディープリンク用）
+  Future<Illust> getIllustById(int id) async {
+    final body = await _get(
+      '/v1/illust/detail',
+      params: {'illust_id': id.toString()},
+    );
+    final data = jsonDecode(body) as Map<String, dynamic>;
+    final illustJson = data['illust'] as Map<String, dynamic>?;
+    if (illustJson == null) {
+      throw Exception('イラストが見つかりませんでした (id=$id)');
+    }
+    return Illust.fromJson(illustJson);
+  }
+
+  /// 小説単体取得（ディープリンク用）
+  Future<Novel> getNovelById(int id) async {
+    final body = await _get(
+      '/v1/novel/detail',
+      params: {'novel_id': id.toString()},
+    );
+    final data = jsonDecode(body) as Map<String, dynamic>;
+    final novelJson = data['novel'] as Map<String, dynamic>?;
+    if (novelJson == null) {
+      throw Exception('小説が見つかりませんでした (id=$id)');
+    }
+    return Novel.fromJson(novelJson);
   }
 
   /// ユーザー詳細取得
@@ -864,6 +1057,45 @@ class FetchResult<T> {
   bool get hasNext => nextOffset != null;
 }
 
+/// 全文検索（all_text）の結果と更新された検索状態を保持するラッパー。
+class AllTextSearchResult<T> {
+  final FetchResult<T> result;
+  final AllTextSearchState state;
+
+  const AllTextSearchResult({required this.result, required this.state});
+
+  List<T> get items => result.items;
+  String? get nextUrl => result.nextUrl;
+  SearchItem? get searchItem => result.searchItem;
+  int? get nextOffset => result.nextOffset;
+  bool get hasNext => result.hasNext || state.hasNext;
+}
+
+/// 全文検索（all_text）用の検索状態を保持するクラス。
+/// タグ検索（partial_match_for_tags）と本文検索（text）は独立したページング状態を持つため、
+/// それぞれの nextUrl/offset を別々に管理する。
+class AllTextSearchState {
+  final int? tagNextOffset;
+  final int? textNextOffset;
+  final String? tagNextUrl;
+  final String? textNextUrl;
+  final SearchItem? searchItem;
+
+  const AllTextSearchState({
+    this.tagNextOffset,
+    this.textNextOffset,
+    this.tagNextUrl,
+    this.textNextUrl,
+    this.searchItem,
+  });
+
+  /// いずれかの検索に次ページがあるか
+  bool get hasNext => tagNextOffset != null || textNextOffset != null;
+
+  /// 空の状態（初回検索前など）を生成
+  static const AllTextSearchState empty = AllTextSearchState();
+}
+
 // ==========================================
 // Isolate.run 用のトップレベル関数
 // Isolate.run はカスタムクラス（Illust/Novel）を直接転送できるため、
@@ -903,7 +1135,7 @@ SearchItem? _extractSearchItem(String rawBody) {
 }
 
 /// Isolate 上でイラストの JSON デコード＋ミュート適用を行い、
-/// シリアライズ可能な List<Map<String, dynamic>> を返す。
+/// シリアライズ可能な `List<Map<String, dynamic>>` を返す。
 /// （Isolate を跨いでカスタムクラスは送受信できないため、fromJson は
 ///  メインスレッド側で 1 回だけ行う。toJson/fromJson の往復は一切なし。）
 List<Map<String, dynamic>> _filterIllustsInIsolate(
@@ -924,8 +1156,10 @@ List<Map<String, dynamic>> _filterIllustsInIsolate(
         jsonDecode(rawBody) as Map<String, dynamic>;
     list = decoded['illusts'] as List<dynamic>? ?? [];
   } catch (e, stack) {
-    print('❌ [API][ISOLATE FATAL] _filterIllustsInIsolate: JSONデコード失敗: $e');
-    print(stack);
+    debugPrint(
+      '❌ [API][ISOLATE FATAL] _filterIllustsInIsolate: JSONデコード失敗: $e',
+    );
+    debugPrint(stack.toString());
     return <Map<String, dynamic>>[];
   }
 
@@ -992,19 +1226,19 @@ List<Map<String, dynamic>> _filterIllustsInIsolate(
       final idStr = (item is Map && item['id'] != null)
           ? item['id'].toString()
           : 'unknown';
-      print('[API][PARSE ERROR] Illust id=$idStr, error=$e');
-      print(stack);
+      debugPrint('[API][PARSE ERROR] Illust id=$idStr, error=$e');
+      debugPrint(stack.toString());
     }
   }
 
-  print(
+  debugPrint(
     '[API] filterIllusts(Isolate): input=${list.length}, output=${filtered.length}',
   );
   return filtered;
 }
 
 /// Isolate 上で小説の JSON デコード＋ミュート適用を行い、
-/// シリアライズ可能な List<Map<String, dynamic>> を返す。
+/// シリアライズ可能な `List<Map<String, dynamic>>` を返す。
 List<Map<String, dynamic>> _filterNovelsInIsolate(
   String rawBody,
   List<String> mutedTags,
@@ -1025,8 +1259,8 @@ List<Map<String, dynamic>> _filterNovelsInIsolate(
     // 必ず小説用の正しいキー名 'novels' からリストを取得
     list = decoded['novels'] as List<dynamic>? ?? [];
   } catch (e, stack) {
-    print('❌ [API][ISOLATE FATAL] _filterNovelsInIsolate: JSONデコード失敗: $e');
-    print(stack);
+    debugPrint('❌ [API][ISOLATE FATAL] _filterNovelsInIsolate: JSONデコード失敗: $e');
+    debugPrint(stack.toString());
     return <Map<String, dynamic>>[];
   }
 
@@ -1085,12 +1319,12 @@ List<Map<String, dynamic>> _filterNovelsInIsolate(
       final idStr = (item is Map && item['id'] != null)
           ? item['id'].toString()
           : 'unknown';
-      print('[API][PARSE ERROR] Novel id=$idStr, error=$e');
-      print(stack);
+      debugPrint('[API][PARSE ERROR] Novel id=$idStr, error=$e');
+      debugPrint(stack.toString());
     }
   }
 
-  print(
+  debugPrint(
     '[API] filterNovels(Isolate): input=${list.length}, output=${filtered.length}',
   );
   return filtered;

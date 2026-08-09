@@ -33,6 +33,8 @@ class Novel {
   final int totalBookmarks;
   bool isBookmarked; // リアルタイムお気に入り切り替えのため非final
   final NovelSeriesInfo? series; // シリーズ情報
+  final int? seriesOrder; // シリーズ内の順序
+  final int aiType; // pixiv: novel_ai_type. 0=非AI, 2=AI生成作品
 
   Novel({
     required this.id,
@@ -51,6 +53,8 @@ class Novel {
     required this.totalBookmarks,
     required this.isBookmarked,
     this.series,
+    this.seriesOrder,
+    this.aiType = 0,
   });
 
   factory Novel.fromJson(Map<String, dynamic> json) {
@@ -109,6 +113,12 @@ class Novel {
       }
     }
 
+    int? seriesOrder;
+    final seriesOrderRaw = json['series_order'];
+    if (seriesOrderRaw != null) {
+      seriesOrder = int.tryParse(seriesOrderRaw.toString());
+    }
+
     return Novel(
       id: json['id'] as int? ?? 0,
       title: json['title'] as String? ?? '無題',
@@ -126,6 +136,8 @@ class Novel {
       totalBookmarks: json['total_bookmarks'] as int? ?? 0,
       isBookmarked: json['is_bookmarked'] as bool? ?? false,
       series: parsedSeries,
+      seriesOrder: seriesOrder,
+      aiType: json['novel_ai_type'] as int? ?? 0,
     );
   }
 
@@ -146,6 +158,8 @@ class Novel {
     'total_bookmarks': totalBookmarks,
     'is_bookmarked': isBookmarked,
     if (series != null) 'series': series!.toJson(),
+    if (seriesOrder != null) 'series_order': seriesOrder,
+    'novel_ai_type': aiType,
   };
 }
 

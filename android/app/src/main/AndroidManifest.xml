@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- INTERNET権限（小説読み込みに必要） -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    
     <application
         android:label="PixEmber"
         android:name="${applicationName}"
@@ -23,6 +27,14 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- ディープリンク: pixiv.net のリンクをアプリで開く（Chooser から選択） -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https" android:host="www.pixiv.net"/>
+                <data android:scheme="https" android:host="pixiv.net"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

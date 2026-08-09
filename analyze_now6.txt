@@ -1,0 +1,40 @@
+Analyzing pixiv_viewer...
+
+  error - lib\screens\home_ui_components.dart:897:29 - The argument type 'String?' can't be assigned to the parameter type 'String'.  - argument_type_not_assignable
+           - 'iconUrl' refers to a public property so it couldn't be promoted.  See http://dart.dev/go/non-promo-public-field at lib\illust_model.dart:240:17.
+warning - lib\screens\home_screen_state.dart:121:14 - The value of the field '_isLoadingMore' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\home_screen_state.dart:605:26 - The declaration '_getSeriesLengthThreshold' isn't referenced. Try removing the declaration of '_getSeriesLengthThreshold'. - unused_element
+warning - lib\screens\home_screen_state.dart:680:10 - The declaration '_buildFilterSectionTitle' isn't referenced. Try removing the declaration of '_buildFilterSectionTitle'. - unused_element
+warning - lib\screens\home_screen_state.dart:685:10 - The declaration '_buildChoiceChip' isn't referenced. Try removing the declaration of '_buildChoiceChip'. - unused_element
+warning - lib\screens\home_screen_state.dart:832:10 - The declaration '_formatNumber' isn't referenced. Try removing the declaration of '_formatNumber'. - unused_element
+warning - lib\screens\home_screen_state.dart:840:17 - The declaration '_fetchNovelForResume' isn't referenced. Try removing the declaration of '_fetchNovelForResume'. - unused_element
+warning - lib\screens\home_sync_handler.dart:13:16 - The declaration '_initializeDriveSync' isn't referenced. Try removing the declaration of '_initializeDriveSync'. - unused_element
+warning - lib\screens\home_ui_components.dart:412:15 - The operand can't be 'null', so the condition is always 'false'. Try removing the condition, an enclosing condition, or the whole conditional statement. - unnecessary_null_comparison
+warning - lib\screens\home_ui_components.dart:412:24 - Dead code. Try removing the code, or fixing the code before it so that it can be reached. - dead_code
+warning - lib\screens\home_ui_components.dart:448:43 - The operand can't be 'null', so the condition is always 'false'. Try removing the condition, an enclosing condition, or the whole conditional statement. - unnecessary_null_comparison
+warning - lib\screens\home_ui_components.dart:452:23 - The operand can't be 'null', so the condition is always 'false'. Try removing the condition, an enclosing condition, or the whole conditional statement. - unnecessary_null_comparison
+warning - lib\screens\home_ui_components.dart:462:34 - The operand can't be 'null', so the condition is always 'true'. Remove the condition. - unnecessary_null_comparison
+warning - lib\screens\home_ui_components.dart:633:42 - The operand can't be 'null', so the condition is always 'false'. Try removing the condition, an enclosing condition, or the whole conditional statement. - unnecessary_null_comparison
+warning - lib\screens\home_ui_components.dart:637:22 - The operand can't be 'null', so the condition is always 'false'. Try removing the condition, an enclosing condition, or the whole conditional statement. - unnecessary_null_comparison
+warning - lib\screens\home_ui_components.dart:938:31 - Dead code. Try removing the code, or fixing the code before it so that it can be reached. - dead_code
+warning - lib\screens\home_ui_components.dart:938:34 - The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand. - dead_null_aware_expression
+warning - lib\screens\home_ui_components.dart:951:33 - The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand. - dead_null_aware_expression
+warning - lib\screens\home_ui_components.dart:1036:49 - The receiver can't be null, so the null-aware operator '?.' is unnecessary. Try replacing the operator '?.' with '.'. - invalid_null_aware_operator
+warning - lib\screens\home_ui_components.dart:1300:10 - The declaration '_formatNumber' isn't referenced. Try removing the declaration of '_formatNumber'. - unused_element
+warning - lib\screens\novel_reader_screen.dart:42:16 - The value of the field '_letterSpacing' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:43:16 - The value of the field '_paragraphSpacing' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:44:14 - The value of the field '_isBold' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:45:14 - The value of the field '_tapZonesEnabled' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:48:13 - The value of the field '_readingStartTime' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:49:13 - The value of the field '_readingElapsedSeconds' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:50:10 - The value of the field '_readingTimer' isn't used. Try removing the field, or using it. - unused_field
+warning - lib\screens\novel_reader_screen.dart:51:31 - The value of the field '_readingTimeNotifier' isn't used. Try removing the field, or using it. - unused_field
+   info - lib\screens\home_sync_handler.dart:58:11 - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check. - use_build_context_synchronously
+   info - lib\screens\home_sync_handler.dart:66:11 - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check. - use_build_context_synchronously
+   info - lib\screens\home_sync_handler.dart:90:11 - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check. - use_build_context_synchronously
+   info - lib\screens\home_sync_handler.dart:98:11 - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check. - use_build_context_synchronously
+   info - lib\screens\home_sync_handler.dart:114:13 - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check. - use_build_context_synchronously
+   info - lib\screens\home_sync_handler.dart:120:30 - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check. - use_build_context_synchronously
+   info - lib\screens\home_sync_handler.dart:134:11 - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check. - use_build_context_synchronously
+
+35 issues found.

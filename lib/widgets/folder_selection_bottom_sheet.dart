@@ -112,7 +112,7 @@ class _FolderSelectionBottomSheetState
               backgroundColor: Colors.pinkAccent,
               foregroundColor: Colors.white,
             ),
-onPressed: () async {
+            onPressed: () async {
               final navigator = Navigator.of(context);
               final messenger = ScaffoldMessenger.of(context);
               final name = nameController.text.trim();
@@ -141,7 +141,7 @@ onPressed: () async {
     );
   }
 
-Future<void> _addToFolder(int folderId) async {
+  Future<void> _addToFolder(int folderId) async {
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -168,9 +168,7 @@ Future<void> _addToFolder(int folderId) async {
       }
     } catch (e) {
       if (!context.mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('追加に失敗しました: $e')),
-      );
+      messenger.showSnackBar(SnackBar(content: Text('追加に失敗しました: $e')));
     }
   }
 

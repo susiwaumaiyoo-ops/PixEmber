@@ -1,0 +1,133 @@
+Analyzing pixiv_viewer...
+
+  error - lib\screens\feeling_discovery_screen.dart:17:7 - Missing concrete implementation of 'State.build'. Try implementing the missing method, or make the class abstract. - non_abstract_class_inherits_abstract_member
+  error - lib\screens\feeling_discovery_screen.dart:103:77 - Unterminated string literal. - unterminated_string_literal
+  error - lib\screens\feeling_discovery_screen.dart:104:8 - Expected to find ')'. - expected_token
+  error - lib\screens\feeling_discovery_screen.dart:117:7 - Expected to find ';'. - expected_token
+  error - lib\screens\feeling_discovery_screen.dart:117:8 - Expected an identifier. - missing_identifier
+  error - lib\screens\feeling_discovery_screen.dart:117:8 - Unexpected text ';'. Try removing the text. - unexpected_token
+  error - lib\screens\feeling_discovery_screen.dart:118:7 - Expected a class member. Try placing this code inside a class member. - expected_class_member
+  error - lib\screens\feeling_discovery_screen.dart:118:12 - Expected an identifier. - missing_identifier
+  error - lib\screens\feeling_discovery_screen.dart:118:12 - Methods must have an explicit list of parameters. Try adding a parameter list. - missing_method_parameters
+  error - lib\screens\feeling_discovery_screen.dart:124:5 - Expected a class member. Try placing this code inside a class member. - expected_class_member
+  error - lib\screens\feeling_discovery_screen.dart:124:8 - Expected an identifier. - missing_identifier
+  error - lib\screens\feeling_discovery_screen.dart:124:9 - Expected an identifier. - missing_identifier
+  error - lib\screens\feeling_discovery_screen.dart:124:10 - Expected to find ')'. - expected_token
+  error - lib\screens\feeling_discovery_screen.dart:125:7 - The await expression can only be used in an async function. Try marking the function body with either 'async' or 'async*'. - await_in_wrong_context
+  error - lib\screens\feeling_discovery_screen.dart:129:5 - Expected a class member. Try placing this code inside a class member. - expected_class_member
+  error - lib\screens\feeling_discovery_screen.dart:129:9 - Expected an identifier. - missing_identifier
+  error - lib\screens\feeling_discovery_screen.dart:129:9 - Methods must have an explicit list of parameters. Try adding a parameter list. - missing_method_parameters
+  error - lib\screens\feeling_discovery_screen.dart:131:7 - The await expression can only be used in an async function. Try marking the function body with either 'async' or 'async*'. - await_in_wrong_context
+  error - lib\screens\feeling_discovery_screen.dart:133:30 - The await expression can only be used in an async function. Try marking the function body with either 'async' or 'async*'. - await_in_wrong_context
+  error - lib\screens\feeling_discovery_screen.dart:133:60 - Undefined name 'query'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:135:12 - The await expression can only be used in an async function. Try marking the function body with either 'async' or 'async*'. - await_in_wrong_context
+  error - lib\screens\feeling_discovery_screen.dart:136:23 - The await expression can only be used in an async function. Try marking the function body with either 'async' or 'async*'. - await_in_wrong_context
+  error - lib\screens\feeling_discovery_screen.dart:136:47 - The method 'searchNovelsByEmbedding' isn't defined for the type 'DatabaseService'. Try correcting the name to the name of an existing method, or defining a method named 'searchNovelsByEmbedding'. - undefined_method
+  error - lib\screens\feeling_discovery_screen.dart:143:12 - Undefined name 'isLoadMore'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:152:30 - Undefined name 'query'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:165:7 - Expected a class member. Try placing this code inside a class member. - expected_class_member
+  error - lib\screens\feeling_discovery_screen.dart:165:13 - Expected an identifier. - missing_identifier
+  error - lib\screens\feeling_discovery_screen.dart:182:9 - Undefined name '_lastQuery'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:183:11 - The function '_search' isn't defined. Try importing the library that defines '_search', correcting the name to the name of an existing function, or defining a function named '_search'. - undefined_function
+  error - lib\screens\feeling_discovery_screen.dart:187:5 - The function '_search' isn't defined. Try importing the library that defines '_search', correcting the name to the name of an existing function, or defining a function named '_search'. - undefined_function
+  error - lib\screens\feeling_discovery_screen.dart:213:7 - Undefined name 'context'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:226:44 - Unterminated string literal. - unterminated_string_literal
+  error - lib\screens\feeling_discovery_screen.dart:227:9 - Expected to find ','. - expected_token
+  error - lib\screens\feeling_discovery_screen.dart:227:9 - The named parameter 'backgroundColor' isn't defined. Try correcting the name to an existing named parameter's name, or defining a named parameter with the name 'backgroundColor'. - undefined_named_parameter
+  error - lib\screens\feeling_discovery_screen.dart:227:26 - Invalid constant value. - invalid_constant
+  error - lib\screens\feeling_discovery_screen.dart:228:9 - The named parameter 'foregroundColor' isn't defined. Try correcting the name to an existing named parameter's name, or defining a named parameter with the name 'foregroundColor'. - undefined_named_parameter
+  error - lib\screens\feeling_discovery_screen.dart:229:9 - The named parameter 'elevation' isn't defined. Try correcting the name to an existing named parameter's name, or defining a named parameter with the name 'elevation'. - undefined_named_parameter
+  error - lib\screens\feeling_discovery_screen.dart:230:9 - The named parameter 'bottom' isn't defined. Try correcting the name to an existing named parameter's name, or defining a named parameter with the name 'bottom'. - undefined_named_parameter
+  error - lib\screens\feeling_discovery_screen.dart:235:27 - Undefined name '_queryController'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:236:25 - Undefined name '_isModelInitializing'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:238:27 - Undefined name '_isModelInitializing'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:240:89 - Unterminated string literal. - unterminated_string_literal
+  error - lib\screens\feeling_discovery_screen.dart:241:17 - Expected to find ','. - expected_token
+  error - lib\screens\feeling_discovery_screen.dart:245:29 - Undefined name '_isModelInitializing'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:261:29 - Undefined name '_queryController'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:261:66 - Undefined name '_isModelInitializing'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:270:27 - Undefined name '_queryController'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:271:27 - The function 'setState' isn't defined. Try importing the library that defines 'setState', correcting the name to the name of an existing function, or defining a function named 'setState'. - undefined_function
+  error - lib\screens\feeling_discovery_screen.dart:280:33 - The constructor being called isn't a const constructor. Try removing 'const' from the constructor invocation. - const_with_non_const
+  error - lib\screens\feeling_discovery_screen.dart:292:28 - Undefined name '_isModelInitializing'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:293:33 - The function 'setState' isn't defined. Try importing the library that defines 'setState', correcting the name to the name of an existing function, or defining a function named 'setState'. - undefined_function
+  error - lib\screens\feeling_discovery_screen.dart:298:7 - The named parameter 'body' isn't defined. Try correcting the name to an existing named parameter's name, or defining a named parameter with the name 'body'. - undefined_named_parameter
+  error - lib\screens\feeling_discovery_screen.dart:299:6 - Expected to find ')'. - expected_token
+  error - lib\screens\feeling_discovery_screen.dart:303:9 - Undefined name '_lastQuery'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:307:9 - Undefined name '_isSearching'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:307:25 - Undefined name '_results'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:308:20 - The name 'Center' isn't a class. Try correcting the name to match an existing class. - creation_with_non_type
+  error - lib\screens\feeling_discovery_screen.dart:320:9 - Undefined name '_results'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:353:24 - The function '_search' isn't defined. Try importing the library that defines '_search', correcting the name to the name of an existing function, or defining a function named '_search'. - undefined_function
+  error - lib\screens\feeling_discovery_screen.dart:355:21 - Undefined name '_scrollController'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:357:20 - Undefined name '_results'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:357:39 - Undefined name '_isLoadingMore'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:359:24 - Undefined name '_results'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:360:26 - The name 'Center' isn't a class. Try correcting the name to match an existing class. - creation_with_non_type
+  error - lib\screens\feeling_discovery_screen.dart:368:24 - Undefined name '_results'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:418:25 - Undefined name 'mounted'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:420:23 - The function 'setState' isn't defined. Try importing the library that defines 'setState', correcting the name to the name of an existing function, or defining a function named 'setState'. - undefined_function
+  error - lib\screens\feeling_discovery_screen.dart:421:25 - Undefined name '_isModelReady'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:422:25 - Undefined name '_isModelInitializing'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:428:43 - Unterminated string literal. - unterminated_string_literal
+  error - lib\screens\feeling_discovery_screen.dart:429:17 - Expected to find ','. - expected_token
+  error - lib\screens\feeling_discovery_screen.dart:429:24 - Methods can't be invoked in constant expressions. - const_eval_method_invocation
+  error - lib\screens\feeling_discovery_screen.dart:429:24 - The argument type 'ButtonStyle' can't be assigned to the parameter type 'TextStyle?'.  - argument_type_not_assignable
+  error - lib\screens\feeling_discovery_screen.dart:434:13 - Expected to find ')'. - expected_token
+  error - lib\screens\feeling_discovery_screen.dart:450:17 - Undefined name '_isModelInitializing'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:458:48 - Unterminated string literal. - unterminated_string_literal
+  error - lib\screens\feeling_discovery_screen.dart:459:17 - Expected to find ','. - expected_token
+  error - lib\screens\feeling_discovery_screen.dart:470:5 - 'return' can't be used as an identifier because it's a keyword. Try renaming this to be an identifier that isn't a keyword. - expected_identifier_but_got_keyword
+  error - lib\screens\feeling_discovery_screen.dart:470:5 - Expected to find ';'. - expected_token
+  error - lib\screens\feeling_discovery_screen.dart:470:5 - Variables must be declared using the keywords 'const', 'final', 'var' or a type name. Try adding the name of the type of the variable or the keyword 'var'. - missing_const_final_var_or_type
+  error - lib\screens\feeling_discovery_screen.dart:471:12 - Named parameters must be enclosed in curly braces ('{' and '}'). Try surrounding the named parameters in curly braces. - named_parameter_outside_group
+  error - lib\screens\feeling_discovery_screen.dart:471:12 - Using a colon as the separator before a default value is no longer supported. Try replacing the colon with an equal sign. - obsolete_colon_for_default_value
+  error - lib\screens\feeling_discovery_screen.dart:471:14 - The default value of an optional parameter must be constant. - non_constant_default_value
+  error - lib\screens\feeling_discovery_screen.dart:480:24 - Undefined name 'isDark'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:486:24 - Undefined name 'isDark'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:491:31 - Unterminated string literal. - unterminated_string_literal
+  error - lib\screens\feeling_discovery_screen.dart:492:15 - Expected to find ','. - expected_token
+  error - lib\screens\feeling_discovery_screen.dart:495:24 - Undefined name 'isDark'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:500:73 - Unterminated string literal. - unterminated_string_literal
+  error - lib\screens\feeling_discovery_screen.dart:501:15 - Expected to find ','. - expected_token
+  error - lib\screens\feeling_discovery_screen.dart:504:24 - Undefined name 'isDark'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:514:50 - Undefined name 'isDark'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:515:54 - Undefined name 'isDark'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:516:53 - Undefined name 'isDark'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:517:55 - Undefined name 'isDark'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:518:55 - Undefined name 'isDark'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:519:53 - Undefined name 'isDark'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:528:24 - Undefined name 'isDark'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:534:6 - A function body must be provided. Try adding a function body. - missing_function_body
+  error - lib\screens\feeling_discovery_screen.dart:535:3 - Expected a method, getter, setter or operator declaration. This appears to be incomplete code. Try removing it or completing it. - expected_executable
+  error - lib\screens\feeling_discovery_screen.dart:538:25 - Undefined name '_isModelReady'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:538:42 - Undefined name '_isModelInitializing'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:548:15 - Undefined name '_queryController'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\screens\feeling_discovery_screen.dart:549:15 - The function '_search' isn't defined. Try importing the library that defines '_search', correcting the name to the name of an existing function, or defining a function named '_search'. - undefined_function
+  error - lib\screens\feeling_discovery_screen.dart:682:74 - Unterminated string literal. - unterminated_string_literal
+  error - lib\screens\feeling_discovery_screen.dart:683:29 - Expected to find ','. - expected_token
+  error - lib\screens\feeling_discovery_screen.dart:749:53 - Expected to find ';'. - expected_token
+  error - lib\screens\feeling_discovery_screen.dart:749:55 - Unterminated string literal. - unterminated_string_literal
+  error - lib\screens\feeling_discovery_screen.dart:762:1 - Expected a method, getter, setter or operator declaration. This appears to be incomplete code. Try removing it or completing it. - expected_executable
+warning - lib\screens\feeling_discovery_screen.dart:17:7 - The declaration '<unnamed>' isn't referenced. Try removing the declaration of '<unnamed>'. - unused_element
+warning - lib\screens\feeling_discovery_screen.dart:40:16 - The declaration '_initializeModel' isn't referenced. Try removing the declaration of '_initializeModel'. - unused_element
+warning - lib\screens\feeling_discovery_screen.dart:96:14 - The declaration '_search' isn't referenced. Try removing the declaration of '_search'. - unused_element
+warning - lib\screens\feeling_discovery_screen.dart:218:4 - The annotation 'override' can only be used on fields, getters, methods, or setters. - invalid_annotation_target
+warning - lib\screens\feeling_discovery_screen.dart:560:11 - The value of the local variable 'workId' isn't used. Try removing the variable or using it. - unused_local_variable
+   info - lib\screens\feeling_discovery_screen.dart:117:9 - Unnecessary empty statement. Try removing the empty statement or restructuring the code. - empty_statements
+   info - lib\screens\feeling_discovery_screen.dart:165:14 - Missing type annotation. Try adding a type annotation. - strict_top_level_inference
+   info - lib\screens\feeling_discovery_screen.dart:227:35 - Unnecessary 'const' keyword. Try removing the keyword. - unnecessary_const
+   info - lib\screens\feeling_discovery_screen.dart:231:26 - Unnecessary 'const' keyword. Try removing the keyword. - unnecessary_const
+   info - lib\screens\feeling_discovery_screen.dart:233:22 - Unnecessary 'const' keyword. Try removing the keyword. - unnecessary_const
+   info - lib\screens\feeling_discovery_screen.dart:247:34 - Unnecessary 'const' keyword. Try removing the keyword. - unnecessary_const
+   info - lib\screens\feeling_discovery_screen.dart:277:23 - Unnecessary 'const' keyword. Try removing the keyword. - unnecessary_const
+   info - lib\screens\feeling_discovery_screen.dart:283:33 - Unnecessary 'const' keyword. Try removing the keyword. - unnecessary_const
+   info - lib\screens\feeling_discovery_screen.dart:470:5 - An uninitialized variable should have an explicit type annotation. Try adding a type annotation. - prefer_typing_uninitialized_variables
+   info - lib\screens\feeling_discovery_screen.dart:470:5 - Missing type annotation. Try adding a type annotation. - strict_top_level_inference
+   info - lib\screens\feeling_discovery_screen.dart:470:12 - Missing type annotation. Try adding a type annotation. - strict_top_level_inference
+   info - lib\screens\feeling_discovery_screen.dart:470:12 - The variable name 'Center' isn't a lowerCamelCase identifier. Try changing the name to follow the lowerCamelCase style. - non_constant_identifier_names
+   info - lib\screens\feeling_discovery_screen.dart:471:7 - Missing type annotation. Try adding a type annotation. - strict_top_level_inference
+   info - lib\screens\feeling_discovery_screen.dart:598:45 - Unnecessary use of multiple underscores. Try using '_'. - unnecessary_underscores
+   info - lib\screens\feeling_discovery_screen.dart:598:49 - Unnecessary use of multiple underscores. Try using '_'. - unnecessary_underscores
+
+129 issues found.

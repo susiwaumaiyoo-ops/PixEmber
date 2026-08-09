@@ -40,16 +40,20 @@ dependencies:
   # 百科事典リンクをブラウザで開く
   url_launcher: ^6.1.14
 
-  # うごイラのZIP解凍用パッケージ
+# うごイラのZIP解凍用パッケージ
   archive: ^3.3.7
 
+  # ダウンロード・保存機能（iOS）
   # ドミナントカラー（イラスト主調色）抽出パッケージ
   palette_generator: any
 
-  # SQLite用 & ローカル保存パス取得用
+# SQLite用 & ローカル保存パス取得用
   sqflite: ^2.3.0
   path: ^1.8.3
   path_provider: ^2.1.1
+
+  # ダウンロード・保存機能
+  permission_handler: ^11.3.1
 
 # 暗号化（ハッシュ用MD5等）
   crypto: ^3.0.3
@@ -58,14 +62,22 @@ dependencies:
   google_sign_in: ^6.1.5
   googleapis: ^11.4.0
 
-# ベクトル数学ライブラリ (Matrix4操作用)
+  # ベクトル数学ライブラリ (Matrix4操作用)
   vector_math: ^2.1.4
+
+  # ONNX Runtime (ローカルAI推論用)
+  flutter_onnxruntime: ^1.8.3
 
   # アプリ内蔵 WebView による完全自動 PKCE OAuth ログイン
   webview_flutter: ^4.4.2
 
-# The following adds the Cupertino Icons font to your application.
-# Use with the CupertinoIcons class for iOS style icons.
+  # ディープリンク（Android: pixiv.net リンクのハンドリング）
+  app_links: ^6.3.0
+
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  googleapis_auth: any
+  image_gallery_saver_plus: ^5.1.1
 cupertino_icons: ^1.0.8
 
 dev_dependencies:
@@ -89,6 +101,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/models/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

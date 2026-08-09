@@ -250,7 +250,10 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
 
     final avatar = _userDetail!['avatar'];
     final comment = _userDetail!['comment'] ?? '';
-    final followers = _userDetail!['total_follower'] ?? 0;
+    final followers =
+        _userDetail!['total_follow_users'] ??
+        _userDetail!['total_follower'] ??
+        0;
     final totalIllusts = _userDetail!['total_illusts'] ?? 0;
     final totalNovels = _userDetail!['total_novels'] ?? 0;
 

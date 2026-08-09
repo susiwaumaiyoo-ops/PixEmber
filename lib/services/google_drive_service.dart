@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
 import 'database_service.dart';
 
 /// GoogleSignIn認証ヘッダー付きのHTTPクライアント
@@ -28,13 +26,17 @@ class GoogleDriveService {
   GoogleDriveService._internal();
 
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: [drive.DriveApi.driveAppdataScope],
+    scopes: [
+      'email',
+      'https://www.googleapis.com/auth/drive.file',
+      'https://www.googleapis.com/auth/drive.appdata',
+    ],
   );
 
   GoogleSignInAccount? _currentUser;
   drive.DriveApi? _driveApi;
 
-bool get isLoggedIn => _currentUser != null;
+  bool get isLoggedIn => _currentUser != null;
   String? get userEmail => _currentUser?.email;
   String? get signedInEmail => _currentUser?.email;
 
@@ -77,12 +79,12 @@ bool get isLoggedIn => _currentUser != null;
     }
   }
 
-  /// appDataFolder内の history.db ファイルを検索
+  /// appDataFolder内のバックアップJSONファイルを検索
   Future<drive.File?> _findBackupFile() async {
     if (_driveApi == null) return null;
     try {
       final fileList = await _driveApi!.files.list(
-        q: "name = 'pixiv_history_local.db' and trashed = false",
+        q: "name = 'pixember_backup.json' and trashed = false",
         spaces: 'appDataFolder',
         $fields: 'files(id, name, size, modifiedTime)',
       );
@@ -96,73 +98,80 @@ bool get isLoggedIn => _currentUser != null;
     }
   }
 
-  /// バックアップ（アップロード）
-  Future<bool> backupHistoryDb() async {
-    if (_driveApi == null) return false;
+  /// バックアップ（JSONエクスポート → アップロード）
+  Future<bool> backupJSON() async {
+    if (_driveApi == null) {
+      throw Exception('Drive API not initialized');
+    }
     try {
-      final documentsDir = await getApplicationDocumentsDirectory();
-      final dbPath = p.join(documentsDir.path, 'pixiv_history_local.db');
-      final dbFile = File(dbPath);
-      if (!await dbFile.exists()) return false;
+      // データをエクスポート
+      final exportData = await DatabaseService().exportAllData();
+      final jsonString = const JsonEncoder.withIndent('  ').convert(exportData);
+      final jsonBytes = utf8.encode(jsonString);
 
-final existingFile = await _findBackupFile();
+      // 既存ファイルを検索
+      final existingFile = await _findBackupFile();
+      final media = drive.Media(
+        Stream<List<int>>.fromIterable([jsonBytes]),
+        jsonBytes.length,
+      );
+
       if (existingFile != null && existingFile.id != null) {
         // Update
-        final media = drive.Media(dbFile.openRead(), await dbFile.length());
         await _driveApi!.files.update(
-          drive.File()..name = 'pixiv_history_local.db',
+          drive.File()..name = 'pixember_backup.json',
           existingFile.id!,
           uploadMedia: media,
         );
       } else {
         // Create
         final fileMetadata = drive.File()
-          ..name = 'pixiv_history_local.db'
-          ..mimeType = 'application/octet-stream';
-        final media = drive.Media(dbFile.openRead(), await dbFile.length());
-        await _driveApi!.files.create(
-          fileMetadata,
-          uploadMedia: media,
-        );
+          ..name = 'pixember_backup.json'
+          ..mimeType = 'application/json';
+        await _driveApi!.files.create(fileMetadata, uploadMedia: media);
       }
       return true;
     } catch (e) {
       debugPrint('バックアップエラー: $e');
-      return false;
+      rethrow;
     }
   }
 
-  /// 復元（ダウンロード → ローカル上書き → DB再起動）
-  Future<bool> restoreHistoryDb() async {
-    if (_driveApi == null) return false;
+  /// 復元（JSONダウンロード → マージインポート → 結果返却）
+  /// 戻り値: マージ結果のサマリー（各テーブルの追加/更新件数）、失敗時はnull
+  Future<Map<String, int>?> restoreJSON() async {
+    if (_driveApi == null) {
+      throw Exception('Drive API not initialized');
+    }
     try {
       final existingFile = await _findBackupFile();
-      if (existingFile == null || existingFile.id == null) return false;
+      if (existingFile == null || existingFile.id == null) {
+        throw Exception('バックアップファイルが見つかりません');
+      }
 
       // ダウンロード
-      final documentsDir = await getApplicationDocumentsDirectory();
-      final dbPath = p.join(documentsDir.path, 'pixiv_history_local.db');
-      final dbFile = File(dbPath);
+      final mediaResponse =
+          await _driveApi!.files.get(
+                existingFile.id!,
+                downloadOptions: drive.DownloadOptions.fullMedia,
+              )
+              as drive.Media;
 
-      final mediaResponse = await _driveApi!.files.get(
-        existingFile.id!,
-        downloadOptions: drive.DownloadOptions.fullMedia,
-      ) as drive.Media;
-
-      // ストリームをバイト配列に変換
+      // ストリームを文字列に変換
       final byteChunks = <int>[];
       await for (final chunk in mediaResponse.stream) {
         byteChunks.addAll(chunk);
       }
-      await dbFile.writeAsBytes(byteChunks);
+      final jsonString = utf8.decode(byteChunks);
+      final jsonData = jsonDecode(jsonString) as Map<String, dynamic>;
 
-      // DBインスタンス再起動
-      await DatabaseService().restartDatabase();
+      // マージインポート実行
+      final summary = await DatabaseService().importAllData(jsonData);
 
-      return true;
+      return summary;
     } catch (e) {
       debugPrint('復元エラー: $e');
-      return false;
+      rethrow;
     }
   }
 }
