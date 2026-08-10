@@ -1,5 +1,6 @@
 import 'home_screen_state.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../novel_model.dart';
@@ -679,13 +680,21 @@ class HomeUIComponents {
                     ),
                     delegate: SliverChildBuilderDelegate((ctx, index) {
                       if (index >= itemCount) return const SizedBox.shrink();
-                      return _buildNovelItemCard(ctx, state.novels[index]);
+                      return FutureBuilder<Widget>(
+                        future: _buildNovelItemCard(ctx, state.novels[index]),
+                        builder: (ctx2, snap) =>
+                            snap.data ?? const SizedBox.shrink(),
+                      );
                     }, childCount: itemCount),
                   )
                 : SliverList(
                     delegate: SliverChildBuilderDelegate((ctx, index) {
                       if (index >= itemCount) return const SizedBox.shrink();
-                      return _buildNovelItemCard(ctx, state.novels[index]);
+                      return FutureBuilder<Widget>(
+                        future: _buildNovelItemCard(ctx, state.novels[index]),
+                        builder: (ctx2, snap) =>
+                            snap.data ?? const SizedBox.shrink(),
+                      );
                     }, childCount: itemCount),
                   ),
           ),
@@ -701,7 +710,10 @@ class HomeUIComponents {
     );
   }
 
-  Widget _buildNovelItemCard(BuildContext context, dynamic rawNovel) {
+  Future<Widget> _buildNovelItemCard(
+    BuildContext context,
+    dynamic rawNovel,
+  ) async {
     final Novel novel = rawNovel as Novel;
     final String coverUrl = novel.coverUrl.isNotEmpty
         ? novel.coverUrl
@@ -719,7 +731,14 @@ class HomeUIComponents {
         _buildNovelBadge(Icons.collections_bookmark, 'シリーズ', Colors.blueAccent),
       );
     }
-    if (badges.length > 2) badges.length = 2;
+    // ローカルしおり（読書進捗）がある場合は「しおり」バッジを表示
+    // （Pixivサーバーのブックマークとは別管理のアプリ内状態）
+    final prefs = await SharedPreferences.getInstance();
+    final bookmarkIds = prefs.getStringList('novel_bookmark_ids') ?? [];
+    if (bookmarkIds.contains(novel.id.toString())) {
+      badges.add(_buildNovelBadge(Icons.bookmark, 'しおり', Colors.pinkAccent));
+    }
+    if (badges.length > 3) badges.length = 3;
 
     // タグ：最大2〜3個を1行Textで表示（無制限Wrap禁止）
     final bool hasTags = novel.tags.isNotEmpty;

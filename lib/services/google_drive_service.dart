@@ -92,8 +92,9 @@ class GoogleDriveService {
         return fileList.files!.first;
       }
       return null;
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('バックアップファイル検索エラー: $e');
+      debugPrint('スタックトレース: $stack');
       return null;
     }
   }
@@ -127,7 +128,8 @@ class GoogleDriveService {
         // Create
         final fileMetadata = drive.File()
           ..name = 'pixember_backup.json'
-          ..mimeType = 'application/json';
+          ..mimeType = 'application/json'
+          ..parents = ['appDataFolder'];
         await _driveApi!.files.create(fileMetadata, uploadMedia: media);
       }
       return true;

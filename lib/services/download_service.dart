@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:isolate';
 // import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -73,7 +72,13 @@ class DownloadService {
     _downloadQueue.add(item);
   }
 
-  /// ダウンロードキューの処理を開始（Isolate.runでバックグラウンド化）
+  /// ダウンロードキューの処理を開始
+  ///
+  /// 画像ダウンロードはネットワークIO主体のため、メインスレッドの async で実行する。
+  /// かつて Isolate.run を使用していたが、onProgress/onSuccess/onError は UI 状態
+  /// （PixivViewerHomeState 等）を捕捉するクロージャであるため、別 Isolate へは
+  /// 送信不可能（unsendable）となり 'object is unsendable' で赤画面クラッシュしていた。
+  /// よって Isolate は使用せず、コールバックを直接呼び出す通常の async 処理とする。
   Future<void> processQueue({
     required void Function(int workId, double progress) onProgress,
     required void Function(int workId, String path) onSuccess,
@@ -83,56 +88,52 @@ class DownloadService {
 
     _isProcessing = true;
 
-    // Isolate.runでバックグラウンド処理
-    await Isolate.run(() async {
-      try {
-        final api = PixivApiService();
-        final token = await api.getAccessToken(await api.getRefreshToken());
+    try {
+      final api = PixivApiService();
+      final token = await api.getAccessToken(await api.getRefreshToken());
 
-        for (int i = 0; i < _downloadQueue.length; i++) {
-          final item = _downloadQueue[i];
-          // final progress = (i + 1) / _downloadQueue.length;
+      for (int i = 0; i < _downloadQueue.length; i++) {
+        final item = _downloadQueue[i];
 
-          try {
-            String? savePath;
+        try {
+          String? savePath;
 
-            if (item.type == 'ugoira') {
-              savePath = await _downloadUgoira(
-                illustId: item.workId,
-                token: token,
-                asGif: item.isGifExport,
-              );
-            } else {
-              final response = await http.get(
-                Uri.parse(item.url),
-                headers: {
-                  'User-Agent': 'PixivAndroidApp/6.71.1 (Android 11; Pixel 5)',
-                  'Authorization': 'Bearer $token',
-                },
-              );
+          if (item.type == 'ugoira') {
+            savePath = await _downloadUgoira(
+              illustId: item.workId,
+              token: token,
+              asGif: item.isGifExport,
+            );
+          } else {
+            final response = await http.get(
+              Uri.parse(item.url),
+              headers: {
+                'User-Agent': 'PixivAndroidApp/6.71.1 (Android 11; Pixel 5)',
+                'Authorization': 'Bearer $token',
+              },
+            );
 
-              if (response.statusCode != 200) {
-                throw Exception('ダウンロード失敗: ${response.statusCode}');
-              }
-
-              savePath = await _saveImage(response.bodyBytes, item.title);
+            if (response.statusCode != 200) {
+              throw Exception('ダウンロード失敗: ${response.statusCode}');
             }
 
-            if (savePath != null) {
-              onProgress(item.workId, 1.0);
-              onSuccess(item.workId, savePath);
-            } else {
-              throw Exception('保存に失敗しました');
-            }
-          } catch (e) {
-            onProgress(item.workId, 0.0);
-            onError(item.workId, e.toString());
+            savePath = await _saveImage(response.bodyBytes, item.title);
           }
+
+          if (savePath != null) {
+            onProgress(item.workId, 1.0);
+            onSuccess(item.workId, savePath);
+          } else {
+            throw Exception('保存に失敗しました');
+          }
+        } catch (e) {
+          onProgress(item.workId, 0.0);
+          onError(item.workId, e.toString());
         }
-      } finally {
-        _isProcessing = false;
       }
-    });
+    } finally {
+      _isProcessing = false;
+    }
   }
 
   /// 画像を保存（プラットフォーム固有処理付き）

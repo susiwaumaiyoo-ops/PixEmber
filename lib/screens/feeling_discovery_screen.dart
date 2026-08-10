@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import '../widgets/pixiv_image.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -421,16 +422,58 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
   }
 
   void _navigateToDetail(Map<String, dynamic> item) {
+    // 検索結果 item は novels テーブルの行（主キーは id）＋ similarity。
+    // 誤って item['work_id'] を参照すると null になり novel.id=0 で
+    // /v1/novel/detail?novel_id=0 が 404 になるため、正しく item['id'] を使う。
+    final int id = item['id'] as int? ?? 0;
+    final String description = item['description'] as String? ?? '';
+
+    // tags は DB に 'tags'（カンマ区切り）または 'tags_json'（JSON）で保存されている。
+    List<String> tags = const <String>[];
+    final tagsJson = item['tags_json'] as String?;
+    if (tagsJson != null && tagsJson.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(tagsJson) as List<dynamic>;
+        tags = decoded
+            .map(
+              (e) => e is Map<String, dynamic>
+                  ? (e['name'] as String? ?? '')
+                  : e.toString(),
+            )
+            .where((t) => t.isNotEmpty)
+            .toList();
+      } catch (_) {
+        // tags_json パース失敗はスルー（空リストでフォールバック）
+      }
+    }
+    if (tags.isEmpty) {
+      final rawTags = item['tags'] as String?;
+      if (rawTags != null && rawTags.isNotEmpty) {
+        tags = rawTags.split(',').where((t) => t.isNotEmpty).toList();
+      }
+    }
+
+    // シリーズ情報（DB に series_id / series_order のみ保存されている場合の復元）
+    NovelSeriesInfo? series;
+    final seriesId = item['series_id'] as int? ?? 0;
+    if (seriesId != 0) {
+      series = NovelSeriesInfo(
+        id: seriesId,
+        title: item['series_title'] as String? ?? '',
+      );
+    }
+
     final novel = Novel(
-      id: item['work_id'] as int? ?? 0,
+      id: id,
       title: item['title'] as String? ?? '',
-      caption: cleanCaption(item['description'] as String? ?? ''),
+      caption: cleanCaption(description),
       author: Author(
+        // novels テーブルには author_id 列がないため、取得不可時は 0 にフォールバック
         id: item['author_id'] as int? ?? 0,
         name: item['author_name'] as String? ?? '不明',
         account: '',
       ),
-      tags: [],
+      tags: tags,
       coverUrl: item['cover_url'] as String? ?? '',
       textCount: item['text_length'] as int? ?? 0,
       wordCount: 0,
@@ -440,6 +483,8 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
       totalView: item['total_view'] as int? ?? 0,
       totalBookmarks: item['total_bookmarks'] as int? ?? 0,
       isBookmarked: false,
+      series: series,
+      aiType: item['novel_ai_type'] as int? ?? 0,
     );
 
     Navigator.push(
@@ -1021,7 +1066,56 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
     final pageCount = item['page_count'] as int? ?? 0;
     final createDate = item['create_date'] as String? ?? '';
     final totalBookmarks = item['total_bookmarks'] as int? ?? 0;
+    final aiType = item['novel_ai_type'] as int? ?? 0;
+    final xRestrict = item['x_restrict'] as int? ?? 0;
+    final seriesId = item['series_id'] as int? ?? 0;
+    final seriesTitle = item['series_title'] as String? ?? '';
     final caption = cleanCaption(item['description'] as String? ?? '');
+
+    // タグ（DBの tags / tags_json から取得、最大3つ1行表示）
+    List<String> tags = const <String>[];
+    final tagsJson = item['tags_json'] as String?;
+    if (tagsJson != null && tagsJson.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(tagsJson) as List<dynamic>;
+        tags = decoded
+            .map(
+              (e) => e is Map<String, dynamic>
+                  ? (e['name'] as String? ?? '')
+                  : e.toString(),
+            )
+            .where((t) => t.isNotEmpty)
+            .toList();
+      } catch (_) {
+        // パース失敗は無視（フォールバックへ）
+      }
+    }
+    if (tags.isEmpty) {
+      final rawTags = item['tags'] as String?;
+      if (rawTags != null && rawTags.isNotEmpty) {
+        tags = rawTags.split(',').where((t) => t.isNotEmpty).take(3).toList();
+      }
+    } else {
+      tags = tags.take(3).toList();
+    }
+
+    // バッジ（AI / R-18 / シリーズ）
+    final List<Widget> badges = <Widget>[];
+    if (aiType == 2) {
+      badges.add(
+        _buildNovelBadge(Icons.auto_awesome, 'AI', Colors.purpleAccent),
+      );
+    }
+    if (xRestrict == 1) {
+      badges.add(
+        _buildNovelBadge(Icons.warning_amber, 'R-18', Colors.redAccent),
+      );
+    }
+    if (seriesId != 0) {
+      badges.add(
+        _buildNovelBadge(Icons.collections_bookmark, 'シリーズ', Colors.blueAccent),
+      );
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1106,6 +1200,10 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                       ],
                     ),
                     const SizedBox(height: 4),
+                    // バッジ（AI / R-18 / シリーズ）
+                    if (badges.isNotEmpty)
+                      Wrap(spacing: 6, runSpacing: 4, children: badges),
+                    const SizedBox(height: 4),
                     // 作者情報
                     Text(
                       authorName,
@@ -1119,7 +1217,49 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
-                    // キャプション（概要）先頭を表示
+                    // シリーズ名（存在時）
+                    if (seriesTitle.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.collections_bookmark,
+                              size: 13,
+                              color: Colors.blueAccent,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                seriesTitle,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blueAccent,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    // タグ（最大3つ1行表示）
+                    if (tags.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          tags.map((t) => '#$t').join('  '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark
+                                ? Colors.pinkAccent.shade200
+                                : Colors.pinkAccent,
+                          ),
+                        ),
+                      ),
+                    // キャプション（概要）先頭を表示（1行）
                     if (caption.isNotEmpty)
                       Text(
                         caption,
@@ -1130,7 +1270,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                               : Colors.grey.shade600,
                           height: 1.3,
                         ),
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     const SizedBox(height: 8),
@@ -1182,6 +1322,32 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
         Icons.menu_book,
         color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
         size: 32,
+      ),
+    );
+  }
+
+  Widget _buildNovelBadge(IconData icon, String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: color,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
       ),
     );
   }

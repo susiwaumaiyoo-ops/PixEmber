@@ -230,44 +230,53 @@ class IllustDetailUIComponents {
             ),
           ];
 
-    // 複数絵: 上から順に縦並びスクロール
-    Widget viewer;
+    // 複数絵: 上から順に縦並びスクロール（全ページがスクロールで見える）
     if (images.length > 1) {
-      viewer = SingleChildScrollView(
-        padding: EdgeInsets.zero,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: [
-            for (int i = 0; i < images.length; i++) ...[
-              Center(
-                child: ZoomableImage(
-                  url: images[i].original ?? state.illust.urls.original ?? '',
-                  isLargeScreen: true,
-                  maxHeight: double.infinity,
-                  cacheWidth: cacheWidth,
-                ),
-              ),
-              if (i < images.length - 1) const SizedBox(height: 8),
-            ],
-          ],
-        ),
+      return Stack(
+        children: [
+          SingleChildScrollView(
+            padding: EdgeInsets.zero,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                for (int i = 0; i < images.length; i++) ...[
+                  Center(
+                    child: ZoomableImage(
+                      url:
+                          images[i].original ??
+                          state.illust.urls.original ??
+                          '',
+                      isLargeScreen: true,
+                      maxHeight: double.infinity,
+                      cacheWidth: cacheWidth,
+                    ),
+                  ),
+                  if (i < images.length - 1) const SizedBox(height: 8),
+                ],
+              ],
+            ),
+          ),
+          Positioned(
+            top: 16,
+            right: 16,
+            child: _buildFullscreenButton(context, state),
+          ),
+        ],
       );
     }
 
     // 1枚絵: 左ペイン内で縦センター配置
-    viewer = Center(
-      child: ZoomableImage(
-        url: images.first.original ?? state.illust.urls.original ?? '',
-        isLargeScreen: true,
-        maxHeight: availableHeight,
-        cacheWidth: cacheWidth,
-      ),
-    );
-
     return Stack(
       children: [
-        viewer,
+        Center(
+          child: ZoomableImage(
+            url: images.first.original ?? state.illust.urls.original ?? '',
+            isLargeScreen: true,
+            maxHeight: availableHeight,
+            cacheWidth: cacheWidth,
+          ),
+        ),
         Positioned(
           top: 16,
           right: 16,
