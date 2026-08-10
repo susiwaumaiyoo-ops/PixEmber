@@ -7,11 +7,20 @@ import '../services/google_drive_service.dart';
 import '../services/pixiv_api_service.dart';
 import 'bookmark_list_screen.dart';
 import 'history_screen.dart';
+import 'feeling_discovery_screen.dart';
 import 'folder_list_screen.dart';
 import 'mute_settings_screen.dart';
 import 'home_ui_components.dart';
 import 'home_filter_handler.dart';
 import 'home_sync_handler.dart';
+import 'dart:convert';
+import 'dart:math';
+import 'package:http/http.dart' as http;
+import '../services/database_service.dart';
+import '../services/embedding_service.dart';
+import '../services/novel_document_text.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:crypto/crypto.dart';
 
 class PixivViewerHome extends StatefulWidget {
   const PixivViewerHome({super.key});
@@ -40,6 +49,10 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   final PixivApiService _pixivApiService = PixivApiService();
   String? loggedInEmail;
   bool isLoggedIn = false;
+
+  // 認証コードの二重交換を防ぐためのガード
+  bool _isExchangingToken = false;
+  String? _processedAuthCode;
 
   // サブスクリプション同期用の状態変数
   Map<String, dynamic>? _syncProgress;
@@ -125,6 +138,12 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   // ページング用
   int? nextOffset;
 
+  // フィーリング発掘：バックグラウンド Embedding 生成の状態管理
+  // 生成中の work_id をメモリ上で保持し、同じ作品の二重処理を防止
+  final Set<int> _backgroundEmbeddingInProgress = {};
+  // 1回の一覧取得あたりの生成上限
+  static const int _maxBackgroundEmbeddingsPerFetch = 5;
+
   // スクロールコントローラー（無限スクロール用）
   late final ScrollController scrollController;
 
@@ -182,6 +201,12 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     _loadSearchHistory();
     _initializeDriveSync();
     fetchData();
+
+    // 起動後、最初のフレーム描画後にトークンを確認し、
+    // 未ログインなら PKCE ログイン画面を自動表示する
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkLoginOnStart();
+    });
   }
 
   @override
@@ -286,6 +311,8 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
 
   // タブ変更（subMode を指定した場合はそのサブモードへ切り替える）
   void changeTab(int index, [int? subMode]) {
+    if (currentIndex == index) return;
+
     setState(() {
       currentIndex = index;
       // サブモードをリセット（おすすめに）
@@ -294,8 +321,16 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
       } else if (index == novelIndex) {
         novelSubMode = subMode ?? 0;
       }
+      // フィーリング発掘は Pixiv API 一覧取得タブではないためローディングを解除
+      if (index == feelingDiscoveryIndex) {
+        isLoading = false;
+        errorMessage = null;
+      }
     });
-    fetchData();
+
+    if (index == illustIndex || index == novelIndex) {
+      fetchData();
+    }
   }
 
   /// 現在のタブのサブモードを変更する公開 API。
@@ -328,6 +363,20 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
 
   // データ取得
   Future<void> fetchData() async {
+    final isPixivDataTab =
+        currentIndex == illustIndex || currentIndex == novelIndex;
+
+    if (!isPixivDataTab) {
+      // フィーリング発掘など Pixiv API 一覧取得タブでは何も取得しない。
+      // 誤って呼ばれた場合でも共通ローディングを解除して遮断を防ぐ。
+      if (mounted && isLoading) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+      return;
+    }
+
     setState(() {
       isLoading = true;
       errorMessage = null;
@@ -358,6 +407,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
           setState(() {
             illusts = result.items;
             nextOffset = result.nextOffset;
+            searchItem = result.searchItem;
             isLoading = false;
           });
         } else if (illustSubMode == 2) {
@@ -399,6 +449,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               novels = result.items;
               _allTextSearchState = result.state;
               nextOffset = result.state.textNextOffset;
+              searchItem = result.result.searchItem;
               isLoading = false;
               _computeSeriesTextLengths(novels);
             });
@@ -417,6 +468,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
             setState(() {
               novels = result.items;
               nextOffset = result.nextOffset;
+              searchItem = result.searchItem;
               isLoading = false;
               _computeSeriesTextLengths(novels);
             });
@@ -436,10 +488,9 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
         }
       }
 
-      // 百科事典データの取得（検索時のみ）
-      if (_currentSearchWord.isNotEmpty &&
-          (illustSubMode == 1 || novelSubMode == 1)) {
-        searchItem = _extractSearchItem('');
+      // 小説一覧を取得したら未生成 Embedding をバックグラウンドで生成
+      if (currentIndex == novelIndex && novels.isNotEmpty) {
+        _generateEmbeddingsInBackground(novels);
       }
     } catch (e) {
       setState(() {
@@ -449,6 +500,75 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
           rateLimited = true;
         }
       });
+    }
+  }
+
+  /// 一覧に表示された小説のうち、Embedding が未生成のものをバックグラウンドで
+  /// 静かに生成する。UI をブロックしない（await しない）。
+  ///
+  /// - EmbeddingService が未初期化ならスキップ（強制初期化しない）
+  /// - 1回の呼び出しで最大 [_maxBackgroundEmbeddingsPerFetch] 件に制限
+  /// - 生成中の work_id は [_backgroundEmbeddingInProgress] で管理（重複防止）
+  /// - エラーは debugPrint のみ（アプリを落とさない）
+  void _generateEmbeddingsInBackground(List<Novel> novels) {
+    if (novels.isEmpty) return;
+    // モデル未初期化なら何もしない（フィーリング発掘タブ未使用時の無駄な読込を回避）
+    final embeddingService = EmbeddingService();
+    if (!embeddingService.isInitialized) return;
+
+    final candidateIds = novels.map((n) => n.id).where((id) => id > 0).toList();
+    if (candidateIds.isEmpty) return;
+
+    // 非同期で抽出＋生成を実行（UI スレッドを止めない）
+    unawaited(_runBackgroundEmbeddingGeneration(candidateIds));
+  }
+
+  Future<void> _runBackgroundEmbeddingGeneration(List<int> candidateIds) async {
+    // モデル未初期化なら何もしない（呼び出し側でも弾いているが念のため再確認）
+    final embeddingService = EmbeddingService();
+    if (!embeddingService.isInitialized) return;
+
+    try {
+      final targets = await DatabaseService().getWorkIdsWithoutEmbedding(
+        candidateIds,
+      );
+      // 未生成かつ生成中でないものを最大上限件数まで選ぶ
+      final toProcess = targets
+          .where((id) => !_backgroundEmbeddingInProgress.contains(id))
+          .take(_maxBackgroundEmbeddingsPerFetch)
+          .toList();
+
+      for (final workId in toProcess) {
+        _backgroundEmbeddingInProgress.add(workId);
+      }
+
+      for (final workId in toProcess) {
+        try {
+          final novel = novels.firstWhere((n) => n.id == workId);
+          final text = buildNovelDocumentText(novel);
+          final vector = await embeddingService.encodeDocument(text);
+          await DatabaseService().saveNovelEmbedding(
+            workId: workId,
+            embedding: vector,
+          );
+          await DatabaseService().saveNovelMeta(
+            workId: workId,
+            title: novel.title,
+            description: novel.caption,
+            authorName: novel.author.name,
+            coverUrl: novel.coverUrl,
+            pageCount: novel.pageCount,
+            totalBookmarks: novel.totalBookmarks,
+            createDate: novel.createDate,
+          );
+        } catch (e) {
+          debugPrint('background embedding failed for workId=$workId: $e');
+        } finally {
+          _backgroundEmbeddingInProgress.remove(workId);
+        }
+      }
+    } catch (e) {
+      debugPrint('background embedding extraction failed: $e');
     }
   }
 
@@ -486,6 +606,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
           setState(() {
             illusts.addAll(result.items);
             nextOffset = result.nextOffset;
+            searchItem = result.searchItem ?? searchItem;
             _isFetchingNextPage = false;
           });
         } else if (illustSubMode == 2) {
@@ -565,6 +686,11 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
           });
         }
       }
+
+      // 追加取得した小説一覧でも未生成 Embedding をバックグラウンドで生成
+      if (currentIndex == novelIndex && novels.isNotEmpty) {
+        _generateEmbeddingsInBackground(novels);
+      }
     } catch (e) {
       setState(() {
         _isFetchingNextPage = false;
@@ -624,18 +750,181 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     );
   }
 
-  // WebView ログイン表示
-  void _showWebViewLogin() async {
-    // PKCE ログインフローの実装
-    // 実際のログイン処理は PixivApiService に委譲
+  // 起動時にトークンを確認し、未ログインなら自動でログイン画面を表示する
+  Future<void> _checkLoginOnStart() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('PIXIV_REFRESH_TOKEN');
+    if (token == null || token.isEmpty) {
+      // トークンが存在しない／空 → 自動ログイン
+      if (mounted) _showWebViewLogin();
+      return;
+    }
+    // 保存済みトークンの有効性を確認
     try {
-      // ログイン処理の実装
+      await _pixivApiService.getAccessToken(token);
+      if (mounted) {
+        setState(() => isLoggedIn = true);
+      }
+    } catch (e) {
+      // 無効なトークン → 再ログイン
+      if (mounted) _showWebViewLogin();
+    }
+  }
+
+  // PKCE 用の code_verifier / code_challenge を生成（S256 方式）
+  // code_verifier: 43〜128 文字の URL-safe ランダム文字列
+  // 利用文字: A-Z a-z 0-9 - . _ ~
+  static const String _pkceAlphabet =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+
+  String _generateCodeVerifier() {
+    final rand = Random.secure();
+    // 44文字（43〜128文字の範囲内）のランダム文字列を生成
+    final length = 44;
+    final buffer = StringBuffer();
+    for (int i = 0; i < length; i++) {
+      buffer.write(_pkceAlphabet[rand.nextInt(_pkceAlphabet.length)]);
+    }
+    return buffer.toString();
+  }
+
+  // code_verifier から S256 の code_challenge を算出
+  // SHA-256(code_verifier) を URL-safe Base64（パディング=なし）でエンコード
+  String _generateCodeChallenge(String codeVerifier) {
+    final bytes = sha256.convert(utf8.encode(codeVerifier)).bytes;
+    return base64UrlEncode(bytes).replaceAll('=', '');
+  }
+
+  // WebView を用いた PKCE ログイン画面の表示
+  void _showWebViewLogin() {
+    // 古いセッションCookieが残ると既存セッションが使われ、
+    // OAuth の code 発行フローが正しく通らないため消去する
+    WebViewCookieManager().clearCookies();
+    final codeVerifier = _generateCodeVerifier();
+    final codeChallenge = _generateCodeChallenge(codeVerifier);
+    final controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..clearCache()
+      ..clearLocalStorage()
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onNavigationRequest: (request) {
+            // pixiv:// スキームのリダイレクトは WebView に遷移させず捕捉する
+            if (request.url.startsWith('pixiv://')) {
+              _handleAuthRedirect(request.url, codeVerifier);
+              return NavigationDecision.prevent;
+            }
+            return NavigationDecision.navigate;
+          },
+          onWebResourceError: (error) {
+            // 未知のスキーム等のリソースエラーでクラッシュしないよう無視する
+            // （pixiv:// は onNavigationRequest で prevent 済みのため基本発生しない）
+          },
+        ),
+      )
+      ..loadRequest(
+        Uri.parse(
+          'https://app-api.pixiv.net/web/v1/login'
+          '?code_challenge=$codeChallenge'
+          '&code_challenge_method=S256'
+          '&client=pixiv-android',
+        ),
+      );
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(
+          children: [
+            const Expanded(child: Text('Pixiv ログイン')),
+            IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 480,
+          child: WebViewWidget(controller: controller),
+        ),
+      ),
+    );
+  }
+
+  // pixiv://auth リダイレクトから認証コードを取り出しトークンと交換
+  Future<void> _handleAuthRedirect(String url, String codeVerifier) async {
+    try {
+      final uri = Uri.parse(url);
+      final code = uri.queryParameters['code'];
+      if (code == null || code.isEmpty) {
+        throw Exception('認証コードが取得できませんでした。');
+      }
+      // 二重交換防止：既に交換中、または同一コードを処理済みならスキップ
+      if (_isExchangingToken || _processedAuthCode == code) {
+        return;
+      }
+      _isExchangingToken = true;
+      _processedAuthCode = code;
+      final refreshToken = await _exchangeCodeForToken(code, codeVerifier);
+      // 既存のキーで保存
+      _pixivApiService.setRefreshToken(refreshToken);
+      if (mounted) {
+        setState(() => isLoggedIn = true);
+        Navigator.of(context).pop(); // WebView ダイアログを閉じる
+        fetchData(); // ログイン後にホーム画面を更新
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('ログインしました')));
+      }
     } catch (e) {
       if (mounted) {
+        Navigator.of(context).pop();
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('ログイン失敗: $e')));
       }
+    }
+  }
+
+  // 認証コードをリフレッシュトークンと交換する
+  Future<String> _exchangeCodeForToken(String code, String codeVerifier) async {
+    final response = await http.post(
+      Uri.parse('https://oauth.secure.pixiv.net/auth/token'),
+      headers: {
+        'User-Agent': 'PixivAndroidApp/5.0.234 (Android 11.0; Pixel 5)',
+        'App-OS': 'android',
+        'App-OS-Version': '11.0',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: {
+        'client_id': 'MOBrBDS8blbauoSck0ZfDbtuzpyT',
+        'client_secret': 'lsACyCD94FhDUtGTXi3QzcFE2uU1hqtDaKeqrdwj',
+        'grant_type': 'authorization_code',
+        'code_verifier': codeVerifier,
+        'code': code,
+        'include_policy': 'true',
+        'redirect_uri':
+            'https://app-api.pixiv.net/web/v1/users/auth/pixiv/callback',
+      },
+    );
+    if (response.statusCode == 200) {
+      final resData = jsonDecode(response.body) as Map<String, dynamic>;
+      final payload = resData['response'] as Map<String, dynamic>?;
+      final refreshToken = payload?['refresh_token'] as String?;
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        return refreshToken;
+      }
+      throw Exception('リフレッシュトークンが取得できませんでした。');
+    } else {
+      // トークン・認証コード・code_verifier は出力しない
+      debugPrint('[PKCE] token exchange failed: status=${response.statusCode}');
+      debugPrint('[PKCE] response body: ${response.body}');
+      throw Exception(
+        'トークン交換に失敗しました (status: ${response.statusCode})\n'
+        '${response.body}',
+      );
     }
   }
 
@@ -828,19 +1117,6 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
       debugPrint('しおり履歴の取得失敗：$e');
       return [];
     }
-  }
-
-  // 百科事典データ抽出
-  SearchItem? _extractSearchItem(String rawBody) {
-    // 簡易実装：検索ワードから百科事典データを生成
-    if (_currentSearchWord.isEmpty) return null;
-    return SearchItem(
-      name: _currentSearchWord,
-      summary: '「$_currentSearchWord」の百科事典データ',
-      wordCount: 0,
-      iconUrl: null,
-      dicUrl: 'https://dic.pixiv.net/a/$_currentSearchWord',
-    );
   }
 
   @override
@@ -1111,15 +1387,19 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               if (currentIndex != feelingDiscoveryIndex &&
                   activeSubMode == 1 &&
                   searchItem != null)
-                _uiComponents.buildEncyclopediaCard(),
+                _uiComponents.buildEncyclopediaCard(context),
 
               // 読書中（しおり）の小説セクション (小説タブかつ非検索時に表示)
               if (currentIndex == novelIndex && activeSubMode != 1)
                 _uiComponents.buildRecentBookmarksSection(),
 
               // 6. メインデータコンテンツ
+              // フィーリング発掘はホーム側の共通ローディング/エラーに遮断されない
+              // 独立画面として扱う（判定を isLoading / errorMessage より前に置く）
               Expanded(
-                child: isLoading
+                child: currentIndex == feelingDiscoveryIndex
+                    ? const FeelingDiscoveryScreen()
+                    : isLoading
                     ? const Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -1137,9 +1417,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                     ? _uiComponents.buildErrorWidget()
                     : currentIndex == illustIndex
                     ? _uiComponents.buildIllustGrid(crossAxisCount)
-                    : currentIndex == novelIndex
-                    ? _uiComponents.buildNovelList()
-                    : const FeelingDiscoveryScreen(),
+                    : _uiComponents.buildNovelList(),
               ),
             ],
           ),

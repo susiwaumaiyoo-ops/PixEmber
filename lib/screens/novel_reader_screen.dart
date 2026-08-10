@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../novel_model.dart';
 import '../services/database_service.dart';
 import '../services/embedding_service.dart';
+import '../services/novel_document_text.dart';
 import '../services/pixiv_api_service.dart';
 
 part 'novel_reader_data.dart';

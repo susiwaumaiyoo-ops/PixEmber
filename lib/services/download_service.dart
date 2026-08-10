@@ -216,7 +216,10 @@ class DownloadService {
         final file = File(filePath);
         final bytes = await file.readAsBytes();
 
-        final result = await ImageGallerySaverPlus.saveImage(bytes, quality: 100);
+        final result = await ImageGallerySaverPlus.saveImage(
+          bytes,
+          quality: 100,
+        );
 
         if (!result['isSuccess']) {
           debugPrint('ギャラリー保存失敗: $result');

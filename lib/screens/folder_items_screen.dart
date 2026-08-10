@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/pixiv_image.dart';
 import '../illust_model.dart';
 import '../novel_model.dart';
 import '../services/database_service.dart';
@@ -212,9 +213,14 @@ class _FolderItemsScreenState extends State<FolderItemsScreen> {
                       child:
                           item['preview_url'] != null &&
                               item['preview_url'].toString().isNotEmpty
-                          ? Image.network(
-                              item['preview_url'],
+                          ? PixivImage(
+                              url: item['preview_url'].toString(),
                               fit: BoxFit.cover,
+                              isThumbnail: true,
+                              errorWidget: const Icon(
+                                Icons.broken_image,
+                                color: Colors.grey,
+                              ),
                             )
                           : Icon(
                               item['type'] == 'novel'

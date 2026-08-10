@@ -1,5 +1,3 @@
-import 'dart:convert';
-import 'dart:typed_data';
 import 'package:sqflite/sqflite.dart';
 import 'database_service.dart';
 
@@ -28,39 +26,6 @@ Future<Map<String, dynamic>?> getNovelText(int workId) async {
   );
   if (result.isEmpty) return null;
   return result.first;
-}
-
-/// 小説のベクトルを保存（UPSERT）
-/// SQLite の TEXT カラムに JSON 文字列として保存する
-Future<int> saveNovelEmbedding({
-  required Database db,
-  required int workId,
-  required Float32List embedding,
-}) async {
-  return await db.insert('novel_embeddings', {
-    'work_id': workId,
-    'embedding': jsonEncode(embedding.toList()),
-    'updated_at': DateTime.now().toIso8601String(),
-  }, conflictAlgorithm: ConflictAlgorithm.replace);
-}
-
-/// 保存された小説ベクトルを取得
-Future<Float32List?> getNovelEmbedding(int workId) async {
-  final db = await DatabaseService().database;
-  final result = await db.query(
-    'novel_embeddings',
-    where: 'work_id = ?',
-    whereArgs: [workId],
-  );
-  if (result.isEmpty) return null;
-
-  final raw = result.first['embedding'];
-  if (raw == null) return null;
-
-  final decoded = jsonDecode(raw as String) as List<dynamic>;
-  return Float32List.fromList(
-    decoded.map((e) => (e as num).toDouble()).toList(),
-  );
 }
 
 /// ダウンロード済みイラストを保存（UPSERT）

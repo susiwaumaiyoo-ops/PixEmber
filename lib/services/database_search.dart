@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'database_service.dart';
+import 'ruri_model_manager.dart';
 
 /// コサイン類似度で類似小説を検索
 ///
@@ -21,21 +22,36 @@ Future<List<Map<String, dynamic>>> searchNovelsByEmbedding({
   // 全ベクトルを取得
   final rows = await db.query(
     'novel_embeddings',
-    columns: ['work_id', 'embedding'],
+    columns: ['work_id', 'embedding', 'model_id', 'model_version'],
   );
 
   // 類似度計算
+  int skippedByModel = 0;
   final similarities = <_SimilarityEntry>[];
   for (final row in rows) {
     final workId = row['work_id'] as int?;
     final embRaw = row['embedding'];
     if (workId == null || embRaw == null) continue;
 
+    // 現行モデルと異なる Embedding はスキップ
+    if (row['model_id'] != RuriModelManager.embeddingModelId ||
+        row['model_version'] != RuriModelManager.embeddingModelVersion) {
+      skippedByModel++;
+      continue;
+    }
+
     try {
       final decoded = jsonDecode(embRaw as String) as List<dynamic>;
       final embedding = Float32List.fromList(
         decoded.map((e) => (e as num).toDouble()).toList(),
       );
+      if (embedding.length != userEmbedding.length) {
+        debugPrint(
+          '[warn] Embedding次元数不一致 workId=$workId '
+          'query=${userEmbedding.length} db=${embedding.length}',
+        );
+        continue;
+      }
       final sim = _cosineSimilarity(userEmbedding, embedding, userNorm);
       if (sim >= minSimilarity) {
         similarities.add(_SimilarityEntry(workId, sim));
@@ -43,6 +59,14 @@ Future<List<Map<String, dynamic>>> searchNovelsByEmbedding({
     } catch (e) {
       debugPrint('embedding decode error for workId=$workId: $e');
     }
+  }
+
+  if (skippedByModel > 0) {
+    debugPrint(
+      '[Search] モデル不一致のためスキップした Embedding: $skippedByModel 件 '
+      '(現行: ${RuriModelManager.embeddingModelId} '
+      'v${RuriModelManager.embeddingModelVersion})',
+    );
   }
 
   // 類似度降順ソート
@@ -146,4 +170,29 @@ class _SimilarityEntry {
   final int workId;
   final double similarity;
   _SimilarityEntry(this.workId, this.similarity);
+}
+
+/// ベクトル検索の補完用：キーワード（タイトル／概要）で小説を検索する。
+///
+/// ベクトル検索結果が少ない場合に呼び出し、既存結果（excludeWorkIds）を
+/// 除外してマージする。類似度バッジと区別できるよう is_keyword_match=1 を付与。
+Future<List<Map<String, dynamic>>> searchNovelsByKeywordFallback({
+  required Database db,
+  required String query,
+  required Set<int> excludeWorkIds,
+  int limit = 10,
+}) async {
+  if (query.trim().isEmpty) return [];
+
+  final rows = await db.query(
+    'novels',
+    where: '(title LIKE ? OR description LIKE ?)',
+    whereArgs: ['%$query%', '%$query%'],
+    limit: limit,
+  );
+
+  return rows
+      .where((row) => !excludeWorkIds.contains(row['id']))
+      .map((row) => {...row, 'similarity': null, 'is_keyword_match': 1})
+      .toList();
 }

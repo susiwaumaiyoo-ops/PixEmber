@@ -2,17 +2,21 @@ import 'home_screen_state.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../novel_model.dart';
 import 'history_screen.dart';
 import 'bookmark_list_screen.dart';
 import 'folder_list_screen.dart';
 import 'mute_settings_screen.dart';
 import 'illust_detail_screen.dart';
 import 'novel_detail_screen.dart';
+import '../widgets/pixiv_image.dart';
 
 /// UIコンポーネントを管理するクラス
 class HomeUIComponents {
+  // タブレット判定閾値: <700=1列, 700〜1099=2列, >=1100=3列
+  static const double _kTabletBreakpoint = 700.0;
+
   final PixivViewerHomeState state;
-  late BuildContext context;
 
   HomeUIComponents(this.state);
 
@@ -20,8 +24,6 @@ class HomeUIComponents {
   // build（エントリポイント）
   // =========================================================================
   Widget build(BuildContext context) {
-    this.context = context;
-
     final screenWidth = MediaQuery.of(context).size.width;
     int crossAxisCount = 2;
     if (screenWidth > 1200) {
@@ -63,7 +65,7 @@ class HomeUIComponents {
           ),
         ],
       ),
-      drawer: _buildDrawer(),
+      drawer: _buildDrawer(context),
       body: Stack(
         children: [buildMainContent(crossAxisCount), buildSyncProgressHUD()],
       ),
@@ -73,7 +75,7 @@ class HomeUIComponents {
   // =========================================================================
   // Drawer
   // =========================================================================
-  Widget _buildDrawer() {
+  Widget _buildDrawer(BuildContext context) {
     return Drawer(
       backgroundColor: const Color(0xFF1A1A1A),
       child: ListView(
@@ -519,13 +521,13 @@ class HomeUIComponents {
           if (index == filteredIllusts.length) {
             return _buildLoadMoreIndicator();
           }
-          return _buildIllustGridItem(filteredIllusts[index]);
+          return _buildIllustGridItem(ctx, filteredIllusts[index]);
         },
       ),
     );
   }
 
-  Widget _buildIllustGridItem(dynamic illust) {
+  Widget _buildIllustGridItem(BuildContext context, dynamic illust) {
     String? previewUrl;
     try {
       previewUrl =
@@ -562,6 +564,7 @@ class HomeUIComponents {
               Image.network(
                 previewUrl,
                 fit: BoxFit.cover,
+                headers: const {'Referer': 'https://www.pixiv.net/'},
                 errorBuilder: (_, _, _) => Container(color: Colors.black26),
               )
             else
@@ -585,7 +588,7 @@ class HomeUIComponents {
                 ),
               ),
             // ブックマーク数バッジ（右下）
-            if ((illust.bookmarkCount ?? 0) > 0)
+            if ((illust.totalBookmarks) > 0)
               Positioned(
                 bottom: 8,
                 right: 8,
@@ -608,7 +611,7 @@ class HomeUIComponents {
                       ),
                       const SizedBox(width: 2),
                       Text(
-                        '${illust.bookmarkCount}',
+                        '${illust.totalBookmarks}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 10,
@@ -627,7 +630,6 @@ class HomeUIComponents {
 
   // =========================================================================
   // 小説リスト
-  // =========================================================================
   Widget buildNovelList() {
     if (state.isLoading && state.novels.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -641,32 +643,90 @@ class HomeUIComponents {
       );
     }
 
+    final screenWidth = MediaQuery.of(state.context).size.width;
+    final isTablet = screenWidth >= _kTabletBreakpoint;
+    // 列数: <700=1, 700以上=2（1100以上でも3列にしない）
+    int crossAxisCount;
+    double horiz, vert;
+    if (isTablet) {
+      crossAxisCount = 2;
+      horiz = 16.0;
+      vert = 10.0;
+    } else {
+      crossAxisCount = 1;
+      horiz = 8.0;
+      vert = 6.0;
+    }
+
+    final itemCount = state.novels.length;
+    final hasNext = state.nextOffset != null;
+
     return RefreshIndicator(
       onRefresh: () => state.fetchData(),
-      child: ListView.builder(
+      child: CustomScrollView(
         controller: state.scrollController,
         physics: const ClampingScrollPhysics(),
-        padding: const EdgeInsets.all(6.0),
-        itemCount: state.novels.length + (state.nextOffset != null ? 1 : 0),
-        itemBuilder: (ctx, index) {
-          if (index == state.novels.length) {
-            return _buildLoadMoreIndicator();
-          }
-          return _buildNovelItemCard(state.novels[index]);
-        },
+        slivers: [
+          SliverPadding(
+            padding: EdgeInsets.symmetric(horizontal: horiz, vertical: vert),
+            sliver: isTablet
+                ? SliverGrid(
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: crossAxisCount,
+                      crossAxisSpacing: 12.0,
+                      mainAxisSpacing: 12.0,
+                      mainAxisExtent: 188.0,
+                    ),
+                    delegate: SliverChildBuilderDelegate((ctx, index) {
+                      if (index >= itemCount) return const SizedBox.shrink();
+                      return _buildNovelItemCard(ctx, state.novels[index]);
+                    }, childCount: itemCount),
+                  )
+                : SliverList(
+                    delegate: SliverChildBuilderDelegate((ctx, index) {
+                      if (index >= itemCount) return const SizedBox.shrink();
+                      return _buildNovelItemCard(ctx, state.novels[index]);
+                    }, childCount: itemCount),
+                  ),
+          ),
+          if (hasNext)
+            SliverToBoxAdapter(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1400),
+                child: Center(child: _buildLoadMoreIndicator()),
+              ),
+            ),
+        ],
       ),
     );
   }
 
-  Widget _buildNovelItemCard(dynamic novel) {
-    String? imageUrl;
-    try {
-      imageUrl = novel.images?.firstOrNull?.url ?? novel.mainImage;
-    } catch (_) {
-      try {
-        imageUrl = novel.mainImage;
-      } catch (_) {}
+  Widget _buildNovelItemCard(BuildContext context, dynamic rawNovel) {
+    final Novel novel = rawNovel as Novel;
+    final String coverUrl = novel.coverUrl.isNotEmpty
+        ? novel.coverUrl
+        : (novel.rawCoverUrl ?? '');
+
+    // バッジ行（優先度: AI > シリーズ、最大2個に制限してWrapの2行化防止）
+    final List<Widget> badges = <Widget>[];
+    if (novel.aiType == 2) {
+      badges.add(
+        _buildNovelBadge(Icons.auto_awesome, 'AI', Colors.purpleAccent),
+      );
     }
+    if (novel.series != null) {
+      badges.add(
+        _buildNovelBadge(Icons.collections_bookmark, 'シリーズ', Colors.blueAccent),
+      );
+    }
+    if (badges.length > 2) badges.length = 2;
+
+    // タグ：最大2〜3個を1行Textで表示（無制限Wrap禁止）
+    final bool hasTags = novel.tags.isNotEmpty;
+
+    // 説明文の正規化
+    final String caption = novel.caption.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final bool hasCaption = caption.isNotEmpty;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -679,66 +739,239 @@ class HomeUIComponents {
             MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: novel)),
           );
         },
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 100,
-              height: 120,
-              child: imageUrl != null
-                  ? Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) =>
-                          Container(color: Colors.black26),
-                    )
-                  : Container(color: Colors.black26),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      novel.title?.toString() ?? '',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      novel.caption?.toString() ?? '',
-                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.bookmark,
-                          size: 12,
-                          color: Colors.pinkAccent,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${novel.bookmarkCount ?? 0}',
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                      ],
-                    ),
-                  ],
+        child: Padding(
+          padding: const EdgeInsets.all(10.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 表紙（固定サイズ・カード高さを超えない）
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 96,
+                  height: 152,
+                  child: coverUrl.isNotEmpty
+                      ? PixivImage(
+                          url: coverUrl,
+                          fit: BoxFit.cover,
+                          isThumbnail: true,
+                          errorWidget: _buildNovelCoverPlaceholder(),
+                          placeholder: _buildNovelCoverPlaceholder(),
+                        )
+                      : _buildNovelCoverPlaceholder(),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    // 狭いカードでは説明文を省略し、優先情報を維持
+                    final bool isCompact = constraints.maxWidth < 420;
+                    // 説明文は常に最大1行（非compact時も2行にしない）
+                    final int captionLines = 1;
+                    final int tagLimit = isCompact ? 2 : 3;
+
+                    final List<Widget> infoChildren = <Widget>[];
+
+                    // バッジ（最大2個・1行のみ）
+                    if (badges.isNotEmpty) {
+                      infoChildren.add(
+                        Wrap(spacing: 6, runSpacing: 0, children: badges),
+                      );
+                      infoChildren.add(const SizedBox(height: 3));
+                    }
+
+                    // タイトル（最大2行）
+                    infoChildren.add(
+                      Text(
+                        novel.title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                    infoChildren.add(const SizedBox(height: 2));
+
+                    // 作者名（最大1行）
+                    infoChildren.add(
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.person_outline,
+                            size: 13,
+                            color: Colors.white70,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              novel.author.name,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.white70,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    // シリーズ名（最大1行・存在時）
+                    if (novel.series != null) {
+                      infoChildren.addAll([
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.collections_bookmark,
+                              size: 13,
+                              color: Colors.blueAccent,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                novel.series!.title,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blueAccent,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ]);
+                    }
+
+                    // 説明文（高さ不足時は非表示）
+                    if (hasCaption && !isCompact) {
+                      infoChildren.addAll([
+                        const SizedBox(height: 2),
+                        Text(
+                          caption,
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 12,
+                          ),
+                          maxLines: captionLines,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ]);
+                    }
+
+                    // タグ（1行Text・最大 tagLimit 個）
+                    if (hasTags) {
+                      final visibleTags = novel.tags.take(tagLimit).toList();
+                      infoChildren.addAll([
+                        const SizedBox(height: 3),
+                        Text(
+                          visibleTags.map((t) => '#$t').join('  '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.pinkAccent,
+                          ),
+                        ),
+                      ]);
+                    }
+
+                    // メタ情報（必ず表示・下部配置）
+                    infoChildren.add(const Spacer());
+                    infoChildren.add(
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.notes,
+                              size: 12,
+                              color: Colors.white54,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              _formatNumber(novel.textLength),
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            const SizedBox(width: 10),
+                            const Icon(
+                              Icons.menu_book,
+                              size: 12,
+                              color: Colors.white54,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              '${novel.pageCount}P',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            const SizedBox(width: 10),
+                            const Icon(
+                              Icons.bookmark,
+                              size: 12,
+                              color: Colors.pinkAccent,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              _formatNumber(novel.totalBookmarks),
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.max,
+                      children: infoChildren,
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  Widget _buildNovelCoverPlaceholder() {
+    return Container(
+      color: Colors.grey.shade900,
+      alignment: Alignment.center,
+      child: const Icon(Icons.menu_book, color: Colors.white38, size: 36),
+    );
+  }
+
+  Widget _buildNovelBadge(IconData icon, String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 3),
+          Text(label, style: TextStyle(fontSize: 10, color: color)),
+        ],
+      ),
+    );
+  }
+
+  String _formatNumber(int number) {
+    if (number >= 10000) {
+      return '${(number / 10000).toStringAsFixed(1)}万';
+    }
+    return number.toString();
   }
 
   // =========================================================================
@@ -868,7 +1101,7 @@ class HomeUIComponents {
   // =========================================================================
   // 百科事典カード
   // =========================================================================
-  Widget buildEncyclopediaCard() {
+  Widget buildEncyclopediaCard(BuildContext context) {
     if (state.searchItem == null) return const SizedBox.shrink();
     final item = state.searchItem!;
     final String? iconUrl = item.iconUrl;
@@ -894,6 +1127,9 @@ class HomeUIComponents {
                         ? Image.network(
                             iconUrl,
                             fit: BoxFit.cover,
+                            headers: const {
+                              'Referer': 'https://www.pixiv.net/',
+                            },
                             errorBuilder: (_, _, _) => const Icon(
                               Icons.bookmark_border,
                               color: Colors.pinkAccent,
@@ -921,13 +1157,19 @@ class HomeUIComponents {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        '作品数: ${item.wordCount}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
+                      if (item.wordCount != null)
+                        Text(
+                          '作品数: ${item.wordCount}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                        )
+                      else
+                        const Text(
+                          '作品数: 取得できません',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -952,11 +1194,24 @@ class HomeUIComponents {
                 alignment: Alignment.centerRight,
                 child: InkWell(
                   onTap: () async {
-                    final uri = Uri.parse(item.dicUrl);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(
-                        uri,
-                        mode: LaunchMode.externalApplication,
+                    final parsed = Uri.tryParse(item.dicUrl);
+                    final uri =
+                        (parsed != null &&
+                            (parsed.scheme == 'http' ||
+                                parsed.scheme == 'https'))
+                        ? parsed
+                        : Uri(
+                            scheme: 'https',
+                            host: 'dic.pixiv.net',
+                            pathSegments: ['a', item.name.trim()],
+                          );
+                    final launched = await launchUrl(
+                      uri,
+                      mode: LaunchMode.externalApplication,
+                    );
+                    if (!launched && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('百科事典を開けませんでした')),
                       );
                     }
                   },
@@ -1118,6 +1373,9 @@ class HomeUIComponents {
                                 ? Image.network(
                                     bookmark['imageUrl']!,
                                     fit: BoxFit.cover,
+                                    headers: const {
+                                      'Referer': 'https://www.pixiv.net/',
+                                    },
                                     errorBuilder: (_, _, _) => const Icon(
                                       Icons.bookmark_border,
                                       color: Colors.pinkAccent,

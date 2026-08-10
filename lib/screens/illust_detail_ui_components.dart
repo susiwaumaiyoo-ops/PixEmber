@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../illust_model.dart';
+import '../widgets/pixiv_image.dart';
 import '../widgets/ugoira_player.dart';
 import '../widgets/zoomable_image.dart';
 import '../widgets/folder_selection_bottom_sheet.dart';
@@ -7,12 +8,24 @@ import 'author_profile_screen.dart';
 import 'full_screen_image_page.dart';
 import 'illust_detail_state.dart';
 
+const double kTabletBreakpoint = 600.0;
+
 class IllustDetailUIComponents {
   // ==========================================
   // メインビルド
   // ==========================================
 
   Widget build(BuildContext context, IllustDetailState state) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTablet = screenWidth >= kTabletBreakpoint;
+    if (isTablet) {
+      return _buildTabletLayout(context, state);
+    }
+    return _buildPhoneLayout(context, state);
+  }
+
+  // スマホレイアウト（従来の縦積みUIを維持）
+  Widget _buildPhoneLayout(BuildContext context, IllustDetailState state) {
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
@@ -61,6 +74,322 @@ class IllustDetailUIComponents {
     );
   }
 
+  // タブレットレイアウト（幅 > kTabletBreakpoint: 左右分割）
+  // タブレットレイアウト（幅 > kTabletBreakpoint: 左右分割）
+  Widget _buildTabletLayout(BuildContext context, IllustDetailState state) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF1A1A1A),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text(
+          state.illust.title,
+          style: const TextStyle(color: Colors.white),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bookmark_border, color: Colors.white),
+            onPressed: () => state.handler.toggleBookmark(state),
+          ),
+          IconButton(
+            icon: const Icon(Icons.download_outlined, color: Colors.white),
+            onPressed: () => state.handler.downloadIllust(state),
+          ),
+          IconButton(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            onPressed: () => _showMoreOptions(context, state),
+          ),
+        ],
+      ),
+      body: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 左ペイン (flex:6) 画像専用
+          Expanded(
+            flex: 6,
+            child: Container(
+              color: Colors.black26,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return _buildTabletImageViewer(
+                    context,
+                    state,
+                    constraints.maxHeight,
+                    constraints.maxWidth,
+                  );
+                },
+              ),
+            ),
+          ),
+          // ペイン間の区切り線 (1px)
+          Container(width: 1, color: Colors.white.withValues(alpha: 0.1)),
+          // 右ペイン (flex:4) 縦スクロール
+          Expanded(
+            flex: 4,
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                24,
+                MediaQuery.of(context).padding.top + 20,
+                24,
+                24,
+              ),
+              child: _buildMetaDetailsRight(context, state),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 作者アイコン + 作者名ブロック（左ペイン / スマホ共通）
+  Widget _buildAuthorBlock(BuildContext context, IllustDetailState state) {
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                AuthorProfileScreen(userId: state.illust.author.id),
+          ),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4.0),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: Colors.transparent,
+              child: ClipOval(
+                child: state.illust.author.avatar != null
+                    ? PixivImage(
+                        url: state.illust.author.avatar!,
+                        fit: BoxFit.cover,
+                        isThumbnail: true,
+                        errorWidget: const Icon(
+                          Icons.person,
+                          color: Colors.grey,
+                        ),
+                      )
+                    : null,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    state.illust.author.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    '${state.illust.totalBookmarks} ブックマーク',
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.volume_off, color: Colors.grey),
+              onPressed: () => state.handler.muteAuthor(state),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // タブレット用画像ビューア（1枚絵=縦センター / 複数絵=縦スクロール / ugoira=中央）
+  Widget _buildTabletImageViewer(
+    BuildContext context,
+    IllustDetailState state,
+    double availableHeight,
+    double availableWidth,
+  ) {
+    final cacheWidth = (availableWidth * MediaQuery.devicePixelRatioOf(context))
+        .round();
+
+    if (state.illust.type == 'ugoira') {
+      return Center(child: UgoiraPlayer(illustId: state.illust.id));
+    }
+
+    final images = state.illust.metaPages.isNotEmpty
+        ? state.illust.metaPages
+        : [
+            PageImage(
+              page: 1,
+              preview: state.illust.urls.preview,
+              original: state.illust.urls.original,
+            ),
+          ];
+
+    // 複数絵: 上から順に縦並びスクロール
+    Widget viewer;
+    if (images.length > 1) {
+      viewer = SingleChildScrollView(
+        padding: EdgeInsets.zero,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            for (int i = 0; i < images.length; i++) ...[
+              Center(
+                child: ZoomableImage(
+                  url: images[i].original ?? state.illust.urls.original ?? '',
+                  isLargeScreen: true,
+                  maxHeight: double.infinity,
+                  cacheWidth: cacheWidth,
+                ),
+              ),
+              if (i < images.length - 1) const SizedBox(height: 8),
+            ],
+          ],
+        ),
+      );
+    }
+
+    // 1枚絵: 左ペイン内で縦センター配置
+    viewer = Center(
+      child: ZoomableImage(
+        url: images.first.original ?? state.illust.urls.original ?? '',
+        isLargeScreen: true,
+        maxHeight: availableHeight,
+        cacheWidth: cacheWidth,
+      ),
+    );
+
+    return Stack(
+      children: [
+        viewer,
+        Positioned(
+          top: 16,
+          right: 16,
+          child: _buildFullscreenButton(context, state),
+        ),
+      ],
+    );
+  }
+
+  // 右ペイン: タイトル + 作者 + キャプション + タグ + 統計 + ブックマーク + 関連作品
+  Widget _buildMetaDetailsRight(BuildContext context, IllustDetailState state) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. タイトル
+        Text(
+          state.illust.title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 8),
+        // 2. 作者アイコン + 作者名
+        _buildAuthorBlock(context, state),
+        const SizedBox(height: 16),
+        if (state.illust.caption.isNotEmpty) ...[
+          Text(
+            state.illust.caption,
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          const SizedBox(height: 16),
+        ],
+        Wrap(
+          spacing: 4,
+          runSpacing: 4,
+          children: state.illust.tags.map((tag) {
+            return InkWell(
+              onTap: () => state.onTagTap?.call(tag),
+              child: Chip(
+                label: Text(
+                  tag,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.pinkAccent,
+                  ),
+                ),
+                backgroundColor: Colors.pink.withValues(alpha: 0.1),
+                side: const BorderSide(color: Colors.pinkAccent, width: 0.5),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            const Icon(
+              Icons.remove_red_eye_outlined,
+              color: Colors.grey,
+              size: 16,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '${state.illust.totalView}',
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+            const SizedBox(width: 16),
+            const Icon(Icons.favorite_border, color: Colors.grey, size: 16),
+            const SizedBox(width: 4),
+            Text(
+              '${state.illust.totalBookmarks}',
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+            const SizedBox(width: 16),
+            const Icon(Icons.calendar_today, color: Colors.grey, size: 16),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                state.illust.createDate,
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: state.isToggling
+                ? null
+                : () => state.handler.toggleBookmark(state),
+            icon: Icon(
+              state.isBookmarked ? Icons.favorite : Icons.favorite_border,
+            ),
+            label: Text(state.isBookmarked ? 'ブックマーク済み' : 'ブックマーク'),
+          ),
+        ),
+        const Divider(color: Colors.grey, height: 32),
+        const Row(
+          children: [
+            Icon(Icons.auto_awesome, color: Colors.pinkAccent, size: 18),
+            SizedBox(width: 8),
+            Text(
+              '関連作品 (無限ディグり)',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _buildRelatedSection(state),
+      ],
+    );
+  }
+
   // ==========================================
   // 画像ビューア
   // ==========================================
@@ -77,12 +406,40 @@ class IllustDetailUIComponents {
       );
     }
 
-    return SizedBox(
-      height: 300,
-      child: ZoomableImage(
-        url: state.illust.urls.original ?? '',
-        isLargeScreen: screenWidth > 900,
-        maxHeight: 300,
+    return Stack(
+      children: [
+        SizedBox(
+          height: 300,
+          child: ZoomableImage(
+            url: state.illust.urls.original ?? '',
+            isLargeScreen: screenWidth > 900,
+            maxHeight: 300,
+          ),
+        ),
+        Positioned(
+          top: 16,
+          right: 16,
+          child: _buildFullscreenButton(context, state),
+        ),
+      ],
+    );
+  }
+
+  // 全画面表示ボタン（半透明・円形、右上配置）
+  Widget _buildFullscreenButton(BuildContext context, IllustDetailState state) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _openFullScreenImage(context, state),
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: const BoxDecoration(
+            color: Colors.black45,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.fullscreen, color: Colors.white, size: 22),
+        ),
       ),
     );
   }
@@ -109,64 +466,7 @@ class IllustDetailUIComponents {
         ),
         const SizedBox(height: 12),
 
-        // 作者情報
-        InkWell(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) =>
-                    AuthorProfileScreen(userId: state.illust.author.id),
-              ),
-            );
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4.0),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Colors.transparent,
-                  child: ClipOval(
-                    child: state.illust.author.avatar != null
-                        ? Image.network(
-                            state.illust.author.avatar!,
-                            fit: BoxFit.cover,
-                          )
-                        : null,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        state.illust.author.name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        '${state.illust.totalBookmarks} ブックマーク',
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.volume_off, color: Colors.grey),
-                  onPressed: () => state.handler.muteAuthor(state),
-                ),
-              ],
-            ),
-          ),
-        ),
+        _buildAuthorBlock(context, state),
         const SizedBox(height: 8),
 
         // タグ
@@ -288,18 +588,17 @@ class IllustDetailUIComponents {
                   fit: StackFit.expand,
                   children: [
                     if (previewUrl != null)
-                      Image.network(
-                        previewUrl,
+                      PixivImage(
+                        url: previewUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            color: Colors.grey[800],
-                            child: const Icon(
-                              Icons.broken_image,
-                              color: Colors.grey,
-                            ),
-                          );
-                        },
+                        isThumbnail: true,
+                        errorWidget: Container(
+                          color: Colors.grey[800],
+                          child: const Icon(
+                            Icons.broken_image,
+                            color: Colors.grey,
+                          ),
+                        ),
                       )
                     else
                       Container(

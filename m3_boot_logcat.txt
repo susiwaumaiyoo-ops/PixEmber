@@ -1,0 +1,1093 @@
+--------- beginning of system
+08-10 20:52:57.592 I/ActivityManager( 4156): Force stopping com.example.pixiv_viewer appid=10527 user=0: from pid 16393
+08-10 20:52:57.599 I/ActivityManager( 4156): Killing 13458:com.example.pixiv_viewer/u0a527 (adj 0): stop com.example.pixiv_viewer due to from pid 16393
+08-10 20:52:57.603 D/DisplayManagerService( 4156): Drop pending events for gone uid 10527
+--------- beginning of main
+08-10 20:52:57.606 D/InetDiagMessage( 4156): Destroyed 7 sockets, proto=IPPROTO_TCP, family=AF_INET, states=14
+08-10 20:52:57.606 I/cr_ChildProcessService(16301): Destroying ChildProcessService pid=16301
+08-10 20:52:57.607 I/ocessService0:0(16301): System.exit called, status: 0
+08-10 20:52:57.607 I/AndroidRuntime(16301): VM exiting with result code 0, cleanup skipped.
+08-10 20:52:57.607 W/ActivityTaskManager( 4156): Force removing ActivityRecord{197058731 u0 com.example.pixiv_viewer/.MainActivity t210 f}}: app died, no saved state
+08-10 20:52:57.607 D/InetDiagMessage( 4156): Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET6, states=14
+08-10 20:52:57.608 D/InetDiagMessage( 4156): Destroyed live tcp sockets for uids={10527} in 4ms
+08-10 20:52:57.609 V/WindowManagerShell( 5636): Transition requested (#1630): android.os.BinderProxy@d86eda6 TransitionRequestInfo { type = CLOSE, triggerTask = TaskInfo{userId=0 taskId=210 effectiveUid=10527 displayId=0 isRunning=false baseIntent=Intent { flg=0x10000000 cmp=com.example.pixiv_viewer/.MainActivity } baseActivity=null topActivity=null origActivity=null realActivity=ComponentInfo{com.example.pixiv_viewer/com.example.pixiv_viewer.MainActivity} numActivities=0 lastActiveTime=381500353 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{android.window.IWindowContainerToken$Stub$Proxy@33ff3e7} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=Rect(0, 0 - 0, 0) topActivityInfo=null launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=true isVisible=true isVisibleRequested=true isTopActivityNoDisplay=false isSleeping=false locusId=null displayAreaFeatureId=1 isTopActivityTransparent=false isActivityStackTransparent=true lastNonFullscreenBounds=Rect(1028, 138 - 2021, 1904) capturedLink=null capturedLinkTimestamp=0 requestedVisibleTypes=-9 topActivityRequestOpenInBrowserEducationTimestamp=0 appCompatTaskInfo=AppCompatTaskInfo { topActivityInSizeCompat=false eligibleForLetterboxEducation= false isLetterboxEducationEnabled= false isLetterboxDoubleTapEnabled= false eligibleForUserAspectRatioButton= false topActivityBoundsLetterboxed= false isFromLetterboxDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 topActivityLetterboxAppWidth=-1 topActivityLetterboxAppHeight=-1 isUserFullscreenOverrideEnabled=false isSystemFullscreenOverrideEnabled=false hasMinAspectRatioOverride=false topActivityLetterboxBounds=null cameraCompatTaskInfo=CameraCompatTaskInfo { freeformCameraCompatMode=inactive}} topActivityMainWindowFrame=null}, pipChange = null, remoteTransition = null, displayChange = null, flags = 0, debugId = 1630 }
+08-10 20:52:57.609 D/BackgroundInstallControlService( 4156): Package event received: 0
+08-10 20:52:57.609 D/InetDiagMessage( 4156): Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET, states=14
+08-10 20:52:57.610 D/InetDiagMessage( 4156): Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET6, states=14
+08-10 20:52:57.610 D/InetDiagMessage( 4156): Destroyed live tcp sockets for uids={20527} in 2ms
+08-10 20:52:57.612 D/VRI[GoogleDiscoverWindow](13079): visibilityChanged oldVisibility=false newVisibility=true
+08-10 20:52:57.613 I/BpBinder( 4249): onLastStrongRef automatically unlinking death recipients: 
+08-10 20:52:57.614 I/ActivityManager( 4156): Killing 16301:com.android.webview:sandboxed_process0:org.chromium.content.app.SandboxedProcessService0:0/u0a527i150 (adj 0): isolated not needed
+08-10 20:52:57.616 D/ConnectivityService( 4156): requestNetwork for uid/pid:10436/5636 asUid: 10439 activeRequest: null callbackRequest: 10441 [NetworkRequest [ REQUEST id=10442, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED&NOT_BANDWIDTH_CONSTRAINED Uid: 10439 RequestorUid: 10436 RequestorPkg: com.android.systemui UnderlyingNetworks: Null] ]] callback flags: 0 order: 2147483647 isUidTracked: false declaredMethods: ALL
+08-10 20:52:57.617 D/BackgroundInstallControlService( 4156): Package event received: 0
+08-10 20:52:57.617 D/BackgroundInstallControlService( 4156): Package event received: 0
+08-10 20:52:57.617 D/WifiNetworkFactory( 4156): got request NetworkRequest [ REQUEST id=10442, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED&NOT_BANDWIDTH_CONSTRAINED Uid: 10439 RequestorUid: 10436 RequestorPkg: com.android.systemui UnderlyingNetworks: Null] ]
+08-10 20:52:57.617 D/ConnectivityService( 4156): NetReassign [10442 : null → 100] [c 0] [a 1] [i 0]
+08-10 20:52:57.617 D/UntrustedWifiNetworkFactory( 4156): got request NetworkRequest [ REQUEST id=10442, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED&NOT_BANDWIDTH_CONSTRAINED Uid: 10439 RequestorUid: 10436 RequestorPkg: com.android.systemui UnderlyingNetworks: Null] ]
+08-10 20:52:57.617 D/OemPaidWifiNetworkFactory( 4156): got request NetworkRequest [ REQUEST id=10442, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED&NOT_BANDWIDTH_CONSTRAINED Uid: 10439 RequestorUid: 10436 RequestorPkg: com.android.systemui UnderlyingNetworks: Null] ]
+08-10 20:52:57.617 D/MultiInternetWifiNetworkFactory( 4156): got request NetworkRequest [ REQUEST id=10442, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED&NOT_BANDWIDTH_CONSTRAINED Uid: 10439 RequestorUid: 10436 RequestorPkg: com.android.systemui UnderlyingNetworks: Null] ]
+08-10 20:52:57.618 W/ProcessStats( 4156): Tracking association SourceState{dafbb42 app.morphe.android.youtube/10519 BTop #143365} whose proc state 2 is better than process ProcessState{37b3b61 app.revanced.android.gms/10501 pkg=app.revanced.android.gms} proc state 14 (11 skipped)
+08-10 20:52:57.619 I/BpBinder( 4249): onLastStrongRef automatically unlinking death recipients: 
+08-10 20:52:57.620 I/AppsFilter( 4156): interaction: PackageSetting{44ba973 com.android.microdroid.empty_payload/10475} -> PackageSetting{fd5938c com.example.pixiv_viewer/10527} BLOCKED
+08-10 20:52:57.621 W/ActivityManager( 4156): Invalid packageName: com.example.pixiv_viewer
+08-10 20:52:57.621 I/ActivityManager( 4156): Force stopping com.example.pixiv_viewer appid=10527 user=12: from pid 16393
+08-10 20:52:57.625 I/AppsFilter( 4156): interaction: PackageSetting{44ba973 com.android.microdroid.empty_payload/10475} -> PackageSetting{fd5938c com.example.pixiv_viewer/10527} BLOCKED
+08-10 20:52:57.636 E/CameraService( 3666): notifyMonitoredUids: Failed to trigger permission callback for 10527:13458: -129
+08-10 20:52:57.636 E/CameraService( 3666): handleBinderStatus: Muting similar errors from listener 10527:13458
+--------- beginning of kernel
+08-10 20:52:56.348 I/binder_alloc( 9378): 13458: binder_alloc_buf, no vma
+08-10 20:52:56.348 I/binder  ( 9378): 3666:9378 transaction failed 29189/-3, size 96-0 line 3381
+08-10 20:52:57.638 D/BackgroundInstallControlService( 4156): Package event received: 0
+08-10 20:52:57.640 V/ActivityManager( 4156): Got obituary of 13458:com.example.pixiv_viewer
+08-10 20:52:57.641 I/WindowManager( 4156): WIN DEATH: Window{72500ae u0 com.example.pixiv_viewer/com.example.pixiv_viewer.MainActivity}
+08-10 20:52:57.641 I/cjin    (13079): onStart
+08-10 20:52:57.643 I/ImeTracker( 4156): com.example.pixiv_viewer:bcffd51d: onRequestHide at ORIGIN_SERVER reason HIDE_REMOVE_CLIENT fromUser false
+08-10 20:52:57.643 I/Zygote  ( 3742): Process 13458 exited due to signal 9 (Killed)
+08-10 20:52:57.643 I/ImeTracker( 4156): com.example.pixiv_viewer:bcffd51d: onCancelled at PHASE_SERVER_SHOULD_HIDE
+08-10 20:52:57.644 D/ConnectivityService( 4156): releasing NetworkRequest [ REQUEST id=10439, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED&NOT_BANDWIDTH_CONSTRAINED Uid: 10527 RequestorUid: 10527 RequestorPkg: com.example.pixiv_viewer UnderlyingNetworks: Null] ] (release request)
+08-10 20:52:57.644 W/ActivityManager( 4156): setHasOverlayUi called on unknown pid: 13458
+08-10 20:52:56.352 W/binder_cleanup_transaction(15429): 43 callbacks suppressed
+08-10 20:52:56.352 I/binder  (15429): undelivered transaction 260492331, process died.
+08-10 20:52:56.352 I/binder  (15429): undelivered transaction 260492333, process died.
+08-10 20:52:57.647 D/ActivityManager( 4156): sync unfroze 13085 org.omnirom.omnijaws for 7
+08-10 20:52:56.367 I/binder  (12960): undelivered transaction 260492379, process died.
+08-10 20:52:57.653 D/BackgroundInstallControlService( 4156): Package event received: 0
+08-10 20:52:57.656 I/libprocessgroup( 4156): Removed cgroup /sys/fs/cgroup/uid_10527/pid_13458
+08-10 20:52:57.656 D/DisplayManagerService( 4156): Drop pending events for gone uid 99150
+08-10 20:52:57.656 I/libprocessgroup( 4156): Removed cgroup /sys/fs/cgroup/uid_99150/pid_16301
+08-10 20:52:57.657 E/system_server( 4156): Failed to open file '/data/resource-cache/data@resource-cache@com.android.systemui-accent-AEkH.frro@idmap': No such file or directory
+08-10 20:52:57.657 E/system_server( 4156): failed to read IDMAP /data/resource-cache/data@resource-cache@com.android.systemui-accent-AEkH.frro@idmap
+08-10 20:52:57.658 W/ResourcesManager( 4156): failed to preload asset path '/data/resource-cache/com.android.systemui-accent-AEkH.frro'
+08-10 20:52:57.658 W/ResourcesManager( 4156): java.io.IOException: Failed to load asset path /data/resource-cache/data@resource-cache@com.android.systemui-accent-AEkH.frro@idmap
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.nativeLoad(Native Method)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.<init>(ApkAssets.java:309)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.loadOverlayFromPath(ApkAssets.java:229)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.loadApkAssets(ResourcesManager.java:614)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ResourcesManager$ApkAssetsSupplier.load(ResourcesManager.java:285)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.createApkAssetsSupplierNotLocked(ResourcesManager.java:1167)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.getResources(ResourcesManager.java:1286)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ActivityThread.getTopLevelResources(ActivityThread.java:2929)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2232)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2218)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getXml(ApplicationPackageManager.java:2568)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.content.pm.PackageItemInfo.loadXmlMetaData(PackageItemInfo.java:422)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.view.inputmethod.InputMethodInfo.<init>(InputMethodInfo.java:276)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.filterInputMethodServices(InputMethodManagerService.java:5353)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.queryRawInputMethodServiceMap(InputMethodManagerService.java:5328)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChangesInternal(InputMethodManagerService.java:893)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChanges(InputMethodManagerService.java:880)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.doHandlePackageEvent(PackageMonitor.java:594)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.lambda$postHandlePackageEvent$0(PackageMonitor.java:433)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.$r8$lambda$bSKEInwdT6Kd7GAyzMZPsXTTqeQ(Unknown Source:0)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.os.Handler.handleCallback(Handler.java:991)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.os.Handler.dispatchMessage(Handler.java:102)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.os.Looper.loopOnce(Looper.java:232)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.os.Looper.loop(Looper.java:317)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.os.HandlerThread.run(HandlerThread.java:85)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.server.ServiceThread.run(ServiceThread.java:49)
+08-10 20:52:57.658 E/system_server( 4156): Failed to open file '/data/resource-cache/data@resource-cache@com.android.systemui-dynamic-jFmw.frro@idmap': No such file or directory
+08-10 20:52:57.658 E/system_server( 4156): failed to read IDMAP /data/resource-cache/data@resource-cache@com.android.systemui-dynamic-jFmw.frro@idmap
+08-10 20:52:57.658 W/ResourcesManager( 4156): failed to preload asset path '/data/resource-cache/com.android.systemui-dynamic-jFmw.frro'
+08-10 20:52:57.658 W/ResourcesManager( 4156): java.io.IOException: Failed to load asset path /data/resource-cache/data@resource-cache@com.android.systemui-dynamic-jFmw.frro@idmap
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.nativeLoad(Native Method)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.<init>(ApkAssets.java:309)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.loadOverlayFromPath(ApkAssets.java:229)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.loadApkAssets(ResourcesManager.java:614)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ResourcesManager$ApkAssetsSupplier.load(ResourcesManager.java:285)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.createApkAssetsSupplierNotLocked(ResourcesManager.java:1167)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.getResources(ResourcesManager.java:1286)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ActivityThread.getTopLevelResources(ActivityThread.java:2929)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2232)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2218)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getXml(ApplicationPackageManager.java:2568)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.content.pm.PackageItemInfo.loadXmlMetaData(PackageItemInfo.java:422)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.view.inputmethod.InputMethodInfo.<init>(InputMethodInfo.java:276)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.filterInputMethodServices(InputMethodManagerService.java:5353)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.queryRawInputMethodServiceMap(InputMethodManagerService.java:5328)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChangesInternal(InputMethodManagerService.java:893)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChanges(InputMethodManagerService.java:880)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.doHandlePackageEvent(PackageMonitor.java:594)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.lambda$postHandlePackageEvent$0(PackageMonitor.java:433)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.$r8$lambda$bSKEInwdT6Kd7GAyzMZPsXTTqeQ(Unknown Source:0)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.os.Handler.handleCallback(Handler.java:991)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.os.Handler.dispatchMessage(Handler.java:102)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.os.Looper.loopOnce(Looper.java:232)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.os.Looper.loop(Looper.java:317)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.os.HandlerThread.run(HandlerThread.java:85)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.server.ServiceThread.run(ServiceThread.java:49)
+08-10 20:52:57.658 E/system_server( 4156): Failed to open file '/data/resource-cache/data@resource-cache@com.android.systemui-neutral-yhuD.frro@idmap': No such file or directory
+08-10 20:52:57.658 E/system_server( 4156): failed to read IDMAP /data/resource-cache/data@resource-cache@com.android.systemui-neutral-yhuD.frro@idmap
+08-10 20:52:57.658 I/Zygote  ( 5723): Process 16301 exited cleanly (0)
+08-10 20:52:57.658 W/ResourcesManager( 4156): failed to preload asset path '/data/resource-cache/com.android.systemui-neutral-yhuD.frro'
+08-10 20:52:57.658 W/ResourcesManager( 4156): java.io.IOException: Failed to load asset path /data/resource-cache/data@resource-cache@com.android.systemui-neutral-yhuD.frro@idmap
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.nativeLoad(Native Method)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.<init>(ApkAssets.java:309)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.loadOverlayFromPath(ApkAssets.java:229)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.loadApkAssets(ResourcesManager.java:614)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ResourcesManager$ApkAssetsSupplier.load(ResourcesManager.java:285)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.createApkAssetsSupplierNotLocked(ResourcesManager.java:1167)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.getResources(ResourcesManager.java:1286)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ActivityThread.getTopLevelResources(ActivityThread.java:2929)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2232)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2218)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getXml(ApplicationPackageManager.java:2568)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.content.pm.PackageItemInfo.loadXmlMetaData(PackageItemInfo.java:422)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.view.inputmethod.InputMethodInfo.<init>(InputMethodInfo.java:276)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.filterInputMethodServices(InputMethodManagerService.java:5353)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.queryRawInputMethodServiceMap(InputMethodManagerService.java:5328)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChangesInternal(InputMethodManagerService.java:893)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChanges(InputMethodManagerService.java:880)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.doHandlePackageEvent(PackageMonitor.java:594)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.lambda$postHandlePackageEvent$0(PackageMonitor.java:433)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.$r8$lambda$bSKEInwdT6Kd7GAyzMZPsXTTqeQ(Unknown Source:0)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.os.Handler.handleCallback(Handler.java:991)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.os.Handler.dispatchMessage(Handler.java:102)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.os.Looper.loopOnce(Looper.java:232)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.os.Looper.loop(Looper.java:317)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at android.os.HandlerThread.run(HandlerThread.java:85)
+08-10 20:52:57.658 W/ResourcesManager( 4156): 	at com.android.server.ServiceThread.run(ServiceThread.java:49)
+08-10 20:52:57.658 E/system_server( 4156): Failed to open file '/data/resource-cache/data@resource-cache@com.android.systemui-accent-AEkH.frro@idmap': No such file or directory
+08-10 20:52:57.658 E/system_server( 4156): failed to read IDMAP /data/resource-cache/data@resource-cache@com.android.systemui-accent-AEkH.frro@idmap
+08-10 20:52:57.659 W/ResourcesManager( 4156): failed to preload asset path '/data/resource-cache/com.android.systemui-accent-AEkH.frro'
+08-10 20:52:57.659 W/ResourcesManager( 4156): java.io.IOException: Failed to load asset path /data/resource-cache/data@resource-cache@com.android.systemui-accent-AEkH.frro@idmap
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.nativeLoad(Native Method)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.<init>(ApkAssets.java:309)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.loadOverlayFromPath(ApkAssets.java:229)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.loadApkAssets(ResourcesManager.java:614)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ResourcesManager$ApkAssetsSupplier.load(ResourcesManager.java:285)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.createApkAssetsSupplierNotLocked(ResourcesManager.java:1167)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.getResources(ResourcesManager.java:1286)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ActivityThread.getTopLevelResources(ActivityThread.java:2929)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2232)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2218)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.view.inputmethod.InputMethodInfo.<init>(InputMethodInfo.java:282)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.filterInputMethodServices(InputMethodManagerService.java:5353)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.queryRawInputMethodServiceMap(InputMethodManagerService.java:5328)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChangesInternal(InputMethodManagerService.java:893)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChanges(InputMethodManagerService.java:880)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.doHandlePackageEvent(PackageMonitor.java:594)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.lambda$postHandlePackageEvent$0(PackageMonitor.java:433)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.$r8$lambda$bSKEInwdT6Kd7GAyzMZPsXTTqeQ(Unknown Source:0)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.os.Handler.handleCallback(Handler.java:991)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.os.Handler.dispatchMessage(Handler.java:102)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.os.Looper.loopOnce(Looper.java:232)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.os.Looper.loop(Looper.java:317)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.os.HandlerThread.run(HandlerThread.java:85)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.server.ServiceThread.run(ServiceThread.java:49)
+08-10 20:52:57.659 E/system_server( 4156): Failed to open file '/data/resource-cache/data@resource-cache@com.android.systemui-dynamic-jFmw.frro@idmap': No such file or directory
+08-10 20:52:57.659 E/system_server( 4156): failed to read IDMAP /data/resource-cache/data@resource-cache@com.android.systemui-dynamic-jFmw.frro@idmap
+08-10 20:52:57.659 W/ResourcesManager( 4156): failed to preload asset path '/data/resource-cache/com.android.systemui-dynamic-jFmw.frro'
+08-10 20:52:57.659 W/ResourcesManager( 4156): java.io.IOException: Failed to load asset path /data/resource-cache/data@resource-cache@com.android.systemui-dynamic-jFmw.frro@idmap
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.nativeLoad(Native Method)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.<init>(ApkAssets.java:309)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.loadOverlayFromPath(ApkAssets.java:229)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.loadApkAssets(ResourcesManager.java:614)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ResourcesManager$ApkAssetsSupplier.load(ResourcesManager.java:285)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.createApkAssetsSupplierNotLocked(ResourcesManager.java:1167)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.getResources(ResourcesManager.java:1286)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ActivityThread.getTopLevelResources(ActivityThread.java:2929)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2232)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2218)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.view.inputmethod.InputMethodInfo.<init>(InputMethodInfo.java:282)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.filterInputMethodServices(InputMethodManagerService.java:5353)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.queryRawInputMethodServiceMap(InputMethodManagerService.java:5328)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChangesInternal(InputMethodManagerService.java:893)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChanges(InputMethodManagerService.java:880)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.doHandlePackageEvent(PackageMonitor.java:594)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.lambda$postHandlePackageEvent$0(PackageMonitor.java:433)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.$r8$lambda$bSKEInwdT6Kd7GAyzMZPsXTTqeQ(Unknown Source:0)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.os.Handler.handleCallback(Handler.java:991)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.os.Handler.dispatchMessage(Handler.java:102)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.os.Looper.loopOnce(Looper.java:232)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.os.Looper.loop(Looper.java:317)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.os.HandlerThread.run(HandlerThread.java:85)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.server.ServiceThread.run(ServiceThread.java:49)
+08-10 20:52:57.659 E/system_server( 4156): Failed to open file '/data/resource-cache/data@resource-cache@com.android.systemui-neutral-yhuD.frro@idmap': No such file or directory
+08-10 20:52:57.659 E/system_server( 4156): failed to read IDMAP /data/resource-cache/data@resource-cache@com.android.systemui-neutral-yhuD.frro@idmap
+08-10 20:52:57.659 W/ResourcesManager( 4156): failed to preload asset path '/data/resource-cache/com.android.systemui-neutral-yhuD.frro'
+08-10 20:52:57.659 W/ResourcesManager( 4156): java.io.IOException: Failed to load asset path /data/resource-cache/data@resource-cache@com.android.systemui-neutral-yhuD.frro@idmap
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.nativeLoad(Native Method)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.<init>(ApkAssets.java:309)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.loadOverlayFromPath(ApkAssets.java:229)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.loadApkAssets(ResourcesManager.java:614)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ResourcesManager$ApkAssetsSupplier.load(ResourcesManager.java:285)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.createApkAssetsSupplierNotLocked(ResourcesManager.java:1167)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.getResources(ResourcesManager.java:1286)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ActivityThread.getTopLevelResources(ActivityThread.java:2929)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2232)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2218)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.view.inputmethod.InputMethodInfo.<init>(InputMethodInfo.java:282)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.filterInputMethodServices(InputMethodManagerService.java:5353)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.queryRawInputMethodServiceMap(InputMethodManagerService.java:5328)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChangesInternal(InputMethodManagerService.java:893)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChanges(InputMethodManagerService.java:880)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.doHandlePackageEvent(PackageMonitor.java:594)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.lambda$postHandlePackageEvent$0(PackageMonitor.java:433)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.$r8$lambda$bSKEInwdT6Kd7GAyzMZPsXTTqeQ(Unknown Source:0)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.os.Handler.handleCallback(Handler.java:991)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.os.Handler.dispatchMessage(Handler.java:102)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.os.Looper.loopOnce(Looper.java:232)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.os.Looper.loop(Looper.java:317)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at android.os.HandlerThread.run(HandlerThread.java:85)
+08-10 20:52:57.659 W/ResourcesManager( 4156): 	at com.android.server.ServiceThread.run(ServiceThread.java:49)
+08-10 20:52:57.659 E/system_server( 4156): Failed to open file '/data/resource-cache/data@resource-cache@com.android.systemui-accent-AEkH.frro@idmap': No such file or directory
+08-10 20:52:57.659 E/system_server( 4156): failed to read IDMAP /data/resource-cache/data@resource-cache@com.android.systemui-accent-AEkH.frro@idmap
+08-10 20:52:57.660 W/ResourcesManager( 4156): failed to preload asset path '/data/resource-cache/com.android.systemui-accent-AEkH.frro'
+08-10 20:52:57.660 W/ResourcesManager( 4156): java.io.IOException: Failed to load asset path /data/resource-cache/data@resource-cache@com.android.systemui-accent-AEkH.frro@idmap
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.nativeLoad(Native Method)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.<init>(ApkAssets.java:309)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.loadOverlayFromPath(ApkAssets.java:229)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.loadApkAssets(ResourcesManager.java:614)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ResourcesManager$ApkAssetsSupplier.load(ResourcesManager.java:285)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.createApkAssetsSupplierNotLocked(ResourcesManager.java:1167)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.getResources(ResourcesManager.java:1286)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ActivityThread.getTopLevelResources(ActivityThread.java:2929)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2232)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2218)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getXml(ApplicationPackageManager.java:2568)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.content.pm.PackageItemInfo.loadXmlMetaData(PackageItemInfo.java:422)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.view.inputmethod.InputMethodInfo.<init>(InputMethodInfo.java:276)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.filterInputMethodServices(InputMethodManagerService.java:5353)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.queryRawInputMethodServiceMap(InputMethodManagerService.java:5328)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChangesInternal(InputMethodManagerService.java:893)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChanges(InputMethodManagerService.java:880)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.doHandlePackageEvent(PackageMonitor.java:594)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.lambda$postHandlePackageEvent$0(PackageMonitor.java:433)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.$r8$lambda$bSKEInwdT6Kd7GAyzMZPsXTTqeQ(Unknown Source:0)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.Handler.handleCallback(Handler.java:991)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.Handler.dispatchMessage(Handler.java:102)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.Looper.loopOnce(Looper.java:232)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.Looper.loop(Looper.java:317)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.HandlerThread.run(HandlerThread.java:85)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.ServiceThread.run(ServiceThread.java:49)
+08-10 20:52:57.660 E/system_server( 4156): Failed to open file '/data/resource-cache/data@resource-cache@com.android.systemui-dynamic-jFmw.frro@idmap': No such file or directory
+08-10 20:52:57.660 E/system_server( 4156): failed to read IDMAP /data/resource-cache/data@resource-cache@com.android.systemui-dynamic-jFmw.frro@idmap
+08-10 20:52:57.660 W/ResourcesManager( 4156): failed to preload asset path '/data/resource-cache/com.android.systemui-dynamic-jFmw.frro'
+08-10 20:52:57.660 W/ResourcesManager( 4156): java.io.IOException: Failed to load asset path /data/resource-cache/data@resource-cache@com.android.systemui-dynamic-jFmw.frro@idmap
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.nativeLoad(Native Method)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.<init>(ApkAssets.java:309)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.loadOverlayFromPath(ApkAssets.java:229)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.loadApkAssets(ResourcesManager.java:614)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ResourcesManager$ApkAssetsSupplier.load(ResourcesManager.java:285)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.createApkAssetsSupplierNotLocked(ResourcesManager.java:1167)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.getResources(ResourcesManager.java:1286)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ActivityThread.getTopLevelResources(ActivityThread.java:2929)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2232)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2218)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getXml(ApplicationPackageManager.java:2568)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.content.pm.PackageItemInfo.loadXmlMetaData(PackageItemInfo.java:422)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.view.inputmethod.InputMethodInfo.<init>(InputMethodInfo.java:276)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.filterInputMethodServices(InputMethodManagerService.java:5353)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.queryRawInputMethodServiceMap(InputMethodManagerService.java:5328)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChangesInternal(InputMethodManagerService.java:893)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChanges(InputMethodManagerService.java:880)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.doHandlePackageEvent(PackageMonitor.java:594)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.lambda$postHandlePackageEvent$0(PackageMonitor.java:433)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.$r8$lambda$bSKEInwdT6Kd7GAyzMZPsXTTqeQ(Unknown Source:0)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.Handler.handleCallback(Handler.java:991)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.Handler.dispatchMessage(Handler.java:102)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.Looper.loopOnce(Looper.java:232)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.Looper.loop(Looper.java:317)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.HandlerThread.run(HandlerThread.java:85)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.ServiceThread.run(ServiceThread.java:49)
+08-10 20:52:57.660 E/system_server( 4156): Failed to open file '/data/resource-cache/data@resource-cache@com.android.systemui-neutral-yhuD.frro@idmap': No such file or directory
+08-10 20:52:57.660 E/system_server( 4156): failed to read IDMAP /data/resource-cache/data@resource-cache@com.android.systemui-neutral-yhuD.frro@idmap
+08-10 20:52:57.660 W/ResourcesManager( 4156): failed to preload asset path '/data/resource-cache/com.android.systemui-neutral-yhuD.frro'
+08-10 20:52:57.660 W/ResourcesManager( 4156): java.io.IOException: Failed to load asset path /data/resource-cache/data@resource-cache@com.android.systemui-neutral-yhuD.frro@idmap
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.nativeLoad(Native Method)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.<init>(ApkAssets.java:309)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.loadOverlayFromPath(ApkAssets.java:229)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.loadApkAssets(ResourcesManager.java:614)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ResourcesManager$ApkAssetsSupplier.load(ResourcesManager.java:285)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.createApkAssetsSupplierNotLocked(ResourcesManager.java:1167)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.getResources(ResourcesManager.java:1286)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ActivityThread.getTopLevelResources(ActivityThread.java:2929)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2232)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2218)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getXml(ApplicationPackageManager.java:2568)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.content.pm.PackageItemInfo.loadXmlMetaData(PackageItemInfo.java:422)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.view.inputmethod.InputMethodInfo.<init>(InputMethodInfo.java:276)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.filterInputMethodServices(InputMethodManagerService.java:5353)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.queryRawInputMethodServiceMap(InputMethodManagerService.java:5328)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChangesInternal(InputMethodManagerService.java:893)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChanges(InputMethodManagerService.java:880)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.doHandlePackageEvent(PackageMonitor.java:594)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.lambda$postHandlePackageEvent$0(PackageMonitor.java:433)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.$r8$lambda$bSKEInwdT6Kd7GAyzMZPsXTTqeQ(Unknown Source:0)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.Handler.handleCallback(Handler.java:991)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.Handler.dispatchMessage(Handler.java:102)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.Looper.loopOnce(Looper.java:232)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.Looper.loop(Looper.java:317)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.HandlerThread.run(HandlerThread.java:85)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.ServiceThread.run(ServiceThread.java:49)
+08-10 20:52:57.660 E/system_server( 4156): Failed to open file '/data/resource-cache/data@resource-cache@com.android.systemui-accent-AEkH.frro@idmap': No such file or directory
+08-10 20:52:57.660 E/system_server( 4156): failed to read IDMAP /data/resource-cache/data@resource-cache@com.android.systemui-accent-AEkH.frro@idmap
+08-10 20:52:57.660 W/ResourcesManager( 4156): failed to preload asset path '/data/resource-cache/com.android.systemui-accent-AEkH.frro'
+08-10 20:52:57.660 W/ResourcesManager( 4156): java.io.IOException: Failed to load asset path /data/resource-cache/data@resource-cache@com.android.systemui-accent-AEkH.frro@idmap
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.nativeLoad(Native Method)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.<init>(ApkAssets.java:309)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.loadOverlayFromPath(ApkAssets.java:229)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.loadApkAssets(ResourcesManager.java:614)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ResourcesManager$ApkAssetsSupplier.load(ResourcesManager.java:285)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.createApkAssetsSupplierNotLocked(ResourcesManager.java:1167)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.getResources(ResourcesManager.java:1286)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ActivityThread.getTopLevelResources(ActivityThread.java:2929)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2232)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2218)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.view.inputmethod.InputMethodInfo.<init>(InputMethodInfo.java:282)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.filterInputMethodServices(InputMethodManagerService.java:5353)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.queryRawInputMethodServiceMap(InputMethodManagerService.java:5328)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChangesInternal(InputMethodManagerService.java:893)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChanges(InputMethodManagerService.java:880)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.doHandlePackageEvent(PackageMonitor.java:594)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.lambda$postHandlePackageEvent$0(PackageMonitor.java:433)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.$r8$lambda$bSKEInwdT6Kd7GAyzMZPsXTTqeQ(Unknown Source:0)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.Handler.handleCallback(Handler.java:991)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.Handler.dispatchMessage(Handler.java:102)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.Looper.loopOnce(Looper.java:232)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.Looper.loop(Looper.java:317)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at android.os.HandlerThread.run(HandlerThread.java:85)
+08-10 20:52:57.660 W/ResourcesManager( 4156): 	at com.android.server.ServiceThread.run(ServiceThread.java:49)
+08-10 20:52:57.660 E/system_server( 4156): Failed to open file '/data/resource-cache/data@resource-cache@com.android.systemui-dynamic-jFmw.frro@idmap': No such file or directory
+08-10 20:52:57.660 E/system_server( 4156): failed to read IDMAP /data/resource-cache/data@resource-cache@com.android.systemui-dynamic-jFmw.frro@idmap
+08-10 20:52:57.661 W/ResourcesManager( 4156): failed to preload asset path '/data/resource-cache/com.android.systemui-dynamic-jFmw.frro'
+08-10 20:52:57.661 W/ResourcesManager( 4156): java.io.IOException: Failed to load asset path /data/resource-cache/data@resource-cache@com.android.systemui-dynamic-jFmw.frro@idmap
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.nativeLoad(Native Method)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.<init>(ApkAssets.java:309)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.loadOverlayFromPath(ApkAssets.java:229)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.loadApkAssets(ResourcesManager.java:614)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.app.ResourcesManager$ApkAssetsSupplier.load(ResourcesManager.java:285)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.createApkAssetsSupplierNotLocked(ResourcesManager.java:1167)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.getResources(ResourcesManager.java:1286)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.app.ActivityThread.getTopLevelResources(ActivityThread.java:2929)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2232)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2218)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.view.inputmethod.InputMethodInfo.<init>(InputMethodInfo.java:282)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.filterInputMethodServices(InputMethodManagerService.java:5353)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.queryRawInputMethodServiceMap(InputMethodManagerService.java:5328)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChangesInternal(InputMethodManagerService.java:893)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChanges(InputMethodManagerService.java:880)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.doHandlePackageEvent(PackageMonitor.java:594)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.lambda$postHandlePackageEvent$0(PackageMonitor.java:433)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.$r8$lambda$bSKEInwdT6Kd7GAyzMZPsXTTqeQ(Unknown Source:0)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.os.Handler.handleCallback(Handler.java:991)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.os.Handler.dispatchMessage(Handler.java:102)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.os.Looper.loopOnce(Looper.java:232)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.os.Looper.loop(Looper.java:317)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.os.HandlerThread.run(HandlerThread.java:85)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at com.android.server.ServiceThread.run(ServiceThread.java:49)
+08-10 20:52:57.661 E/system_server( 4156): Failed to open file '/data/resource-cache/data@resource-cache@com.android.systemui-neutral-yhuD.frro@idmap': No such file or directory
+08-10 20:52:57.661 E/system_server( 4156): failed to read IDMAP /data/resource-cache/data@resource-cache@com.android.systemui-neutral-yhuD.frro@idmap
+08-10 20:52:57.661 D/ActivityThread(13085): Package [com.example.pixiv_viewer] reported as REPLACED, but missing application info. Assuming REMOVED.
+08-10 20:52:57.661 W/ResourcesManager( 4156): failed to preload asset path '/data/resource-cache/com.android.systemui-neutral-yhuD.frro'
+08-10 20:52:57.661 W/ResourcesManager( 4156): java.io.IOException: Failed to load asset path /data/resource-cache/data@resource-cache@com.android.systemui-neutral-yhuD.frro@idmap
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.nativeLoad(Native Method)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.<init>(ApkAssets.java:309)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.content.res.ApkAssets.loadOverlayFromPath(ApkAssets.java:229)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.loadApkAssets(ResourcesManager.java:614)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.app.ResourcesManager$ApkAssetsSupplier.load(ResourcesManager.java:285)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.createApkAssetsSupplierNotLocked(ResourcesManager.java:1167)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.app.ResourcesManager.getResources(ResourcesManager.java:1286)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.app.ActivityThread.getTopLevelResources(ActivityThread.java:2929)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2232)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.app.ApplicationPackageManager.getResourcesForApplication(ApplicationPackageManager.java:2218)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.view.inputmethod.InputMethodInfo.<init>(InputMethodInfo.java:282)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.filterInputMethodServices(InputMethodManagerService.java:5353)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService.queryRawInputMethodServiceMap(InputMethodManagerService.java:5328)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChangesInternal(InputMethodManagerService.java:893)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChanges(InputMethodManagerService.java:880)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.doHandlePackageEvent(PackageMonitor.java:594)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.lambda$postHandlePackageEvent$0(PackageMonitor.java:433)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor.$r8$lambda$bSKEInwdT6Kd7GAyzMZPsXTTqeQ(Unknown Source:0)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at com.android.internal.content.PackageMonitor$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.os.Handler.handleCallback(Handler.java:991)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.os.Handler.dispatchMessage(Handler.java:102)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.os.Looper.loopOnce(Looper.java:232)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.os.Looper.loop(Looper.java:317)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at android.os.HandlerThread.run(HandlerThread.java:85)
+08-10 20:52:57.661 W/ResourcesManager( 4156): 	at com.android.server.ServiceThread.run(ServiceThread.java:49)
+08-10 20:52:57.663 D/ActivityThread(13085): Package [com.example.pixiv_viewer] reported as REPLACED, but missing application info. Assuming REMOVED.
+08-10 20:52:57.663 D/ActivityThread(13085): Package [com.example.pixiv_viewer] reported as REPLACED, but missing application info. Assuming REMOVED.
+08-10 20:52:57.678 W/OmniJawsClient(25648): queryWeather while disabled
+08-10 20:52:57.693 I/cgyj    (13079): (REDACTED) [%s] onStart()
+08-10 20:52:57.693 I/chax    (13079): Reloading theme data
+08-10 20:52:57.698 D/ChimeraServiceProvider(30275): serviceIntentCall: com.google.android.gms.inappreach.service.START -> Intent { act=com.google.android.gms.inappreach.service.START pkg=com.google.android.gms cmp=com.google.android.gms/org.microg.gms.DummyService }
+08-10 20:52:57.715 W/ActivityTaskManager( 4156): callingPackage for (uid=2000, pid=16403) has no WPC
+08-10 20:52:57.717 V/GrammaticalInflectionUtils( 4156): AttributionSource: android.content.AttributionSource@c0e1d381 does not have READ_SYSTEM_GRAMMATICAL_GENDER permission.
+08-10 20:52:57.717 W/OptProp ( 4156): Cannot read opt property android.window.PROPERTY_COMPAT_ALLOW_RESIZEABLE_ACTIVITY_OVERRIDES
+08-10 20:52:57.717 W/OptProp ( 4156): Cannot read opt property android.window.PROPERTY_COMPAT_ALLOW_MIN_ASPECT_RATIO_OVERRIDE
+08-10 20:52:57.720 W/OptProp ( 4156): Cannot read opt property android.window.PROPERTY_COMPAT_ALLOW_ORIENTATION_OVERRIDE
+08-10 20:52:57.722 I/ActivityTaskManager( 4156): Add Task{7fbf308 #210 type=standard I=com.example.pixiv_viewer/.MainActivity} to hidden list because adding Task{6178b87 #211 type=standard I=com.example.pixiv_viewer/.MainActivity}
+08-10 20:52:57.723 I/ActivityTaskManager( 4156): START u0 {flg=0x10000000 cmp=com.example.pixiv_viewer/.MainActivity} with LAUNCH_SINGLE_TOP from uid 2000 (BAL_ALLOW_PERMISSION) result code=0
+08-10 20:52:57.723 E/NetworkErrorMessage(13079): (REDACTED) Invalid connectivity state: %s
+08-10 20:52:57.727 V/GrammaticalInflectionUtils( 4156): AttributionSource: android.content.AttributionSource@c0e1d381 does not have READ_SYSTEM_GRAMMATICAL_GENDER permission.
+08-10 20:52:57.730 D/GmsDummySvc(30275): bound by: GetServiceRequest[INAPP_REACH, packageName="com.google.android.googlequicksearchbox", gmsVersion=263125000, scopes=[], extras=Bundle[{}], defaultFeatures=[], apiFeatures=[Feature[account_health_alerts,1], Feature[account_messages,1], Feature[account_data_response,1], Feature[account_data_response_v2,1]], supportsConnectionInfo=true]
+08-10 20:52:57.730 W/HWUI    ( 5636): Image decoding logging dropped!
+08-10 20:52:57.731 D/ClearcutLoggerService(30275): bound by: GetServiceRequest[CLEARCUT_LOGGER, packageName="com.google.android.googlequicksearchbox", gmsVersion=263125000, scopes=[], extras=Bundle[{}], defaultFeatures=[], apiFeatures=[Feature[log_error,1], Feature[client_side_batching,1]], supportsConnectionInfo=true]
+08-10 20:52:57.732 I/ActivityManager( 4156): Start proc 13459:com.example.pixiv_viewer/u0a527 for next-top-activity {com.example.pixiv_viewer/com.example.pixiv_viewer.MainActivity}
+08-10 20:52:57.737 W/GoogleApiManager(13079): Not showing notification since connectionResult is not user-facing: ConnectionResult{statusCode=API_DISABLED, resolution=null, message=null, clientMethodKey=null}
+08-10 20:52:57.737 D/BufferPoolAccessor2.0(22834): bufferpool2 0xb400007b935c8478 : 5(15667200 size) total buffers - 4(12533760 size) used buffers - 14613/14618 (recycle/alloc) - 5/14618 (fetch/transfer)
+08-10 20:52:57.737 I/droid.launcher3(25648): AssetManager2(0xb400007c33535c18) locale list changing from [] to [ja-JP]
+08-10 20:52:57.742 W/HWUI    (25648): Image decoding logging dropped!
+08-10 20:52:56.450 I/KernelSU(13459): handle_setresuid from 0 to 10527
+08-10 20:52:57.744 D/CoreBackPreview( 4156): Window{53c647f u0 Splash Screen com.example.pixiv_viewer}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@23cc99b, mPriority=0, mIsAnimationCallback=false, mOverrideBehavior=0}
+08-10 20:52:57.744 W/HWUI    (25648): Image decoding logging dropped!
+08-10 20:52:57.745 I/le.pixiv_viewer(13459): Using CollectorTypeCMC GC.
+08-10 20:52:57.747 D/PhenotypeService(30275): bound by: GetServiceRequest[PHENOTYPE, packageName="com.google.android.googlequicksearchbox", gmsVersion=263125000, scopes=[], extras=Bundle[{}], defaultFeatures=[], apiFeatures=[Feature[commit_to_configuration_v2_api,1], Feature[get_serving_version_api,1], Feature[get_experiment_tokens_api,1], Feature[register_flag_update_listener_api,2], Feature[sync_after_api,1], Feature[sync_after_for_application_api,1], Feature[set_app_wide_properties_api,1], Feature[set_runtime_properties_api,1], Feature[get_storage_info_api,1], Feature[get_registered_packages_api,1]], supportsConnectionInfo=true]
+08-10 20:52:57.750 I/cjin    (13079): onResume
+08-10 20:52:57.750 W/eahz    (13079): missing event name
+08-10 20:52:57.753 D/nativeloader(13459): Load libframework-connectivity-tiramisu-jni.so using APEX ns com_android_tethering for caller /apex/com.android.tethering/javalib/framework-connectivity-t.jar: ok
+08-10 20:52:57.753 D/ChimeraServiceProvider(30275): serviceIntentCall: com.google.android.gms.auth.aang.events.services.START -> Intent { act=com.google.android.gms.auth.aang.events.services.START pkg=com.google.android.gms cmp=com.google.android.gms/org.microg.gms.DummyService }
+08-10 20:52:57.756 D/GmsDummySvc(30275): bound by: GetServiceRequest[GOOGLE_AUTH_AANG, packageName="com.google.android.googlequicksearchbox", gmsVersion=263125000, scopes=[], extras=Bundle[{}], defaultFeatures=[], apiFeatures=[Feature[google_auth_api,1], Feature[sync_account_state_api,1], Feature[embedded_reauth,1], Feature[remove_account_api,1]], supportsConnectionInfo=true]
+08-10 20:52:57.756 W/GoogleApiManager(13079): Not showing notification since connectionResult is not user-facing: ConnectionResult{statusCode=API_DISABLED, resolution=null, message=null, clientMethodKey=null}
+08-10 20:52:57.763 D/BaseDepthController(25648): setSurface:
+08-10 20:52:57.763 D/BaseDepthController(25648): 	mWaitingOnSurfaceValidity: false
+08-10 20:52:57.763 D/BaseDepthController(25648): 	mSurface: Surface(name=com.android.launcher3/com.android.launcher3.uioverrides.QuickstepLauncher)/@0xe7bcdf9
+08-10 20:52:57.765 D/BackgroundInstallControlService( 4156): Package event received: 0
+08-10 20:52:57.765 W/ccti    (13079): Failed to fetch CanUseIncognitoMode capability
+08-10 20:52:57.765 W/ccti    (13079): cxoz: 17: API: GoogleAuth.API is not available on this device. Connection failed with: ConnectionResult{statusCode=API_DISABLED, resolution=null, message=null, clientMethodKey=null}
+08-10 20:52:57.765 W/ccti    (13079): 	at cxwh.s(PG:15)
+08-10 20:52:57.765 W/ccti    (13079): 	at cxqd.f(PG:5)
+08-10 20:52:57.765 W/ccti    (13079): 	at cxsd.t(PG:48)
+08-10 20:52:57.765 W/ccti    (13079): 	at cxsd.g(PG:10)
+08-10 20:52:57.765 W/ccti    (13079): 	at cxsd.j(PG:158)
+08-10 20:52:57.765 W/ccti    (13079): 	at cxsd.b(PG:2)
+08-10 20:52:57.765 W/ccti    (13079): 	at cxve.c(PG:3)
+08-10 20:52:57.765 W/ccti    (13079): 	at cxup.a(PG:7)
+08-10 20:52:57.765 W/ccti    (13079): 	at cxuh.c(PG:65)
+08-10 20:52:57.765 W/ccti    (13079): 	at cxuk.handleMessage(PG:269)
+08-10 20:52:57.765 W/ccti    (13079): 	at android.os.Handler.dispatchMessage(Handler.java:109)
+08-10 20:52:57.765 W/ccti    (13079): 	at cypx.b(PG:1)
+08-10 20:52:57.765 W/ccti    (13079): 	at cypx.dispatchMessage(PG:1)
+08-10 20:52:57.765 W/ccti    (13079): 	at android.os.Looper.loopOnce(Looper.java:232)
+08-10 20:52:57.765 W/ccti    (13079): 	at android.os.Looper.loop(Looper.java:317)
+08-10 20:52:57.765 W/ccti    (13079): 	at android.os.HandlerThread.run(HandlerThread.java:85)
+08-10 20:52:57.776 D/ApplicationLoaders(13459): Returning zygote-cached class loader: /system_ext/framework/androidx.window.extensions.jar
+08-10 20:52:57.776 D/ApplicationLoaders(13459): Returning zygote-cached class loader: /system_ext/framework/androidx.window.sidecar.jar
+08-10 20:52:57.780 D/nativeloader(13459): Configuring clns-7 for other apk /data/app/~~KDcxijlWP5r3LeK37Zedbw==/com.example.pixiv_viewer-cgcl68eegRpEaLPhgi4PpA==/base.apk. target_sdk_version=36, uses_libraries=, library_path=/data/app/~~KDcxijlWP5r3LeK37Zedbw==/com.example.pixiv_viewer-cgcl68eegRpEaLPhgi4PpA==/lib/arm64:/data/app/~~KDcxijlWP5r3LeK37Zedbw==/com.example.pixiv_viewer-cgcl68eegRpEaLPhgi4PpA==/base.apk!/lib/arm64-v8a, permitted_path=/data:/mnt/expand:/data/user/0/com.example.pixiv_viewer
+08-10 20:52:57.782 I/le.pixiv_viewer(13459): AssetManager2(0xb400007c334cb818) locale list changing from [] to [ja-JP]
+08-10 20:52:57.786 V/GraphicsEnvironment(13459): Currently set values for:
+08-10 20:52:57.786 V/GraphicsEnvironment(13459):   angle_gl_driver_selection_pkgs=[com.android.angle, com.linecorp.b612.android, com.campmobile.snow, com.google.android.apps.tachyon]
+08-10 20:52:57.786 V/GraphicsEnvironment(13459):   angle_gl_driver_selection_values=[angle, native, native, native]
+08-10 20:52:57.786 V/GraphicsEnvironment(13459): com.example.pixiv_viewer is not listed in per-application setting
+08-10 20:52:57.786 V/GraphicsEnvironment(13459): Updatable production driver is not supported on the device.
+08-10 20:52:57.786 D/StatsLog(25648): LAUNCHER_ONRESUME
+08-10 20:52:57.789 D/QuickstepModelDelegate(25648): notifyAppTargetEvent action=1 launchLocation=
+08-10 20:52:57.795 W/SplitSelectStateCtor(25648): Missing session instanceIds
+08-10 20:52:57.795 D/StatsLog(25648): LAUNCHER_SPLIT_SELECTION_EXIT_INTERRUPTED
+08-10 20:52:57.796 I/AppsFilter( 4156): interaction: PackageSetting{44ba973 com.android.microdroid.empty_payload/10475} -> PackageSetting{6abed05 com.example.pixiv_viewer/10527} BLOCKED
+08-10 20:52:57.797 D/BackgroundInstallControlService( 4156): Package event received: 0
+08-10 20:52:57.803 V/WindowManagerShell( 5636): onTransitionReady(transaction=17849884277894)
+08-10 20:52:57.804 V/WindowManagerShell( 5636): onTransitionReady (#1630) android.os.BinderProxy@d86eda6: {id=1630 t=CLOSE f=0x0 trk=0 r=[0@Point(0, 0)] c=[
+08-10 20:52:57.804 V/WindowManagerShell( 5636):         {m=OPEN f=MOVE_TO_TOP leash=Surface(name=Task=211)/@0x58e3706 sb=Rect(0, 0 - 3048, 2032) eb=Rect(0, 0 - 3048, 2032) epz=Point(3048, 2032) d=0 taskParent=-1},
+08-10 20:52:57.804 V/WindowManagerShell( 5636):         {m=CLOSE f=NONE leash=Surface(name=Task=210)/@0x6f571c7 sb=Rect(0, 0 - 3048, 2032) eb=Rect(0, 0 - 3048, 2032) epz=Point(3048, 2032) d=0 taskParent=-1},
+08-10 20:52:57.804 V/WindowManagerShell( 5636):         {m=TO_FRONT f=IS_WALLPAPER leash=Surface(name=WallpaperWindowToken{e5b0930 token=android.os.Binder@b815673})/@0x61643f4 sb=Rect(0, 0 - 3048, 2032) eb=Rect(0, 0 - 3048, 2032) epz=Point(3048, 2032) d=0}
+08-10 20:52:57.804 V/WindowManagerShell( 5636):     ]}
+08-10 20:52:57.804 V/WindowManagerShell( 5636): Playing animation for (#1630) android.os.BinderProxy@d86eda6@0
+08-10 20:52:57.804 V/ShellRecents( 5636): RecentsTransitionHandler.startAnimation: no controller found
+08-10 20:52:57.804 V/WindowManagerShell( 5636): Transition doesn't have explicit remote, search filters for match for {id=1630 t=CLOSE f=0x0 trk=0 r=[0@Point(0, 0)] c=[{m=OPEN f=MOVE_TO_TOP leash=Surface(name=Task=211)/@0x58e3706 sb=Rect(0, 0 - 3048, 2032) eb=Rect(0, 0 - 3048, 2032) epz=Point(3048, 2032) d=0 taskParent=-1},{m=CLOSE f=NONE leash=Surface(name=Task=210)/@0x6f571c7 sb=Rect(0, 0 - 3048, 2032) eb=Rect(0, 0 - 3048, 2032) epz=Point(3048, 2032) d=0 taskParent=-1},{m=TO_FRONT f=IS_WALLPAPER leash=Surface(name=WallpaperWindowToken{e5b0930 token=android.os.Binder@b815673})/@0x61643f4 sb=Rect(0, 0 - 3048, 2032) eb=Rect(0, 0 - 3048, 2032) epz=Point(3048, 2032) d=0}]}
+08-10 20:52:57.804 V/WindowManagerShell( 5636):  Checking filter Pair{{types=[] flags=0x0] notFlags=0x100 checks=[{atype=home independent=true modes=[OPEN,TO_FRONT] flags=NONE mustBeTask=false order=TOP topActivity=ComponentInfo{com.android.launcher3/com.android.launcher3.uioverrides.QuickstepLauncher} launchCookie=null windowingMode=undefined},{atype=standard independent=true modes=[CLOSE,TO_BACK] flags=NONE mustBeTask=false order=ANY topActivity=null launchCookie=null windowingMode=undefined},{NOT atype=undefined independent=true modes=[] flags=NONE mustBeTask=true order=ANY topActivity=null launchCookie=null customAnim=true windowingMode=undefined}]} RemoteTransition { remoteTransition = android.window.IRemoteTransition$Stub$Proxy@5ccf819, appThread = android.app.IApplicationThread$Stub$Proxy@83370de, debugName = QuickstepLaunchHome }}
+08-10 20:52:57.804 V/WindowManagerShell( 5636):  Delegate animation for (#1630) to null
+08-10 20:52:57.804 V/WindowManagerShell( 5636): start default transition animation, info = {id=1630 t=CLOSE f=0x0 trk=0 r=[0@Point(0, 0)] c=[{m=OPEN f=MOVE_TO_TOP leash=Surface(name=Task=211)/@0x58e3706 sb=Rect(0, 0 - 3048, 2032) eb=Rect(0, 0 - 3048, 2032) epz=Point(3048, 2032) d=0 taskParent=-1},{m=CLOSE f=NONE leash=Surface(name=Task=210)/@0x6f571c7 sb=Rect(0, 0 - 3048, 2032) eb=Rect(0, 0 - 3048, 2032) epz=Point(3048, 2032) d=0 taskParent=-1},{m=TO_FRONT f=IS_WALLPAPER leash=Surface(name=WallpaperWindowToken{e5b0930 token=android.os.Binder@b815673})/@0x61643f4 sb=Rect(0, 0 - 3048, 2032) eb=Rect(0, 0 - 3048, 2032) epz=Point(3048, 2032) d=0}]}
+08-10 20:52:57.805 V/WindowManagerShell( 5636): loadAnimation: anim=android.view.animation.AnimationSet@94dab60 animAttr=0x11 type=CLOSE isEntrance=false
+08-10 20:52:57.806 V/WindowManagerShell( 5636): loadAnimation: anim=android.view.animation.AnimationSet@8f20de animAttr=0x10 type=CLOSE isEntrance=true
+08-10 20:52:57.807 V/WindowManagerShell( 5636):  animated by com.android.wm.shell.transition.DefaultTransitionHandler@3019452
+08-10 20:52:57.820 D/BackgroundInstallControlService( 4156): Package event received: 0
+08-10 20:52:57.821 V/WindowManager( 4156): Sent Transition (#1630) createdAt=08-10 20:52:57.607 via request=TransitionRequestInfo { type = CLOSE, triggerTask = TaskInfo{userId=0 taskId=210 effectiveUid=10527 displayId=0 isRunning=false baseIntent=Intent { flg=0x10000000 cmp=com.example.pixiv_viewer/.MainActivity } baseActivity=null topActivity=null origActivity=null realActivity=ComponentInfo{com.example.pixiv_viewer/com.example.pixiv_viewer.MainActivity} numActivities=0 lastActiveTime=381500353 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{RemoteToken{8e04e49 Task{7fbf308 #210 type=standard I=com.example.pixiv_viewer/.MainActivity}}} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=Rect(0, 0 - 0, 0) topActivityInfo=null launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=true isVisible=true isVisibleRequested=true isTopActivityNoDisplay=false isSleeping=false locusId=null displayAreaFeatureId=1 isTopActivityTransparent=false isActivityStackTransparent=true lastNonFullscreenBounds=Rect(1028, 138 - 2021, 1904) capturedLink=null capturedLinkTimestamp=0 requestedVisibleTypes=-9 topActivityRequestOpenInBrowserEducationTimestamp=0 appCompatTaskInfo=AppCompatTaskInfo { topActivityInSizeCompat=false eligibleForLetterboxEducation= false isLetterboxEducationEnabled= false isLetterboxDoubleTapEnabled= false eligibleForUserAspectRatioButton= false topActivityBoundsLetterboxed= false isFromLetterboxDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 topActivityLetterboxAppWidth=-1 topActivityLetterboxAppHeight=-1 isUserFullscreenOverrideEnabled=false isSystemFullscreenOverrideEnabled=false hasMinAspectRatioOverride=false topActivityLetterboxBounds=null cameraCompatTaskInfo=CameraCompatTaskInfo { freeformCameraCompatMode=inactive}} topActivityMainWindowFrame=null}, pipChange = null, remoteTransition = null, displayChange = null, flags = 0, debugId = 1630 }
+08-10 20:52:57.821 V/WindowManager( 4156):     startWCT=WindowContainerTransaction { changes= {} hops= [] errorCallbackToken=null taskFragmentOrganizer=null }
+08-10 20:52:57.821 V/WindowManager( 4156):     info={id=1630 t=CLOSE f=0x0 trk=0 r=[0@Point(0, 0)] c=[
+08-10 20:52:57.821 V/WindowManager( 4156):         {WCT{RemoteToken{9af40ac Task{6178b87 #211 type=standard I=com.example.pixiv_viewer/.MainActivity}}} m=OPEN f=MOVE_TO_TOP leash=Surface(name=Task=211)/@0xd58dc80 sb=Rect(0, 0 - 3048, 2032) eb=Rect(0, 0 - 3048, 2032) epz=Point(3048, 2032) d=0 taskParent=-1},
+08-10 20:52:57.821 V/WindowManager( 4156):         {WCT{RemoteToken{8e04e49 Task{7fbf308 #210 type=standard I=com.example.pixiv_viewer/.MainActivity}}} m=CLOSE f=NONE leash=Surface(name=Task=210)/@0xafbf577 sb=Rect(0, 0 - 3048, 2032) eb=Rect(0, 0 - 3048, 2032) epz=Point(3048, 2032) d=0 taskParent=-1},
+08-10 20:52:57.821 V/WindowManager( 4156):         {m=TO_FRONT f=IS_WALLPAPER leash=Surface(name=WallpaperWindowToken{e5b0930 token=android.os.Binder@b815673})/@0x12ee15e sb=Rect(0, 0 - 3048, 2032) eb=Rect(0, 0 - 3048, 2032) epz=Point(3048, 2032) d=0}
+08-10 20:52:57.821 V/WindowManager( 4156):     ]}
+08-10 20:52:57.825 I/le.pixiv_viewer(13459): AssetManager2(0xb400007c334d1c18) locale list changing from [] to [ja-JP]
+08-10 20:52:57.826 D/BackgroundInstallControlService( 4156): Package event received: 0
+08-10 20:52:57.827 W/UserManagerService( 4156): Requested status bar icon for non-badged user 0
+08-10 20:52:57.829 D/BackgroundInstallControlService( 4156): Package event received: 0
+08-10 20:52:57.829 D/ConnectivityService( 4156): requestNetwork for uid/pid:10436/5636 asUid: 10527 activeRequest: null callbackRequest: 10443 [NetworkRequest [ REQUEST id=10444, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED&NOT_BANDWIDTH_CONSTRAINED Uid: 10527 RequestorUid: 10436 RequestorPkg: com.android.systemui UnderlyingNetworks: Null] ]] callback flags: 0 order: 2147483647 isUidTracked: false declaredMethods: ALL
+08-10 20:52:57.831 D/WifiNetworkFactory( 4156): got request NetworkRequest [ REQUEST id=10444, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED&NOT_BANDWIDTH_CONSTRAINED Uid: 10527 RequestorUid: 10436 RequestorPkg: com.android.systemui UnderlyingNetworks: Null] ]
+08-10 20:52:57.831 D/ConnectivityService( 4156): NetReassign [10444 : null → 100] [c 0] [a 0] [i 1]
+08-10 20:52:57.831 D/UntrustedWifiNetworkFactory( 4156): got request NetworkRequest [ REQUEST id=10444, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED&NOT_BANDWIDTH_CONSTRAINED Uid: 10527 RequestorUid: 10436 RequestorPkg: com.android.systemui UnderlyingNetworks: Null] ]
+08-10 20:52:57.831 D/OemPaidWifiNetworkFactory( 4156): got request NetworkRequest [ REQUEST id=10444, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED&NOT_BANDWIDTH_CONSTRAINED Uid: 10527 RequestorUid: 10436 RequestorPkg: com.android.systemui UnderlyingNetworks: Null] ]
+08-10 20:52:57.832 D/MultiInternetWifiNetworkFactory( 4156): got request NetworkRequest [ REQUEST id=10444, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED&NOT_BANDWIDTH_CONSTRAINED Uid: 10527 RequestorUid: 10436 RequestorPkg: com.android.systemui UnderlyingNetworks: Null] ]
+08-10 20:52:57.839 D/nativeloader(13459): Load /data/app/~~KDcxijlWP5r3LeK37Zedbw==/com.example.pixiv_viewer-cgcl68eegRpEaLPhgi4PpA==/base.apk!/lib/arm64-v8a/libflutter.so using class loader ns clns-7 (caller=/data/app/~~KDcxijlWP5r3LeK37Zedbw==/com.example.pixiv_viewer-cgcl68eegRpEaLPhgi4PpA==/base.apk): ok
+08-10 20:52:57.841 D/FileUtils( 4156): Rounded bytes from 7826767872 to 8000000000
+08-10 20:52:57.844 I/le.pixiv_viewer(13459): AssetManager2(0xb400007c334d0958) locale list changing from [] to [ja-JP]
+08-10 20:52:57.846 D/skia    (13459): [SkFontMgr Android Parser] /product/etc/fonts_customization.xml:922:4: warning: 'ndot55' alias target not found
+08-10 20:52:57.846 D/skia    (13459): [SkFontMgr Android Parser] /product/etc/fonts_customization.xml:923:4: warning: 'ndot57' alias target not found
+08-10 20:52:57.846 D/skia    (13459): [SkFontMgr Android Parser] /product/etc/fonts_customization.xml:924:4: warning: 'ndot57-aligned' alias target not found
+08-10 20:52:57.844 W/le.pixiv_viewer(13459): type=1400 audit(0.0:30472): avc:  denied  { read } for  name="max_map_count" dev="proc" ino=2896042 scontext=u:r:untrusted_app:s0:c15,c258,c512,c768 tcontext=u:object_r:proc_max_map_count:s0 tclass=file permissive=0
+08-10 20:52:57.858 D/DesktopModeFlagsUtil(13459): Toggle override initialized to: OVERRIDE_UNSET
+08-10 20:52:57.866 D/vulkan  (13459): searching for layers in '/data/app/~~KDcxijlWP5r3LeK37Zedbw==/com.example.pixiv_viewer-cgcl68eegRpEaLPhgi4PpA==/lib/arm64'
+08-10 20:52:57.866 D/vulkan  (13459): searching for layers in '/data/app/~~KDcxijlWP5r3LeK37Zedbw==/com.example.pixiv_viewer-cgcl68eegRpEaLPhgi4PpA==/base.apk!/lib/arm64-v8a'
+08-10 20:52:57.877 D/com.llfbandit.app_links(13459): Intent { flg=0x10000000 cmp=com.example.pixiv_viewer/.MainActivity }
+08-10 20:52:57.880 W/libc    (13459): Access denied finding property "ro.hardware.chipname"
+08-10 20:52:57.883 D/nativeloader(13459): Load /data/app/~~KDcxijlWP5r3LeK37Zedbw==/com.example.pixiv_viewer-cgcl68eegRpEaLPhgi4PpA==/base.apk!/lib/arm64-v8a/libonnxruntime4j_jni.so using class loader ns clns-7 (caller=/data/app/~~KDcxijlWP5r3LeK37Zedbw==/com.example.pixiv_viewer-cgcl68eegRpEaLPhgi4PpA==/base.apk): ok
+08-10 20:52:57.884 I/AdrenoVK-0(13459): ===== BEGIN DUMP OF OVERRIDDEN SETTINGS =====
+08-10 20:52:57.884 I/AdrenoVK-0(13459): ===== END DUMP OF OVERRIDDEN SETTINGS =====
+08-10 20:52:57.886 I/AdrenoVK-0(13459): QUALCOMM build          : 58810a5932, I41ab8621fc
+08-10 20:52:57.886 I/AdrenoVK-0(13459): Build Date              : 08/16/24
+08-10 20:52:57.886 I/AdrenoVK-0(13459): Shader Compiler Version : E031.41.03.56
+08-10 20:52:57.886 I/AdrenoVK-0(13459): Local Branch            : 
+08-10 20:52:57.886 I/AdrenoVK-0(13459): Remote Branch           : refs/tags/AU_LINUX_ANDROID_LA.VENDOR.13.2.0.11.00.00.855.856
+08-10 20:52:57.886 I/AdrenoVK-0(13459): Remote Branch           : NONE
+08-10 20:52:57.886 I/AdrenoVK-0(13459): Reconstruct Branch      : NOTHING
+08-10 20:52:57.886 I/AdrenoVK-0(13459): Build Config            : S P 14.1.4 AArch64
+08-10 20:52:57.886 I/AdrenoVK-0(13459): Driver Path             : /vendor/lib64/hw/vulkan.adreno.so
+08-10 20:52:57.886 I/AdrenoVK-0(13459): Driver Version          : 0676.63
+08-10 20:52:57.886 I/AdrenoVK-0(13459): PFP                     : 0x01740168
+08-10 20:52:57.886 I/AdrenoVK-0(13459): ME                      : 0x00000000
+08-10 20:52:57.886 I/AdrenoVK-0(13459): Application Name    : Impeller
+08-10 20:52:57.886 I/AdrenoVK-0(13459): Application Version : 0x00400000
+08-10 20:52:57.886 I/AdrenoVK-0(13459): Engine Name         : Impeller
+08-10 20:52:57.886 I/AdrenoVK-0(13459): Engine Version      : 0x00800000
+08-10 20:52:57.886 I/AdrenoVK-0(13459): Api Version         : 0x00401000
+08-10 20:52:57.887 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.887 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.887 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.887 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.887 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.887 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.887 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.887 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.887 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.887 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.887 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.887 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.887 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.887 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.887 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.887 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.888 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.888 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.888 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.888 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.888 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.888 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.888 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.888 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.888 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.888 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.888 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.888 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.888 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.888 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.888 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.889 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.890 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.890 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.890 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.890 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.890 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.890 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.890 I/AdrenoVK-0(13459): Unknown struct with type 0x3b9ff250 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.890 I/AdrenoVK-0(13459): Unknown struct with type 0x3ba17508 provided to vkGetPhysicalDeviceFeatures2
+08-10 20:52:57.892 I/flutter (13459): [IMPORTANT:flutter/shell/platform/android/android_context_vk_impeller.cc(62)] Using the Impeller rendering backend (Vulkan).
+08-10 20:52:57.895 I/cjin    (13079): onPause
+08-10 20:52:57.896 W/eahz    (13079): measuring already stopped.
+08-10 20:52:57.906 D/nativeloader(13459): Load /data/app/~~KDcxijlWP5r3LeK37Zedbw==/com.example.pixiv_viewer-cgcl68eegRpEaLPhgi4PpA==/base.apk!/lib/arm64-v8a/libdartjni.so using class loader ns clns-7 (caller=/data/app/~~KDcxijlWP5r3LeK37Zedbw==/com.example.pixiv_viewer-cgcl68eegRpEaLPhgi4PpA==/base.apk): ok
+08-10 20:52:57.952 I/WindowExtensionsImpl(13459): Initializing Window Extensions, vendor API level=8, activity embedding enabled=true
+08-10 20:52:57.957 D/CoreBackPreview( 4156): Window{9212761 u0 com.example.pixiv_viewer/com.example.pixiv_viewer.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@ca54112, mPriority=0, mIsAnimationCallback=false, mOverrideBehavior=0}
+08-10 20:52:57.968 I/AdrenoGLES-0(13459): QUALCOMM build                   : 58810a5932, I41ab8621fc
+08-10 20:52:57.968 I/AdrenoGLES-0(13459): Build Date                       : 08/16/24
+08-10 20:52:57.968 I/AdrenoGLES-0(13459): OpenGL ES Shader Compiler Version: E031.41.03.56
+08-10 20:52:57.968 I/AdrenoGLES-0(13459): Local Branch                     : 
+08-10 20:52:57.968 I/AdrenoGLES-0(13459): Remote Branch                    : refs/tags/AU_LINUX_ANDROID_LA.VENDOR.13.2.0.11.00.00.855.856
+08-10 20:52:57.968 I/AdrenoGLES-0(13459): Remote Branch                    : NONE
+08-10 20:52:57.968 I/AdrenoGLES-0(13459): Reconstruct Branch               : NOTHING
+08-10 20:52:57.968 I/AdrenoGLES-0(13459): Build Config                     : S P 14.1.4 AArch64
+08-10 20:52:57.968 I/AdrenoGLES-0(13459): Driver Path                      : /vendor/lib64/egl/libGLESv2_adreno.so
+08-10 20:52:57.968 I/AdrenoGLES-0(13459): Driver Version                   : 0676.63
+08-10 20:52:56.683 I/servicemanager( 1297): Caller(pid=13459,uid=10527,sid=u:r:untrusted_app:s0:c15,c258,c512,c768) Could not find android.hardware.graphics.allocator.IAllocator/default in the VINTF manifest. No alternative instances declared in VINTF.
+08-10 20:52:57.972 I/AdrenoGLES-0(13459): PFP: 0x01740168, ME: 0x00000000
+08-10 20:52:57.976 I/AdrenoUtils(13459): <ReadGpuID:407>: Reading chip ID through GSL
+08-10 20:52:57.977 E/qdgralloc(13459): GetSize: Unrecognized pixel format: 0x3b
+08-10 20:52:57.977 W/qdgralloc(13459): gralloc failed to allocate buffer for size 0 format 59 AWxAH 1x1 usage 2816
+08-10 20:52:57.977 E/Gralloc4(13459): isSupported(1, 1, 59, 1, ...) failed with 7
+08-10 20:52:57.978 E/qdgralloc( 2413): GetSize: Unrecognized pixel format: 0x3b
+08-10 20:52:57.978 W/qdgralloc( 2413): gralloc failed to allocate buffer for size 0 format 59 AWxAH 4x4 usage 2816
+08-10 20:52:57.978 E/GraphicBufferAllocator(13459): Failed to allocate (4 x 4) layerCount 1 format 59 usage b00: 7
+08-10 20:52:57.978 E/AHardwareBuffer(13459): GraphicBuffer(w=4, h=4, lc=1) failed (Unknown error -7), handle=0x0
+08-10 20:52:57.978 E/qdgralloc(13459): GetSize: Unrecognized pixel format: 0x3b
+08-10 20:52:57.978 W/qdgralloc(13459): gralloc failed to allocate buffer for size 0 format 59 AWxAH 1x1 usage 2816
+08-10 20:52:57.978 E/Gralloc4(13459): isSupported(1, 1, 59, 1, ...) failed with 7
+08-10 20:52:57.978 E/qdgralloc( 2413): GetSize: Unrecognized pixel format: 0x3b
+08-10 20:52:57.978 W/qdgralloc( 2413): gralloc failed to allocate buffer for size 0 format 59 AWxAH 4x4 usage 2816
+08-10 20:52:57.978 E/GraphicBufferAllocator(13459): Failed to allocate (4 x 4) layerCount 1 format 59 usage b00: 7
+08-10 20:52:57.978 E/AHardwareBuffer(13459): GraphicBuffer(w=4, h=4, lc=1) failed (Unknown error -7), handle=0x0
+08-10 20:52:56.688 I/servicemanager( 1297): Caller(pid=13459,uid=10527,sid=u:r:untrusted_app:s0:c15,c258,c512,c768) Could not find android.hardware.graphics.allocator.IAllocator/default in the VINTF manifest. No alternative instances declared in VINTF.
+08-10 20:52:57.985 W/qdgralloc(13459): getInterlacedFlag: getMetaData returned 3, defaulting to interlaced_flag = 0
+08-10 20:52:57.992 W/qdgralloc(13459): getInterlacedFlag: getMetaData returned 3, defaulting to interlaced_flag = 0
+08-10 20:52:57.997 W/qdgralloc(13459): getInterlacedFlag: getMetaData returned 3, defaulting to interlaced_flag = 0
+08-10 20:52:58.002 W/qdgralloc(13459): getInterlacedFlag: getMetaData returned 3, defaulting to interlaced_flag = 0
+08-10 20:52:58.008 W/qdgralloc(13459): getInterlacedFlag: getMetaData returned 3, defaulting to interlaced_flag = 0
+08-10 20:52:58.015 W/qdgralloc(13459): getInterlacedFlag: getMetaData returned 3, defaulting to interlaced_flag = 0
+08-10 20:52:58.042 I/le.pixiv_viewer(13459): AssetManager2(0xb400007c3353ad58) locale list changing from [] to [ja-JP]
+08-10 20:52:58.043 I/WebViewFactory(13459): Loading com.android.webview version 137.0.7151.72 (code 715107201)
+08-10 20:52:58.043 I/le.pixiv_viewer(13459): AssetManager2(0xb400007c3353c018) locale list changing from [] to [ja-JP]
+08-10 20:52:58.043 I/le.pixiv_viewer(13459): AssetManager2(0xb400007c33536898) locale list changing from [] to [ja-JP]
+08-10 20:52:58.044 I/le.pixiv_viewer(13459): AssetManager2(0xb400007c33539a98) locale list changing from [] to [ja-JP]
+08-10 20:52:58.045 V/ResourcesManager(13459): The following library key has been added: ResourcesKey{ mHash=4344639d mResDir=null mSplitDirs=[] mOverlayDirs=[/system/product/overlay/NavigationBarModeGestural/NavigationBarModeGesturalOverlay.apk,/data/resource-cache/com.android.systemui-accent-opSu.frro,/data/resource-cache/com.android.systemui-dynamic-gUZm.frro,/data/resource-cache/com.android.systemui-neutral-HS48.frro] mLibDirs=[/system/product/app/webview/webview.apk,/system_ext/framework/androidx.window.extensions.jar] mDisplayId=0 mOverrideConfig=v35 mCompatInfo={400dpi always-compat} mLoaders=[]}
+08-10 20:52:58.046 V/WindowManagerShell( 5636): Transition animation finished (aborted=false), notifying core (#1630) android.os.BinderProxy@d86eda6@0
+08-10 20:52:58.047 D/ApplicationLoaders(13459): Returning zygote-cached class loader: /system_ext/framework/androidx.window.extensions.jar
+08-10 20:52:58.047 D/AuthSignInService(30275): onBind: Intent { act=com.google.android.gms.auth.api.signin.service.START pkg=com.google.android.gms }
+08-10 20:52:58.049 D/nativeloader(13459): InitLlndkLibrariesProduct: libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libRS.so:libandroid_net.so:libapexsupport.so:libavf.so:libbinder_ndk.so:libc.so:libcgrouprc.so:libclang_rt.asan-aarch64-android.so:libclang_rt.asan-arm-android.so:libclang_rt.hwasan-aarch64-android.so:libcom.android.tethering.connectivity_native.so:libdl.so:libft2.so:liblog.so:libm.so:libmediandk.so:libnativewindow.so:libneuralnetworks.so:libselinux.so:libsync.so:libvendorsupport.so:libvndksupport.so:libvulkan.so
+08-10 20:52:58.049 D/nativeloader(13459): Configuring product-clns-8 for unbundled product apk /system/product/app/webview/webview.apk. target_sdk_version=35, uses_libraries=, library_path=/system/product/app/webview/lib/arm64:/system/product/app/webview/webview.apk!/lib/arm64-v8a:/product/lib64:/system/product/lib64, permitted_path=/data:/mnt/expand:/product/lib64:/system/product/lib64
+08-10 20:52:58.052 W/ActivityManager( 4156): pid 4156 system sent binder code 7 with flags 1 to frozen apps and got error -32
+08-10 20:52:58.052 W/WindowManager( 4156): Exception thrown during dispatchAppVisibility Window{72500ae u0 com.example.pixiv_viewer/com.example.pixiv_viewer.MainActivity EXITING}
+08-10 20:52:58.052 W/WindowManager( 4156): android.os.DeadObjectException
+08-10 20:52:58.052 W/WindowManager( 4156): 	at android.os.BinderProxy.transactNative(Native Method)
+08-10 20:52:58.052 W/WindowManager( 4156): 	at android.os.BinderProxy.transact(BinderProxy.java:592)
+08-10 20:52:58.052 W/WindowManager( 4156): 	at android.view.IWindow$Stub$Proxy.dispatchAppVisibility(IWindow.java:557)
+08-10 20:52:58.052 W/WindowManager( 4156): 	at com.android.server.wm.WindowState.sendAppVisibilityToClients(WindowState.java:3298)
+08-10 20:52:58.052 W/WindowManager( 4156): 	at com.android.server.wm.WindowContainer.sendAppVisibilityToClients(WindowContainer.java:1348)
+08-10 20:52:58.052 W/WindowManager( 4156): 	at com.android.server.wm.WindowToken.setClientVisible(WindowToken.java:437)
+08-10 20:52:58.052 W/WindowManager( 4156): 	at com.android.server.wm.ActivityRecord.setClientVisible(ActivityRecord.java:7214)
+08-10 20:52:58.052 W/WindowManager( 4156): 	at com.android.server.wm.ActivityRecord.postApplyAnimation(ActivityRecord.java:5896)
+08-10 20:52:58.052 W/WindowManager( 4156): 	at com.android.server.wm.ActivityRecord.commitVisibility(ActivityRecord.java:5839)
+08-10 20:52:58.052 W/WindowManager( 4156): 	at com.android.server.wm.Transition.finishTransition(Transition.java:1384)
+08-10 20:52:58.052 W/WindowManager( 4156): 	at com.android.server.wm.TransitionController.finishTransition(TransitionController.java:986)
+08-10 20:52:58.052 W/WindowManager( 4156): 	at com.android.server.wm.WindowOrganizerController.finishTransition(WindowOrganizerController.java:526)
+08-10 20:52:58.052 W/WindowManager( 4156): 	at android.window.IWindowOrganizerController$Stub.onTransact(IWindowOrganizerController.java:293)
+08-10 20:52:58.052 W/WindowManager( 4156): 	at com.android.server.wm.WindowOrganizerController.onTransact(WindowOrganizerController.java:215)
+08-10 20:52:58.052 W/WindowManager( 4156): 	at android.os.Binder.execTransactInternal(Binder.java:1411)
+08-10 20:52:58.052 W/WindowManager( 4156): 	at android.os.Binder.execTransact(Binder.java:1350)
+08-10 20:52:58.052 W/Process ( 4156): Unable to open /proc/13458/status
+08-10 20:52:58.053 D/nativeloader(13459): InitVndkspLibrariesProduct: VNDK is deprecated with product
+08-10 20:52:58.053 V/WindowManager( 4156): Finish Transition (#1630): created at 08-10 20:52:57.607 collect-started=0.024ms request-sent=0.286ms started=5.938ms ready=192.787ms sent=194.935ms finished=443.309ms
+08-10 20:52:56.764 I/binder  ( 6004): 4156:6004 transaction failed 29189/-22, size 64-0 line 3201
+08-10 20:52:58.058 D/BackgroundInstallControlService( 4156): Package event received: 0
+08-10 20:52:58.060 V/WindowManagerShell( 5636): Track 0 became idle
+08-10 20:52:58.060 V/WindowManagerShell( 5636): All active transition animations finished
+08-10 20:52:58.060 W/UserManagerService( 4156): Requested status bar icon for non-badged user 0
+08-10 20:52:58.065 I/cr_WVCFactoryProvider(13459): version=137.0.7151.72 (715107201) minSdkVersion=26 isBundle=false multiprocess=true packageId=2
+08-10 20:52:58.068 W/UserManagerService( 4156): Requested status bar icon for non-badged user 0
+08-10 20:52:58.071 D/RecentsView(25648): onTaskRemoved: 210, not handling task stack changes
+08-10 20:52:58.071 D/RecentsView(25648): onTaskRemoved: 210, not handling task stack changes
+08-10 20:52:58.071 W/UserManagerService( 4156): Requested status bar icon for non-badged user 0
+08-10 20:52:58.071 E/BpTransactionCompletedListener( 4249): Failed to transact (-32)
+08-10 20:52:58.072 E/BpTransactionCompletedListener( 4249): Failed to transact (-32)
+08-10 20:52:58.073 D/nativeloader(13459): Load /system/product/app/webview/webview.apk!/lib/arm64-v8a/libwebviewchromium.so using class loader ns product-clns-8 (caller=/product/app/webview/webview.apk): ok
+08-10 20:52:58.075 D/nativeloader(13459): Load /system/lib64/libwebviewchromium_plat_support.so using class loader ns product-clns-8 (caller=/product/app/webview/webview.apk): ok
+08-10 20:52:58.085 I/cr_LibraryLoader(13459): Successfully loaded native library
+08-10 20:52:58.087 I/cr_CachingUmaRecorder(13459): Flushed 7 samples from 7 histograms, 0 samples were dropped.
+08-10 20:52:58.097 I/cr_CombinedPProvider(13459): #registerProvider() provider:WV.u7@6d3ba80 isPolicyCacheEnabled:false policyProvidersSize:0
+08-10 20:52:58.099 I/cr_PolicyProvider(13459): #setManagerAndSource() 0
+08-10 20:52:58.100 I/le.pixiv_viewer(13459): AssetManager2(0xb400007c33534638) locale list changing from [] to [ja-JP]
+08-10 20:52:58.101 V/GrammaticalInflectionUtils( 4156): AttributionSource: android.content.AttributionSource@7f915751 does not have READ_SYSTEM_GRAMMATICAL_GENDER permission.
+08-10 20:52:58.102 I/le.pixiv_viewer(13459): AssetManager2(0xb400007c33538198) locale list changing from [] to [ja-JP]
+08-10 20:52:58.109 I/cr_CombinedPProvider(13459): #linkNativeInternal() 1
+08-10 20:52:58.110 I/cr_AppResProvider(13459): #getApplicationRestrictionsFromUserManager() Bundle[EMPTY_PARCEL]
+08-10 20:52:58.110 I/cr_PolicyProvider(13459): #notifySettingsAvailable() 0
+08-10 20:52:58.110 I/cr_CombinedPProvider(13459): #onSettingsAvailable() 0
+08-10 20:52:58.110 I/cr_CombinedPProvider(13459): #flushPolicies()
+08-10 20:52:58.114 D/Zygote  ( 5723): Forked child process 16454
+08-10 20:52:58.121 I/ActivityManager( 4156): Start proc 16454:com.android.webview:sandboxed_process0:org.chromium.content.app.SandboxedProcessService0:0/u0i151 for  {com.example.pixiv_viewer/org.chromium.content.app.SandboxedProcessService0:0}
+08-10 20:52:58.122 I/ocessService0:0(16454): Using CollectorTypeCMC GC.
+08-10 20:52:58.135 D/nativeloader(16454): Load libframework-connectivity-tiramisu-jni.so using APEX ns com_android_tethering for caller /apex/com.android.tethering/javalib/framework-connectivity-t.jar: ok
+08-10 20:52:58.145 D/ActivityManager( 4156): sync unfroze 13207 com.android.webview:webview_service for 6
+08-10 20:52:58.147 D/BackgroundInstallControlService( 4156): Package event received: 0
+08-10 20:52:58.147 D/BackgroundInstallControlService( 4156): Package event received: 0
+08-10 20:52:58.153 W/cr_MetricsBridgeService(13207): retained records has reached the max capacity, dropping record
+08-10 20:52:58.153 I/CameraManagerGlobal(13459): Connecting to camera service
+08-10 20:52:58.155 W/HWUI    (13459): Image decoding logging dropped!
+08-10 20:52:58.156 W/HWUI    (13459): Image decoding logging dropped!
+08-10 20:52:58.160 I/AttributionAndPermissionUtils( 3666): checkPermission (forDataDelivery 0 startDataDelivery 0): Permission hard denied for client attribution [uid 10527, pid 13459, packageName "<unknown>"]
+08-10 20:52:56.873 W/servicemanager( 1297): Isolated app with UID 99151 requested 'network_management', but the service is not allowed for isolated apps.
+08-10 20:52:58.163 D/ApplicationLoaders(16454): Returning zygote-cached class loader: /system_ext/framework/androidx.window.extensions.jar
+08-10 20:52:58.163 D/CompatChangeReporter(16454): Compat change id reported: 202956589; UID 99151; state: ENABLED
+08-10 20:52:58.165 I/ocessService0:0(16454): AssetManager2(0xe30c5114) locale list changing from [] to [ja-JP]
+08-10 20:52:56.878 W/servicemanager( 1297): Isolated app with UID 99151 requested 'connectivity', but the service is not allowed for isolated apps.
+08-10 20:52:58.166 D/ConnectivityService( 4156): requestNetwork for uid/pid:10527/13459 activeRequest: null callbackRequest: 10445 [NetworkRequest [ REQUEST id=10446, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED&NOT_BANDWIDTH_CONSTRAINED Uid: 10527 RequestorUid: 10527 RequestorPkg: com.example.pixiv_viewer UnderlyingNetworks: Null] ]] callback flags: 0 order: 2147483647 isUidTracked: false declaredMethods: ALL
+08-10 20:52:58.169 D/ConnectivityService( 4156): NetReassign [10446 : null → 100] [c 0] [a 1] [i 0]
+08-10 20:52:58.169 D/WifiNetworkFactory( 4156): got request NetworkRequest [ REQUEST id=10446, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED&NOT_BANDWIDTH_CONSTRAINED Uid: 10527 RequestorUid: 10527 RequestorPkg: com.example.pixiv_viewer UnderlyingNetworks: Null] ]
+08-10 20:52:58.169 I/cr_WebViewApkApp(16454): version=137.0.7151.72 (715107201) minSdkVersion=26 isBundle=false processName=com.android.webview:sandboxed_process0:org.chromium.content.app.SandboxedProcessService0:0
+08-10 20:52:58.170 D/ConnectivityService( 4156): NetReassign [no changes] [c 0] [a 0] [i 1]
+08-10 20:52:58.170 D/UntrustedWifiNetworkFactory( 4156): got request NetworkRequest [ REQUEST id=10446, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED&NOT_BANDWIDTH_CONSTRAINED Uid: 10527 RequestorUid: 10527 RequestorPkg: com.example.pixiv_viewer UnderlyingNetworks: Null] ]
+08-10 20:52:58.170 D/OemPaidWifiNetworkFactory( 4156): got request NetworkRequest [ REQUEST id=10446, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED&NOT_BANDWIDTH_CONSTRAINED Uid: 10527 RequestorUid: 10527 RequestorPkg: com.example.pixiv_viewer UnderlyingNetworks: Null] ]
+08-10 20:52:58.170 D/MultiInternetWifiNetworkFactory( 4156): got request NetworkRequest [ REQUEST id=10446, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED&NOT_BANDWIDTH_CONSTRAINED Uid: 10527 RequestorUid: 10527 RequestorPkg: com.example.pixiv_viewer UnderlyingNetworks: Null] ]
+08-10 20:52:58.173 D/BackgroundInstallControlService( 4156): Package event received: 0
+08-10 20:52:56.885 E/SELinux ( 1297): avc:  denied  { find } for pid=16454 uid=99151 name=content_capture scontext=u:r:isolated_app:s0:c512,c768 tcontext=u:object_r:content_capture_service:s0 tclass=service_manager permissive=0
+08-10 20:52:58.174 I/cr_ChildProcessService(16454): Creating new ChildProcessService pid=16454
+08-10 20:52:58.204 D/WifiStaIfaceHidlImpl( 4156): getCachedScanData is not implemented by HIDL
+08-10 20:52:58.212 W/cr_media(13459): BLUETOOTH_CONNECT permission is missing.
+08-10 20:52:58.214 W/cr_media(13459): getBluetoothAdapter() requires BLUETOOTH permission
+08-10 20:52:58.214 W/cr_media(13459): registerBluetoothIntentsIfNeeded: Requires BLUETOOTH permission
+08-10 20:52:58.219 W/WindowOnBackDispatcher(13459): OnBackInvokedCallback is not enabled for the application.
+08-10 20:52:58.219 W/WindowOnBackDispatcher(13459): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+08-10 20:52:58.220 I/Choreographer(13459): Skipped 37 frames!  The application may be doing too much work on its main thread.
+08-10 20:52:58.221 I/AdrenoVK-0(13459): QUALCOMM build          : 58810a5932, I41ab8621fc
+08-10 20:52:58.221 I/AdrenoVK-0(13459): Build Date              : 08/16/24
+08-10 20:52:58.221 I/AdrenoVK-0(13459): Shader Compiler Version : E031.41.03.56
+08-10 20:52:58.221 I/AdrenoVK-0(13459): Local Branch            : 
+08-10 20:52:58.221 I/AdrenoVK-0(13459): Remote Branch           : refs/tags/AU_LINUX_ANDROID_LA.VENDOR.13.2.0.11.00.00.855.856
+08-10 20:52:58.221 I/AdrenoVK-0(13459): Remote Branch           : NONE
+08-10 20:52:58.221 I/AdrenoVK-0(13459): Reconstruct Branch      : NOTHING
+08-10 20:52:58.221 I/AdrenoVK-0(13459): Build Config            : S P 14.1.4 AArch64
+08-10 20:52:58.221 I/AdrenoVK-0(13459): Driver Path             : /vendor/lib64/hw/vulkan.adreno.so
+08-10 20:52:58.221 I/AdrenoVK-0(13459): Driver Version          : 0676.63
+08-10 20:52:58.221 I/AdrenoVK-0(13459): PFP                     : 0x01740168
+08-10 20:52:58.221 I/AdrenoVK-0(13459): ME                      : 0x00000000
+08-10 20:52:58.221 I/AdrenoVK-0(13459): Application Name    : 
+08-10 20:52:58.221 I/AdrenoVK-0(13459): Application Version : 0x00000001
+08-10 20:52:58.221 I/AdrenoVK-0(13459): Engine Name         : 
+08-10 20:52:58.221 I/AdrenoVK-0(13459): Engine Version      : 0x00000001
+08-10 20:52:58.221 I/AdrenoVK-0(13459): Api Version         : 0x00403000
+08-10 20:52:58.231 I/cr_LibraryLoader(16454): Successfully loaded native library
+08-10 20:52:58.233 I/cr_CachingUmaRecorder(16454): Flushed 2 samples from 2 histograms, 0 samples were dropped.
+08-10 20:52:56.958 W/servicemanager( 1297): Isolated app with UID 99151 requested 'uimode', but the service is not allowed for isolated apps.
+08-10 20:52:58.247 W/SystemServiceRegistry(16454): No service published for: uimode
+08-10 20:52:58.250 D/AuthSignInService(30275): bound by: GetServiceRequest[AUTH_GOOGLE_SIGN_IN, packageName="com.example.pixiv_viewer", gmsVersion=12451000, scopes=[], extras=Bundle[{}], defaultFeatures=[], apiFeatures=[], supportsConnectionInfo=true]
+08-10 20:52:58.253 I/ActivityTaskManager( 4156): Displayed com.example.pixiv_viewer/.MainActivity for user 0: +522ms
+08-10 20:52:58.253 I/ActivityTaskManager( 4156): Fully drawn com.example.pixiv_viewer/.MainActivity: +522ms
+08-10 20:52:58.260 W/chromium(16454): [WARNING:content/child/runtime_features.cc:559] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+08-10 20:52:58.260 W/chromium(16454): [WARNING:content/child/runtime_features.cc:584] Topics cannot be enabled in this configuration. Use --enable-features=BrowsingTopics in addition.
+08-10 20:52:58.260 W/chromium(16454): [WARNING:content/child/runtime_features.cc:605] SharedStorage cannot be enabled in this configuration. Use --enable-features=SharedStorageAPI in addition.
+08-10 20:52:58.260 W/chromium(16454): [WARNING:content/child/runtime_features.cc:615] AttributionReporting cannot be enabled in this configuration. Use --enable-features=ConversionMeasurement in addition.
+08-10 20:52:58.257 W/cr_MetricsBridgeService(13207): retained records has reached the max capacity, dropping record
+08-10 20:52:58.260 W/cr_MetricsBridgeService(13207): retained records has reached the max capacity, dropping record
+08-10 20:52:58.261 D/WindowLayoutComponentImpl(13459): Register WindowLayoutInfoListener on Context=com.example.pixiv_viewer.MainActivity@a2e39d9, of which baseContext=android.app.ContextImpl@75ce8b8
+08-10 20:52:58.262 W/cr_MetricsBridgeService(13207): retained records has reached the max capacity, dropping record
+08-10 20:52:58.271 D/AuthSignInService(30275): com.example.pixiv_viewer:silentSignIn(GoogleSignInOptions[scopes=[https://www.googleapis.com/auth/drive.appdata, openid, profile, https://www.googleapis.com/auth/drive.file, email], idTokenRequested=false, forceCodeForRefreshToken=false, serverAuthCodeRequested=false])
+08-10 20:52:58.286 D/AuthSignInService(30275): silentSignIn: account -> null
+08-10 20:52:58.286 D/AuthSignInService(30275): Result[Status[code=4]]: null
+08-10 20:52:58.291 D/WifiStaIfaceHidlImpl( 4156): getCachedScanData is not implemented by HIDL
+08-10 20:52:58.296 E/FontsProvider(30275): query: content://com.google.android.gms.fonts [_id, file_id, font_ttc_index, font_variation_settings, font_weight, font_italic, result_code] query = ? [name=Google Sans&weight=700&besteffort=false]
+08-10 20:52:58.312 I/ImeTracker( 4156): com.example.pixiv_viewer:69858041: onRequestHide at ORIGIN_SERVER reason HIDE_UNSPECIFIED_WINDOW fromUser false
+08-10 20:52:58.316 I/GoogleInputMethodService(26912): GoogleInputMethodService.onFinishInput():2276 
+08-10 20:52:58.318 I/Module  (26912): DeviceLockedStatusModuleProvider$Module.updateDeviceLockedStatusInternal():129 repeatCheckTimes = 0, locked = false
+08-10 20:52:58.318 I/GoogleInputMethodService(26912): GoogleInputMethodService.onStartInput():1460 onStartInput(EditorInfo{EditorInfo{packageName=com.example.pixiv_viewer, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=0, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+08-10 20:52:58.318 I/LatinIMEBase(26912): LatinIMEBase.updateInputViewCoverNavigation():317 Update input view padding, isNavbarOverInputWindow=false, bottom inset=120
+08-10 20:52:58.320 I/Module  (26912): DeviceLockedStatusModuleProvider$Module.updateDeviceLockedStatusInternal():129 repeatCheckTimes = 1, locked = false
+08-10 20:52:58.321 D/FontsProvider(30275): openFile: content://com.google.android.gms.fonts/file/1337 mode: r
+08-10 20:52:58.321 W/PackageConfigPersister( 4156): App-specific configuration not found for packageName: com.example.pixiv_viewer and userId: 0
+08-10 20:52:58.322 W/AudioCapabilities(13459): Unsupported mediaType audio/alac
+08-10 20:52:58.323 W/AudioCapabilities(13459): Unsupported mediaType audio/x-ape
+08-10 20:52:58.324 W/AudioCapabilities(13459): Unsupported mediaType audio/dsd
+08-10 20:52:58.327 W/AudioCapabilities(13459): Unsupported mediaType audio/amr-wb-plus
+08-10 20:52:58.328 D/InsetsController(13459): hide(ime(), fromIme=false)
+08-10 20:52:58.328 I/ImeTracker(13459): com.example.pixiv_viewer:69858041: onCancelled at PHASE_CLIENT_ALREADY_HIDDEN
+08-10 20:52:58.328 W/AudioCapabilities(13459): Unsupported mediaType audio/amr-wb+
+08-10 20:52:58.329 W/AudioCapabilities(13459): Unsupported mediaType audio/x-ms-wma
+08-10 20:52:58.330 W/AudioCapabilities(13459): Unsupported mediaType audio/alac
+08-10 20:52:58.331 W/AudioCapabilities(13459): Unsupported mediaType audio/x-ape
+08-10 20:52:58.336 E/FontsProvider(30275): query: content://com.google.android.gms.fonts [_id, file_id, font_ttc_index, font_variation_settings, font_weight, font_italic, result_code] query = ? [name=Noto Color Emoji Compat&weight=400&besteffort=false]
+08-10 20:52:58.339 D/FontsProvider(30275): openFile: content://com.google.android.gms.fonts/file/1337 mode: r
+08-10 20:52:58.342 E/FontsProvider(30275): query: content://com.google.android.gms.fonts [_id, file_id, font_ttc_index, font_variation_settings, font_weight, font_italic, result_code] query = ? [name=Google Sans Flex&weight=400&besteffort=false]
+08-10 20:52:58.343 D/FontsProvider(30275): openFile: content://com.google.android.gms.fonts/file/1337 mode: r
+08-10 20:52:58.346 E/FontsProvider(30275): query: content://com.google.android.gms.fonts [_id, file_id, font_ttc_index, font_variation_settings, font_weight, font_italic, result_code] query = ? [name=Google Sans&weight=400&besteffort=false]
+08-10 20:52:58.347 D/FontsProvider(30275): openFile: content://com.google.android.gms.fonts/file/1337 mode: r
+08-10 20:52:58.347 D/BaseDepthController(25648): setSurface:
+08-10 20:52:58.347 D/BaseDepthController(25648): 	mWaitingOnSurfaceValidity: false
+08-10 20:52:58.347 D/BaseDepthController(25648): 	mSurface: null
+08-10 20:52:58.348 D/BaseDepthController(25648): mSurface is null and mCurrentBlur is: 22
+08-10 20:52:58.349 D/StatsLog(25648): LAUNCHER_ONSTOP
+08-10 20:52:58.350 I/cjin    (13079): onStop
+08-10 20:52:58.353 E/FontsProvider(30275): query: content://com.google.android.gms.fonts [_id, file_id, font_ttc_index, font_variation_settings, font_weight, font_italic, result_code] query = ? [name=Google Sans&weight=500&besteffort=false]
+08-10 20:52:58.354 D/FontsProvider(30275): openFile: content://com.google.android.gms.fonts/file/1337 mode: r
+08-10 20:52:58.358 W/VideoCapabilities(13459): Unsupported mime image/vnd.android.heic
+08-10 20:52:58.365 W/VideoCapabilities(13459): Unsupported mime video/dolby-vision
+08-10 20:52:58.366 W/VideoCapabilities(13459): Unsupported mime video/dolby-vision
+08-10 20:52:58.366 W/VideoCapabilities(13459): Unsupported mime video/dolby-vision
+08-10 20:52:58.368 D/BackgroundInstallControlService( 4156): Package event received: 0
+08-10 20:52:58.376 D/VRI[GoogleDiscoverWindow](13079): visibilityChanged oldVisibility=true newVisibility=false
+08-10 20:52:58.378 W/AudioCapabilities(13459): Unsupported mime audio/alac
+08-10 20:52:58.379 W/AudioCapabilities(13459): Unsupported mime audio/x-ape
+08-10 20:52:58.380 W/AudioCapabilities(13459): Unsupported mime audio/dsd
+08-10 20:52:58.380 W/AudioCapabilities(13459): Unsupported mime audio/amr-wb-plus
+08-10 20:52:58.380 W/AudioCapabilities(13459): Unsupported mime audio/amr-wb+
+08-10 20:52:58.380 W/AudioCapabilities(13459): Unsupported mime audio/x-ms-wma
+08-10 20:52:58.380 W/AudioCapabilities(13459): Unsupported mime audio/alac
+08-10 20:52:58.380 W/AudioCapabilities(13459): Unsupported mime audio/x-ape
+08-10 20:52:58.384 W/VideoCapabilities(13459): Unsupported mime image/vnd.android.heic
+08-10 20:52:58.384 W/VideoCapabilities(13459): Unsupported mime image/vnd.android.heic
+08-10 20:52:58.385 W/VideoCapabilities(13459): Unsupported mime video/dolby-vision
+08-10 20:52:58.385 W/VideoCapabilities(13459): Unsupported mime video/dolby-vision
+08-10 20:52:58.385 W/VideoCapabilities(13459): Unsupported mime video/dolby-vision
+08-10 20:52:58.389 W/cr_VAUtil(13459): Unknown level: 2048 for profile 32 of codec video/dolby-vision
+08-10 20:52:58.389 W/cr_VAUtil(13459): Unknown profile: 16 for codec video/dolby-vision
+08-10 20:52:58.389 W/cr_VAUtil(13459): Unknown level: 2048 for profile 256 of codec video/dolby-vision
+08-10 20:52:58.389 W/cr_VAUtil(13459): Unknown level: 2048 for profile 32 of codec video/dolby-vision
+08-10 20:52:58.389 W/cr_VAUtil(13459): Unknown profile: 16 for codec video/dolby-vision
+08-10 20:52:58.389 W/cr_VAUtil(13459): Unknown level: 2048 for profile 256 of codec video/dolby-vision
+08-10 20:52:58.393 D/GmsDummySvc(30275): bound by: GetServiceRequest[INAPP_REACH, packageName="com.google.android.googlequicksearchbox", gmsVersion=263125000, scopes=[], extras=Bundle[{}], defaultFeatures=[], apiFeatures=[Feature[account_health_alerts,1], Feature[account_messages,1], Feature[account_data_response,1], Feature[account_data_response_v2,1]], supportsConnectionInfo=true]
+08-10 20:52:58.396 W/GoogleApiManager(13079): Not showing notification since connectionResult is not user-facing: ConnectionResult{statusCode=API_DISABLED, resolution=null, message=null, clientMethodKey=null}
+08-10 20:52:58.439 D/vendor.xiaomi.hardware.mimd@2.0-service( 2206): psi 10 is triggered, settimer.
+08-10 20:52:58.439 D/vendor.xiaomi.hardware.mimd@2.0-service( 2206): psi partial stall call back reclaimed -1 delay tasks
+08-10 20:52:58.498 W/WindowOnBackDispatcher( 5636): sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda13@71c57cf
+08-10 20:52:58.499 D/CoreBackPreview( 4156): Window{53c647f u0 Splash Screen com.example.pixiv_viewer EXITING}: Setting back callback null
+08-10 20:52:58.858 W/chbox:googleapp(13079): Reducing the number of considered missed Gc histogram windows from 284 to 100
+08-10 20:52:59.243 D/PipelineWatcher(22834): onInputBufferReleased: frameIndex not found (14698); ignored
+08-10 20:52:59.950 I/QC2Comp ( 2478): [avcD_777] Stats: Pending(7) i/p-done(3) Works: Q: 14746/Done 14740|Work-Rate: Q(59.2/s Avg=60.0/s) Done(59.396/s Avg=60.022/s)| Stream: 31.25fps 69.8Kbps
+08-10 20:52:59.950 I/QC2Comp ( 2478): [avcD_777] Mem-usage:  [In-1D: 5 bufs 14.941 MB] [1D-1295: 15 bufs 0.234 MB] [2D-1296: 27 bufs 82.898 MB] | Total: 98.074 MB
+08-10 20:52:59.972 W/perf-hal-servic( 2466): type=1400 audit(0.0:30473): avc:  denied  { read } for  name="cmdline" dev="proc" ino=2897027 scontext=u:r:vendor_hal_perf_default:s0 tcontext=u:r:hal_graphics_composer_default:s0 tclass=file permissive=0
+08-10 20:52:59.972 W/perf-hal-servic( 2466): type=1400 audit(0.0:30474): avc:  denied  { read } for  name="comm" dev="proc" ino=2897028 scontext=u:r:vendor_hal_perf_default:s0 tcontext=u:r:hal_graphics_composer_default:s0 tclass=file permissive=0
+08-10 20:52:59.725 E/BATTERY_CHG(16062): xm_charger_debug_info_print_work: usb_present: 1
+08-10 20:52:59.725 E/BATTERY_CHG(16062): xm_charger_debug_info_print_work: wls_present: 0
+08-10 20:52:59.730 E/BATTERY_CHG(16062): xm_charger_debug_info_print_work: pogo_vbus:= -6000, pogo_icl:= 1891000
+08-10 20:52:59.735 E/BATTERY_CHG(16062): xm_charger_debug_info_print_work: chg_type= PD_PPS tl:= 13  ffc:= 0, pd_verifed:= 1, is_eu_model:=0, FG_VENDOR_ID:= 1, pps_ptf:=0.
+08-10 20:52:59.736 E/BATTERY_CHG(16062): xm_charger_debug_info_print_work: raw_soc: 5446, vbus_vol_uv: 8775000, ibus_ua: 1987000
+08-10 20:53:01.222 D/WifiStaIfaceHidlImpl( 4156): getCachedScanData is not implemented by HIDL
+08-10 20:53:02.440 D/vendor.xiaomi.hardware.mimd@2.0-service( 2206): psi 10  is reloaded.
+08-10 20:53:03.226 D/BufferPoolAccessor2.0(22834): bufferpool2 0xb400007b935c8478 : 5(15667200 size) total buffers - 5(15667200 size) used buffers - 14938/14943 (recycle/alloc) - 5/14943 (fetch/transfer)
+08-10 20:53:03.337 D/InetDiagMessage( 4156): Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET, states=14
+08-10 20:53:03.339 D/InetDiagMessage( 4156): Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET6, states=14
+08-10 20:53:03.339 D/InetDiagMessage( 4156): Destroyed live tcp sockets for uids={10427} in 3ms
+08-10 20:53:03.340 D/InetDiagMessage( 4156): Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET, states=14
+08-10 20:53:03.341 D/InetDiagMessage( 4156): Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET6, states=14
+08-10 20:53:03.341 D/InetDiagMessage( 4156): Destroyed live tcp sockets for uids={20427} in 2ms
+08-10 20:53:03.364 D/InetDiagMessage( 4156): Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET, states=14
+08-10 20:53:03.365 D/InetDiagMessage( 4156): Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET6, states=14
+08-10 20:53:03.365 D/InetDiagMessage( 4156): Destroyed live tcp sockets for uids={10495} in 4ms
+08-10 20:53:03.367 D/InetDiagMessage( 4156): Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET, states=14
+08-10 20:53:03.368 D/InetDiagMessage( 4156): Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET6, states=14
+08-10 20:53:03.369 D/InetDiagMessage( 4156): Destroyed live tcp sockets for uids={20495} in 4ms
+08-10 20:53:03.469 D/ProfileInstaller(13459): Installing profile for com.example.pixiv_viewer
+08-10 20:53:02.283 I/(virq   (16399): irq_count)- GICv3:IPI(1):937142537 GICv3:arch_timer(11):332836401 GICv3:IPI(6):145736205 GICv3:IPI(2):41197929 GICv3:msm_drm(240):22346879 GICv3:apps_rsc-drv-2(20):20497048 ipcc:glink-native-adsp(363):20388809 GICv3:ipcc_0(34):19776843 GICv3:msm-vidc(239):19506913 GICv3:hfi(202):19005739
+08-10 20:53:02.283 I/(cpu    (16399): irq_count)- 0:368767379 1:369873119 2:345424570 3:234885994 4:126014944 5:80824576 6:80244880 7:28722373
+08-10 20:53:02.283 I/(ipi    (16399): irq_count)- 0:937142537 1:41197929 2:0 3:0 4:0 5:145736205 6:0
+08-10 20:53:02.670 D/cnss    (16062): Runtime suspend start
+08-10 20:53:02.670 D/cnss    (16062): Runtime suspend status: -16
+08-10 20:53:03.976 W/perf-hal-servic( 2466): type=1400 audit(0.0:30475): avc:  denied  { read } for  name="cmdline" dev="proc" ino=2897027 scontext=u:r:vendor_hal_perf_default:s0 tcontext=u:r:hal_graphics_composer_default:s0 tclass=file permissive=0
+08-10 20:53:03.976 W/perf-hal-servic( 2466): type=1400 audit(0.0:30476): avc:  denied  { read } for  name="comm" dev="proc" ino=2897028 scontext=u:r:vendor_hal_perf_default:s0 tcontext=u:r:hal_graphics_composer_default:s0 tclass=file permissive=0
+08-10 20:53:02.793 E/BATTERY_CHG( 3542): charger_notifier_event: charger_notifier_event: get thermal_board_temp: 422
+08-10 20:53:02.794 I/PowerDet(16150): start
+08-10 20:53:02.794 I/PowerDet(16150): last active wakeup source: qcom_rx_wakelock, last_time:273022240 ms, active_count: 324996
+08-10 20:53:02.795 I/PowerDet(16150): last sec active wakeup source: hal_bluetooth_lock, last_time:272926242 ms, active_count: 790
+08-10 20:53:02.814 I/PowerDet(16150): dump_top5_task:2026-08-10 11:53:04.102475(android time)
+08-10 20:53:02.814 I/PowerDet(16150): Cpu usage:12% user + 7% kernel, comm:surfaceflinger, pid:4249, cpu_mask:f, pcomm:surfaceflinger, ppid:4249
+08-10 20:53:02.814 I/PowerDet(16150): Cpu usage:0% user + 13% kernel, comm:crtc_commit:176, pid:1504, cpu_mask:ff, pcomm:crtc_commit:176, ppid:1504
+08-10 20:53:02.814 I/PowerDet(16150): Cpu usage:7% user + 2% kernel, comm:RenderEngine, pid:4263, cpu_mask:f, pcomm:surfaceflinger, ppid:4249
+08-10 20:53:02.814 I/PowerDet(16150): Cpu usage:7% user + 2% kernel, comm:ExoPlayer:Playb, pid:5712, cpu_mask:ff, pcomm:android.youtube, ppid:22834
+08-10 20:53:02.814 I/PowerDet(16150): Cpu usage:3% user + 4% kernel, comm:MediaCodec_loop, pid:16189, cpu_mask:ff, pcomm:android.youtube, ppid:22834
+08-10 20:53:04.241 D/WifiStaIfaceHidlImpl( 4156): getCachedScanData is not implemented by HIDL
+08-10 20:53:04.455 W/HWUI    (22834): Warning: Reusing an immutable bitmap as an image decoder target.
+08-10 20:53:04.463 W/HWUI    (22834): Image decoding logging dropped!
+08-10 20:53:04.951 I/QC2Comp ( 2478): [avcD_777] Stats: Pending(8) i/p-done(5) Works: Q: 15050/Done 15043|Work-Rate: Q(60.8/s Avg=60.1/s) Done(60.594/s Avg=60.034/s)| Stream: 30.30fps 2.7Mbps
+08-10 20:53:04.951 I/QC2Comp ( 2478): [avcD_777] Mem-usage:  [In-1D: 5 bufs 14.941 MB] [1D-1295: 15 bufs 0.234 MB] [2D-1296: 27 bufs 82.898 MB] | Total: 98.074 MB
+08-10 20:53:03.966 D/cnss    (16062): Runtime suspend start
+08-10 20:53:03.966 D/cnss    (16062): Runtime suspend status: -16
+08-10 20:53:04.589 E/BATTERY_CHG(16134): xm_batt_update_work: batt_update_work: batt_temp:38900 blank_state:0,interval:10,soc:57
+08-10 20:53:04.783 E/BATTERY_CHG(16399): handle_message: [ADSP] fg_update_status1:: ssoc: 57, rsoc: 55, raw_soc: 5436, vbat: 4004, ibat: -714, temp: 389, ffc: 1, rm: 2256, bf: 4150, bc: 785, input_suspend: 0, fcc: thermal-1500, icl: chg_user_cl-3000
+08-10 20:53:04.943 D/cnss    (16062): Runtime suspend start
+08-10 20:53:04.943 D/cnss    (16062): Runtime suspend status: -16
+08-10 20:53:05.200 E/BATTERY_CHG( 3338): power_supply_read_temp: batt_thermal temp:389 ,delta:2006 rc=0
+08-10 20:53:05.958 D/cnss    (16062): Runtime suspend start
+08-10 20:53:05.958 D/cnss    (16062): Runtime suspend status: -16
+08-10 20:53:07.259 D/WifiStaIfaceHidlImpl( 4156): getCachedScanData is not implemented by HIDL
+08-10 20:53:07.976 W/perf-hal-servic( 2466): type=1400 audit(0.0:30477): avc:  denied  { read } for  name="cmdline" dev="proc" ino=2897027 scontext=u:r:vendor_hal_perf_default:s0 tcontext=u:r:hal_graphics_composer_default:s0 tclass=file permissive=0
+08-10 20:53:07.980 W/perf-hal-servic( 2466): type=1400 audit(0.0:30478): avc:  denied  { read } for  name="comm" dev="proc" ino=2897028 scontext=u:r:vendor_hal_perf_default:s0 tcontext=u:r:hal_graphics_composer_default:s0 tclass=file permissive=0
+08-10 20:53:08.359 D/ActivityManager( 4156): freezing 13207 com.android.webview:webview_service
+08-10 20:53:08.364 D/InetDiagMessage( 4156): Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET, states=14
+08-10 20:53:08.366 D/InetDiagMessage( 4156): Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET6, states=14
+08-10 20:53:08.367 D/InetDiagMessage( 4156): Destroyed live tcp sockets for uids={10427} in 6ms
+08-10 20:53:07.139 D/cnss    (16062): Runtime suspend start
+08-10 20:53:07.139 D/cnss    (16062): Runtime suspend status: -16
+08-10 20:53:08.527 D/BufferPoolAccessor2.0(22834): bufferpool2 0xb400007b935c8478 : 5(15667200 size) total buffers - 5(15667200 size) used buffers - 15256/15261 (recycle/alloc) - 5/15261 (fetch/transfer)
+08-10 20:53:08.805 D/InetDiagMessage( 4156): Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET, states=14
+08-10 20:53:08.806 D/InetDiagMessage( 4156): Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET6, states=14
+08-10 20:53:08.807 D/InetDiagMessage( 4156): Destroyed live tcp sockets for uids={10455} in 3ms
+08-10 20:53:08.808 D/InetDiagMessage( 4156): Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET, states=14
+08-10 20:53:08.810 D/InetDiagMessage( 4156): Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET6, states=14
+08-10 20:53:08.810 D/InetDiagMessage( 4156): Destroyed live tcp sockets for uids={20455} in 3ms
+08-10 20:53:07.567 W/healthd ( 2324): battery l=57 v=4008 t=38.9 h=2 st=2 c=-1458000 chg=a
+08-10 20:53:07.567 W/healthd ( 2324): battery l=57 v=4008 t=38.9 h=2 st=2 c=-1458000 chg=a
+08-10 20:53:08.869 W/ProcessStats( 4156): Tracking association SourceState{dafbb42 app.morphe.android.youtube/10519 BTop #143405} whose proc state 2 is better than process ProcessState{37b3b61 app.revanced.android.gms/10501 pkg=app.revanced.android.gms} proc state 14 (24 skipped)
+08-10 20:53:07.580 W/healthd ( 2324): battery l=57 v=4008 t=38.9 h=2 st=2 c=-1458000 chg=a
+08-10 20:53:08.875 E/fpyl    (13079): (REDACTED) Trace %s timed out after %d ms. Complete trace: %s
+08-10 20:53:08.875 E/fpyl    (13079): fpzt: 
+08-10 20:53:08.875 E/fpyl    (13079): 	at tk_trace.handleBroadcast(Started After:0)
+08-10 20:53:08.875 E/fpyl    (13079): 	at tk_trace.Broadcast to com.google.android.libraries.search.gcm.googleapp.GoogleAppProcessGcmBroadcastReceiver_Receiver com.google.android.c2dm.intent.RECEIVE(Started After:0)
+08-10 20:53:08.875 E/fpyl    (13079): (REDACTED) Trace %s timed out after %d ms. Complete trace: %s
+08-10 20:53:08.875 E/fpyl    (13079): fpzt: 
+08-10 20:53:08.875 E/fpyl    (13079): 	at tk_trace.ZwiebackCookieProviderImpl#extractZwieback(Started After:0)
+08-10 20:53:08.875 E/fpyl    (13079): 	at tk_trace.ZwiebackCookieProviderImpl#getCookie(Started After:0)
+08-10 20:53:08.875 E/fpyl    (13079): 	at tk_trace.Synclet: facts_daily_data_logging_sync 1(Started After:0)
+08-10 20:53:08.875 E/fpyl    (13079): 	at tk_trace.NoAccountWorkerFactory startWork()(Started After:0)
+08-10 20:53:08.875 E/fpyl    (13079): 	at tk_trace.com.google.apps.tiktok.sync.impl.workmanager.SyncPeriodicWorker startWork()(Started After:0)
+08-10 20:53:08.875 E/fpyl    (13079): 	at tk_trace.com.google.apps.tiktok.sync.impl.workmanager.SyncPeriodicWorker startWork()(Started After:0)
+08-10 20:53:08.875 E/fpyl    (13079): 	at tk_trace.WorkManager:TikTokListenableWorker startWork(Started After:0)
+08-10 20:53:08.875 E/fpyl    (13079): (REDACTED) Trace %s timed out after %d ms. Complete trace: %s
+08-10 20:53:08.875 E/fpyl    (13079): fpzt: 
+08-10 20:53:08.875 E/fpyl    (13079): 	at tk_trace.Write KansasDataProtoStoreKey(Started After:0)
+08-10 20:53:08.875 E/fpyl    (13079): 	at tk_trace.Update KansasDataProtoStoreKey(Started After:0)
+08-10 20:53:08.875 E/fpyl    (13079): 	at tk_trace.ActionUpload#tryRequestUpload(Started After:0)
+08-10 20:53:08.875 E/fpyl    (13079): 	at tk_trace.ActionUpload#postAction(Started After:0)
+08-10 20:53:08.875 E/fpyl    (13079): 	at tk_trace.NotificationClickHandler#recordActions(Started After:0)
+08-10 20:53:08.875 E/fpyl    (13079): 	at tk_trace.ChimeNotificationEventHandler#onNotificationCreated(Started After:0)
+08-10 20:53:08.875 E/fpyl    (13079): 	at tk_trace.FirebaseMessagingServiceImpl(Started After:0)
+08-10 20:53:08.884 E/fpyl    (13079): (REDACTED) Trace %s timed out after %d ms. Complete trace: %s
+08-10 20:53:08.884 E/fpyl    (13079): fpzt: 
+08-10 20:53:08.884 E/fpyl    (13079): 	at tk_trace.HANDLE_TASK_FINISHED (Timed Out)(Started After:3)
+08-10 20:53:08.884 E/fpyl    (13079): 	at tk_trace.NoAccountWorkerFactory startWork()(Started After:0)
+08-10 20:53:08.884 E/fpyl    (13079): 	at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork()(Started After:0)
+08-10 20:53:08.884 E/fpyl    (13079): 	at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork()(Started After:0)
+08-10 20:53:08.884 E/fpyl    (13079): 	at tk_trace.WorkManager:TikTokListenableWorker startWork(Started After:0)
+08-10 20:53:08.884 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.HANDLE_TASK_FINISHED(unfinished)(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3077 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 1 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.ADD_FILE_GROUP_FINISHED(unfinished)(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3077 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 1 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.ADD_FILE_GROUP_START(unfinished)(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3077 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 1 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.ADD_FILE_GROUP_FINISHED(unfinished)(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3077 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 1 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.ADD_FILE_GROUP_FINISHED(unfinished)(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3077 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 1 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.ADD_FILE_GROUP_START(unfinished)(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3077 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 1 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.ADD_FILE_GROUP_START(unfinished)(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3077 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 1 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.ADD_FILE_GROUP_FINISHED(unfinished)(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3077 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 1 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.ADD_FILE_GROUP_FINISHED(unfinished)(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3077 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 1 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.ADD_FILE_GROUP_START(unfinished)(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3077 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3082 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 1 ms(Unknown Source:0)
+08-10 20:53:08.884 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.884 E/fpyl    (13079): 		at tk_trace.Suppressed exceptions exceeds the limit 10, additional unfinished spans will not be reported(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): (REDACTED) Trace %s timed out after %d ms. Complete trace: %s
+08-10 20:53:08.885 E/fpyl    (13079): fpzt: 
+08-10 20:53:08.885 E/fpyl    (13079): 	at tk_trace.HANDLE_TASK_FINISHED (Timed Out)(Started After:3)
+08-10 20:53:08.885 E/fpyl    (13079): 	at tk_trace.NoAccountWorkerFactory startWork()(Started After:0)
+08-10 20:53:08.885 E/fpyl    (13079): 	at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork()(Started After:0)
+08-10 20:53:08.885 E/fpyl    (13079): 	at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork()(Started After:0)
+08-10 20:53:08.885 E/fpyl    (13079): 	at tk_trace.WorkManager:TikTokListenableWorker startWork(Started After:0)
+08-10 20:53:08.885 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.HANDLE_TASK_FINISHED(unfinished)(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3073 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 0 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.ADD_FILE_GROUP_FINISHED(unfinished)(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3073 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 0 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.ADD_FILE_GROUP_START(unfinished)(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3073 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 0 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.ADD_FILE_GROUP_FINISHED(unfinished)(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3073 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 0 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.ADD_FILE_GROUP_START(unfinished)(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3073 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 0 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.ADD_FILE_GROUP_FINISHED(unfinished)(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3073 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 0 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.ADD_FILE_GROUP_START(unfinished)(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3073 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.885 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.886 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 0 ms(Unknown Source:0)
+08-10 20:53:08.886 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.886 E/fpyl    (13079): 		at tk_trace.ADD_FILE_GROUP_FINISHED(unfinished)(Unknown Source:0)
+08-10 20:53:08.886 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3073 ms(Unknown Source:0)
+08-10 20:53:08.886 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.886 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.886 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 0 ms(Unknown Source:0)
+08-10 20:53:08.886 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.886 E/fpyl    (13079): 		at tk_trace.ADD_FILE_GROUP_FINISHED(unfinished)(Unknown Source:0)
+08-10 20:53:08.886 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3073 ms(Unknown Source:0)
+08-10 20:53:08.886 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.886 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.886 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 0 ms(Unknown Source:0)
+08-10 20:53:08.886 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.886 E/fpyl    (13079): 		at tk_trace.ADD_FILE_GROUP_START(unfinished)(Unknown Source:0)
+08-10 20:53:08.886 E/fpyl    (13079): 		at tk_trace.NoAccountWorkerFactory startWork() 3073 ms(Unknown Source:0)
+08-10 20:53:08.886 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.886 E/fpyl    (13079): 		at tk_trace.com.google.android.libraries.mdi.download.workmanager.tiktok.TikTokPeriodicWorker startWork() 3078 ms(Unknown Source:0)
+08-10 20:53:08.886 E/fpyl    (13079): 		at tk_trace.WorkManager:TikTokListenableWorker startWork 0 ms(Unknown Source:0)
+08-10 20:53:08.886 E/fpyl    (13079): 	Suppressed: fpzs: 
+08-10 20:53:08.886 E/fpyl    (13079): 		at tk_trace.Suppressed exceptions exceeds the limit 10, additional unfinished spans will not be reported(Unknown Source:0)
+08-10 20:53:08.906 W/cr_HandleImpl(13459): Handle was not closed.
+08-10 20:53:09.913 W/HWUI    (22834): Warning: Reusing an immutable bitmap as an image decoder target.
+08-10 20:53:09.931 W/HWUI    (22834): Image decoding logging dropped!
+08-10 20:53:09.951 I/QC2Comp ( 2478): [avcD_777] Stats: Pending(7) i/p-done(3) Works: Q: 15350/Done 15344|Work-Rate: Q(60.0/s Avg=60.1/s) Done(60.197/s Avg=60.037/s)| Stream: 30.30fps 558.2Kbps
+08-10 20:53:09.951 I/QC2Comp ( 2478): [avcD_777] Mem-usage:  [In-1D: 5 bufs 14.941 MB] [1D-1295: 15 bufs 0.234 MB] [2D-1296: 27 bufs 82.898 MB] | Total: 98.074 MB
+08-10 20:53:10.279 D/WifiStaIfaceHidlImpl( 4156): getCachedScanData is not implemented by HIDL
+08-10 20:53:09.580 D/cnss    (16062): Runtime suspend start
+08-10 20:53:09.580 D/cnss    (16062): Runtime suspend status: -16
+08-10 20:53:11.984 W/perf-hal-servic( 2466): type=1400 audit(0.0:30479): avc:  denied  { read } for  name="cmdline" dev="proc" ino=2897027 scontext=u:r:vendor_hal_perf_default:s0 tcontext=u:r:hal_graphics_composer_default:s0 tclass=file permissive=0
+08-10 20:53:11.984 W/perf-hal-servic( 2466): type=1400 audit(0.0:30480): avc:  denied  { read } for  name="comm" dev="proc" ino=2897028 scontext=u:r:vendor_hal_perf_default:s0 tcontext=u:r:hal_graphics_composer_default:s0 tclass=file permissive=0
+08-10 20:53:11.578 D/cnss    (16062): Runtime suspend start
+08-10 20:53:11.578 D/cnss    (16062): Runtime suspend status: -16
+08-10 20:53:13.299 D/WifiStaIfaceHidlImpl( 4156): getCachedScanData is not implemented by HIDL
+08-10 20:53:13.726 D/BufferPoolAccessor2.0(22834): bufferpool2 0xb400007b935c8478 : 5(15667200 size) total buffers - 5(15667200 size) used buffers - 15568/15573 (recycle/alloc) - 5/15573 (fetch/transfer)
+08-10 20:53:12.627 D/cnss    (16062): Runtime suspend start
+08-10 20:53:12.627 D/cnss    (16062): Runtime suspend status: -16
+08-10 20:53:12.778 I/PowerDet(16150): start
+08-10 20:53:12.778 I/PowerDet(16150): last active wakeup source: qcom_rx_wakelock, last_time:273032280 ms, active_count: 325006
+08-10 20:53:12.778 I/PowerDet(16150): last sec active wakeup source: hal_bluetooth_lock, last_time:272926242 ms, active_count: 790
+08-10 20:53:12.794 E/BATTERY_CHG( 3542): charger_notifier_event: charger_notifier_event: get thermal_board_temp: 422
+08-10 20:53:14.952 I/QC2Comp ( 2478): [avcD_777] Stats: Pending(8) i/p-done(4) Works: Q: 15650/Done 15643|Work-Rate: Q(60.0/s Avg=60.1/s) Done(59.793/s Avg=60.032/s)| Stream: 30.30fps 24.8Kbps
+08-10 20:53:14.952 I/QC2Comp ( 2478): [avcD_777] Mem-usage:  [In-1D: 5 bufs 14.941 MB] [1D-1295: 15 bufs 0.234 MB] [2D-1296: 27 bufs 82.898 MB] | Total: 98.074 MB
+08-10 20:53:13.905 E/BATTERY_CHG(15342): handle_message: [ADSP] fg_update_status0:: ssoc: 57, rsoc: 55, raw_soc: 5453, vbat: 4009, ibat: -744, temp: 361, ffc: 1, rm: 2303, bf: 4223, bc: 761, input_suspend: 0, fcc: thermal-1500, icl: chg_user_cl-3000
+08-10 20:53:14.051 D/cnss    (16134): Runtime suspend start
+08-10 20:53:14.051 D/cnss    (16134): Runtime suspend status: -16
+08-10 20:53:14.268 I/logd    ( 1316): logdr: UID=2000 GID=2000 PID=16528 n tail=0 logMask=99 pid=0 start=0ns deadline=0ns

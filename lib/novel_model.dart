@@ -57,6 +57,9 @@ class Novel {
     this.aiType = 0,
   });
 
+  /// 互換用ゲッター（古いコード救済）。実体は totalBookmarks。
+  int get bookmarkCount => totalBookmarks;
+
   factory Novel.fromJson(Map<String, dynamic> json) {
     final tagsList = json['tags'] as List<dynamic>?;
     final List<String> parsedTags = tagsList != null

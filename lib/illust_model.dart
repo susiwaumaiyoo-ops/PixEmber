@@ -45,6 +45,9 @@ class Illust {
     required this.isBookmarked,
   });
 
+  /// 互換用ゲッター（古いコード救済）。実体は totalBookmarks。
+  int get bookmarkCount => totalBookmarks;
+
   factory Illust.fromJson(Map<String, dynamic> json) {
     final tagsList = json['tags'] as List<dynamic>?;
     final List<String> parsedTags = tagsList != null
@@ -238,14 +241,14 @@ class SearchItem {
   final String dicUrl;
   final String summary;
   final String? iconUrl;
-  final int wordCount;
+  final int? wordCount;
 
   SearchItem({
     required this.name,
     required this.dicUrl,
     required this.summary,
     this.iconUrl,
-    required this.wordCount,
+    this.wordCount,
   });
 
   factory SearchItem.fromJson(Map<String, dynamic> json) {
@@ -254,7 +257,7 @@ class SearchItem {
       dicUrl: json['dic_url'] as String? ?? '',
       summary: json['summary'] as String? ?? '',
       iconUrl: json['icon_url'] as String?,
-      wordCount: json['word_count'] as int? ?? 0,
+      wordCount: json['word_count'] as int?,
     );
   }
 }

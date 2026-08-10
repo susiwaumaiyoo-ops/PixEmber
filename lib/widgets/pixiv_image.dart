@@ -9,6 +9,7 @@ class PixivImage extends StatelessWidget {
   isThumbnail; // サムネイル一覧表示用かどうか。true の場合は cacheWidth: 300 を指定してインメモリ圧縮
   final Widget? errorWidget;
   final Widget? placeholder;
+  final int? cacheWidth;
 
   const PixivImage({
     super.key,
@@ -19,6 +20,7 @@ class PixivImage extends StatelessWidget {
     this.isThumbnail = false,
     this.errorWidget,
     this.placeholder,
+    this.cacheWidth,
   });
 
   @override
@@ -29,7 +31,7 @@ class PixivImage extends StatelessWidget {
 
     // リファラなどのセキュリティヘッダーを付与してPixivのアセットサーバーからの直リンク403エラーを回避
     final Map<String, String> headers = {
-      'Referer': 'https://app-api.pixiv.net/',
+      'Referer': 'https://www.pixiv.net/',
       'User-Agent': 'PixivAndroidApp/6.71.1 (Android 11; Pixel 5)',
     };
 
@@ -41,7 +43,7 @@ class PixivImage extends StatelessWidget {
       height: height,
       // cacheWidth を指定するとデコード後のビットマップメモリを縮小でき、メモリ発熱・スクロール時のカクつきを完全に防止できます
       // サムネイルは 300、オリジナル高画質でも 1200 に制限して巨大画像のメモリバースト（発熱・クラッシュ）を防ぐ
-      cacheWidth: isThumbnail ? 300 : 1200,
+      cacheWidth: cacheWidth ?? (isThumbnail ? 300 : 1200),
       loadingBuilder: (context, child, loadingProgress) {
         if (loadingProgress == null) {
           return child;

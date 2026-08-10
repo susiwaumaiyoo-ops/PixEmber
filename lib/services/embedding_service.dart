@@ -1,402 +1,298 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:isolate';
-import 'dart:math';
-import 'dart:typed_data';
-import 'package:flutter/services.dart' show rootBundle;
+import 'dart:math' as math;
+
+import 'package:dart_sentencepiece_tokenizer/dart_sentencepiece_tokenizer.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 
-/// Isolate で実行する重い語彙パース処理（型安全版）
-/// JSON デコードと大規模マップ構築をメインスレッドからオフロード
-/// 型キャストエラーを防ぐため、is チェックによる安全な型判定を使用
-Future<Map<String, int>> _parseVocabInIsolate(String tokenizerJson) async {
-  final dynamic decoded = jsonDecode(tokenizerJson);
-  final Map<String, int> vocab = {};
+import 'ruri_model_manager.dart';
 
-  if (decoded is Map<String, dynamic>) {
-    // 1. 'model' -> 'vocab' (Map形式) の安全な読み込み
-    final model = decoded['model'];
-    if (model is Map<String, dynamic>) {
-      final rawVocab = model['vocab'];
-      if (rawVocab is Map) {
-        rawVocab.forEach((key, value) {
-          if (value is int) {
-            vocab[key.toString()] = value;
-          }
-        });
-      }
-    }
-
-    // 2. 'added_tokens' (List形式) の安全な読み込み
-    final addedTokens = decoded['added_tokens'];
-    if (addedTokens is List) {
-      for (final token in addedTokens) {
-        if (token is Map && token['content'] != null && token['id'] is int) {
-          vocab[token['content'].toString()] = token['id'] as int;
-        }
-      }
-    }
-
-    // 3. max_seq_length があれば取得（truncation 設定から）
-    int? maxSeqLength;
-    final truncation = decoded['truncation'];
-    if (truncation is Map<String, dynamic> && truncation['max_length'] is int) {
-      maxSeqLength = truncation['max_length'] as int;
-    }
-
-    // maxSeqLength も含めて返す（特別なキーで）
-    if (maxSeqLength != null) {
-      vocab['__max_seq_length__'] = maxSeqLength;
-    }
-  }
-
-  return vocab;
-}
-
-/// 日本語対応軽量Embeddingモデル（paraphrase-multilingual-MiniLM-L12-v2 等）を用いた
-/// ローカルONNX推論サービス。
-/// - アセットからモデル・トークナイザーを読み込み
-/// - テキストをトークナイズして入力テンソル生成
-/// - ONNX Runtime で推論実行
-/// - 平均プーリングで単一ベクトル（384次元等）を出力
+/// Ruri v3-310m INT8 による埋め込み生成サービス（シングルトン）。
+///
+/// 公開 API は [encodeQuery] / [encodeDocument] の 2 つのみ。
+/// プレフィックス付与は本サービス内部でのみ行う（呼び出し側は付けない）。
 class EmbeddingService {
   static final EmbeddingService _instance = EmbeddingService._internal();
   factory EmbeddingService() => _instance;
   EmbeddingService._internal();
 
+  // ---- 固定仕様（推定ロジック禁止） ----
+  static const String modelId = RuriModelManager.embeddingModelId;
+  static const int modelVersion = RuriModelManager.embeddingModelVersion;
+  static const int embeddingDimension = RuriModelManager.embeddingDimension;
+  static const int prefixSchemeVersion = RuriModelManager.prefixSchemeVersion;
+  static const int paddedLength = 128;
+
+  static const int bosTokenId = 1;
+  static const int eosTokenId = 2;
+  static const int padTokenId = 3;
+
+  static const String _queryPrefix = RuriModelManager.queryPrefix;
+  static const String _documentPrefix = RuriModelManager.documentPrefix;
+
   OrtSession? _session;
-  final Map<String, int> _vocab = {};
-  int _maxSeqLength = 128; // パディング/切り捨て長
+  SentencePieceTokenizer? _tokenizer;
   bool _isInitialized = false;
   String? _initError;
-  final Completer<void> _initCompleter = Completer<void>();
+  Completer<void>? _initCompleter;
 
-  /// 初期化完了を待つ
-  Future<void> get ready => _initCompleter.future;
-
-  /// 初期化エラーを取得（失敗時のみ非null）
+  bool get isInitialized => _isInitialized;
   String? get initError => _initError;
 
-  /// 初期化成功かどうか
-  bool get isInitialized => _isInitialized;
+  /// 既存呼び出し側互換: 初期化完了を待つ Future。
+  Future<void> get ready => _initCompleter?.future ?? Future<void>.value();
 
-  /// 非同期初期化：モデルとトークナイザーの読み込み
-  /// 例外を内部でキャッチし、アプリクラッシュを防ぐ
+  /// モデル・トークナイザを読み込み、スモーク推論まで実施する。
+  ///
+  /// 多重呼び出しは同一の初期化処理を共有する。
   Future<void> initialize() async {
     if (_isInitialized) return;
+    final existing = _initCompleter;
+    if (existing != null && !existing.isCompleted) {
+      return existing.future;
+    }
+    final completer = Completer<void>();
+    _initCompleter = completer;
+    _initError = null;
     try {
-      // 1. 語彙（vocab）読み込み
-      await _loadVocab();
-
-      // 2. ONNX モデル読み込み
-      final ort = OnnxRuntime();
-      _session = await ort.createSessionFromAsset(
-        'assets/models/embedding_model.onnx',
-      );
-
-      // 入力名・出力名の確認（デバッグ用）
-      // print('Input names: ${_session!.inputNames}');
-      // print('Output names: ${_session!.outputNames}');
-
+      await _doInitialize();
       _isInitialized = true;
-      _initError = null;
-      _initCompleter.complete();
-    } catch (e) {
-      _isInitialized = false;
+      if (!completer.isCompleted) completer.complete();
+    } catch (e, st) {
       _initError = e.toString();
-      _initCompleter.completeError(e);
-      // 例外を再スローせず、アプリクラッシュを防止
+      _isInitialized = false;
+      debugPrint('[EmbeddingService] 初期化失敗: $e');
+      debugPrint(st.toString());
+      if (!completer.isCompleted) completer.completeError(e, st);
+      // 呼び出し側の既存挙動を壊さないため rethrow しない。
     }
   }
 
-  /// tokenizer.json から語彙マップを構築（vocab.txt は使用しない）
-  /// 重い JSON デコードとマップ構築は Isolate.run() でオフロード
-  Future<void> _loadVocab() async {
-    final tokenizerJson = await rootBundle.loadString(
-      'assets/models/tokenizer.json',
-    );
+  Future<void> _doInitialize() async {
+    final manager = RuriModelManager();
 
-    // Isolate で重いパース処理を実行
-    final parsedVocab = await Isolate.run(
-      () => _parseVocabInIsolate(tokenizerJson),
-    );
-
-    // max_seq_length を抽出（特別なキーで渡される）
-    final maxSeqLength = parsedVocab.remove('__max_seq_length__');
-    if (maxSeqLength != null) {
-      _maxSeqLength = maxSeqLength;
+    // 1) モデルが SHA-256 検証済みで存在するか確認
+    final ready = await manager.isModelReady();
+    if (!ready) {
+      throw StateError('Ruri モデルが未準備です（未ダウンロードまたは検証失敗）。');
     }
 
-    // パースされた語彙をマージ
-    _vocab.addAll(parsedVocab);
-
-    // 4. 必須特殊トークンが欠けている場合のフォールバック（tokenizer_config.json も確認）
-    await _ensureSpecialTokens();
-
-    if (_vocab.isEmpty) {
-      throw StateError('語彙マップの構築に失敗しました: tokenizer.json から vocab を読み込めません');
-    }
-  }
-
-  /// tokenizer_config.json から不足している特殊トークンを補完
-  Future<void> _ensureSpecialTokens() async {
-    const specialTokenKeys = [
-      'bos_token',
-      'cls_token',
-      'eos_token',
-      'pad_token',
-      'sep_token',
-      'unk_token',
-      'mask_token',
-    ];
-
-    try {
-      final configJson = await rootBundle.loadString(
-        'assets/models/tokenizer_config.json',
+    final modelPath = (await manager.modelFile).path;
+    final tokPath = await manager.tokenizerPath;
+    debugPrint('[EmbeddingService] modelPath=$modelPath');
+    debugPrint('[EmbeddingService] tokenizerPath=$tokPath');
+    final info = await manager.readInfo();
+    if (info != null) {
+      debugPrint(
+        '[EmbeddingService] modelSha256=${info['modelSha256']} '
+        'tokenizerSha256=${info['tokenizerSha256']}',
       );
-      final Map<String, dynamic> config = jsonDecode(configJson);
+    }
 
-      for (final key in specialTokenKeys) {
-        if (config.containsKey(key)) {
-          final tokenValue = config[key];
-          String? tokenStr;
-          if (tokenValue is String) {
-            tokenStr = tokenValue;
-          } else if (tokenValue is Map && tokenValue['content'] is String) {
-            // AddedToken 形式の場合
-            tokenStr = tokenValue['content'] as String;
-          }
-          if (tokenStr != null && !_vocab.containsKey(tokenStr)) {
-            // IDは適当な値を割り当て（実際のIDは学習済みモデルに依存）
-            // ここでは既存のvocabサイズ以降を使う
-            _vocab[tokenStr] = _vocab.length;
-          }
-        }
-      }
-    } catch (_) {
-      // tokenizer_config.json が読めなくても無視（model.vocab に含まれていればOK）
+    // 2) 既存セッションは必ず先に破棄（複数セッション同時保持の禁止）
+    await _disposeSession();
+
+    // 3) ORT セッション作成（ネイティブ側で非同期実行）
+    final session = await manager.loadSession();
+    _session = session;
+    debugPrint('[EmbeddingService] inputNames=${session.inputNames}');
+    debugPrint('[EmbeddingService] outputNames=${session.outputNames}');
+
+    // 4) トークナイザ読み込み（非同期・1 回だけ・キャッシュ）
+    _tokenizer = await SentencePieceTokenizer.fromModelFile(tokPath);
+
+    // 5) スモーク推論（768 次元・NaN/Inf なしを確認）
+    final smoke = await _encodeInternal('$_queryPrefix初期化確認');
+    if (smoke.length != embeddingDimension) {
+      throw StateError('スモーク推論の次元が不正: ${smoke.length}');
+    }
+    debugPrint('[EmbeddingService] スモーク推論 OK (dim=${smoke.length})');
+  }
+
+  /// 検索クエリ用の埋め込みを生成する。
+  Future<Float32List> encodeQuery(String text) async {
+    _ensureReady();
+    return _encodeInternal('$_queryPrefix$text');
+  }
+
+  /// 検索文書用の埋め込みを生成する。
+  Future<Float32List> encodeDocument(String text) async {
+    _ensureReady();
+    return _encodeInternal('$_documentPrefix$text');
+  }
+
+  void _ensureReady() {
+    if (!_isInitialized || _session == null || _tokenizer == null) {
+      throw StateError(
+        'EmbeddingService が初期化されていません。initialize() を先に呼んでください。'
+        '${_initError != null ? ' (initError: $_initError)' : ''}',
+      );
     }
   }
 
-  /// 単一テキストをベクトル化
-  /// 返り値: Float32List (次元数 = モデルの隠れ層サイズ、通常 384 or 768)
-  Future<Float32List> encode(String text) async {
-    await ready;
+  // ---- トークナイズ ----
 
-    // トークナイズ
-    final inputIds = _tokenize(text);
-    final attentionMask = List<int>.filled(inputIds.length, 1);
+  /// [1(BOS)] + content + [2(EOS)] を作り、128 に切り詰め/PAD する。
+  @visibleForTesting
+  ({Int64List inputIds, Int64List attentionMask, int validCount}) buildInputs(
+    String text,
+  ) {
+    final tokenizer = _tokenizer;
+    if (tokenizer == null) {
+      throw StateError('トークナイザ未ロードです。');
+    }
+    final content = tokenizer.encode(text).ids;
 
-    // パディング
-    final paddedLength = _maxSeqLength;
-    final paddedInputIds = _padOrTruncate(
-      inputIds,
+    final ids = <int>[bosTokenId];
+    // BOS/EOS 分 2 を除いた本文長まで採用
+    final maxContent = paddedLength - 2;
+    for (int i = 0; i < content.length && i < maxContent; i++) {
+      ids.add(content[i]);
+    }
+    ids.add(eosTokenId);
+
+    final inputIds = Int64List(paddedLength);
+    final attention = Int64List(paddedLength);
+    final valid = ids.length;
+    for (int i = 0; i < paddedLength; i++) {
+      if (i < valid) {
+        inputIds[i] = ids[i];
+        attention[i] = 1;
+      } else {
+        inputIds[i] = padTokenId;
+        attention[i] = 0;
+      }
+    }
+    return (inputIds: inputIds, attentionMask: attention, validCount: valid);
+  }
+
+  // ---- 推論本体 ----
+
+  Future<Float32List> _encodeInternal(String prefixedText) async {
+    final session = _session;
+    if (session == null) {
+      throw StateError('ORT セッションが未作成です。');
+    }
+
+    final built = buildInputs(prefixedText);
+    final validCount = built.validCount;
+    if (validCount <= 0) {
+      throw StateError('有効トークン数が 0 です。');
+    }
+
+    final idsTensor = await OrtValue.fromList(built.inputIds, [
+      1,
       paddedLength,
-      _vocab['<pad>'] ?? _vocab['[PAD]'] ?? 0,
-    );
-    final paddedAttentionMask = _padOrTruncate(attentionMask, paddedLength, 0);
+    ]);
+    final maskTensor = await OrtValue.fromList(built.attentionMask, [
+      1,
+      paddedLength,
+    ]);
 
-    // Type IDs (segment embeddings) - 単一文なら全て0
-    final tokenTypeIds = List<int>.filled(paddedLength, 0);
+    final feeds = <String, OrtValue>{
+      'input_ids': idsTensor,
+      'attention_mask': maskTensor,
+    };
+    // ModernBERT は token_type_ids 不要。存在する場合のみゼロを渡す。
+    OrtValue? typeTensor;
+    if (session.inputNames.contains('token_type_ids')) {
+      typeTensor = await OrtValue.fromList(Int64List(paddedLength), [
+        1,
+        paddedLength,
+      ]);
+      feeds['token_type_ids'] = typeTensor;
+    }
 
-    // Int64List に明示的に変換 (ONNXモデルは tensor(int64) を期待)
-    final inputIdsInt64 = Int64List.fromList(paddedInputIds);
-    final attentionMaskInt64 = Int64List.fromList(paddedAttentionMask);
-    final tokenTypeIdsInt64 = Int64List.fromList(tokenTypeIds);
-
-    // 入力テンソル作成 (batch=1, seq_len)
-    OrtValue? inputIdsTensor;
-    OrtValue? attentionMaskTensor;
-    OrtValue? tokenTypeIdsTensor;
-    OrtValue? outputTensor;
-
+    Map<String, OrtValue>? outputs;
     try {
-      inputIdsTensor = await OrtValue.fromList(inputIdsInt64, [
-        1,
-        paddedLength,
-      ]);
-      attentionMaskTensor = await OrtValue.fromList(attentionMaskInt64, [
-        1,
-        paddedLength,
-      ]);
-      tokenTypeIdsTensor = await OrtValue.fromList(tokenTypeIdsInt64, [
-        1,
-        paddedLength,
-      ]);
-
-      // 推論実行
-      final outputs = await _session!.run({
-        _session!.inputNames[0]: inputIdsTensor,
-        _session!.inputNames[1]: attentionMaskTensor,
-        _session!.inputNames[2]: tokenTypeIdsTensor,
-      });
-
-      // 出力: last_hidden_state [batch, seq_len, hidden_size]
-      // OrtValue から平坦化された List<double> を取得 (row-major)
-      outputTensor = outputs[_session!.outputNames[0]]!;
-      final lastHiddenState = await outputTensor.asFlattenedList();
-
-      // 形状推定: [1, seq_len, hidden_size]
-      // batch=1 なので、実質 [seq_len, hidden_size]
-      // lastHiddenState.length = seq_len * hidden_size
-      // attention_mask から有効な seq_len を推定
-      int actualSeqLen = 0;
-      for (int i = 0; i < paddedLength; i++) {
-        if (paddedAttentionMask[i] == 1) actualSeqLen++;
+      outputs = await session.run(feeds);
+      final tokenEmb = outputs['token_embeddings'];
+      if (tokenEmb == null) {
+        throw StateError('token_embeddings 出力が存在しません。');
       }
-      if (actualSeqLen == 0) actualSeqLen = 1;
-
-      final hiddenSize = lastHiddenState.length ~/ actualSeqLen;
-
-      // 平均プーリング (attention_mask でマスク)
-      final pooled = Float32List(hiddenSize);
-      for (int i = 0; i < actualSeqLen; i++) {
-        if (paddedAttentionMask[i] == 0) continue;
-        final offset = i * hiddenSize;
-        for (int j = 0; j < hiddenSize; j++) {
-          pooled[j] += lastHiddenState[offset + j];
-        }
+      if (outputs.containsKey('sentence_embedding')) {
+        debugPrint('[EmbeddingService] sentence_embedding は未使用（将来比較用）');
       }
 
-      // 有効トークン数で割る
-      final validTokens = paddedAttentionMask.where((m) => m == 1).length;
-      if (validTokens > 0) {
-        for (int j = 0; j < hiddenSize; j++) {
-          pooled[j] /= validTokens;
-        }
-      }
-
-      // L2正規化（コサイン類似度計算を高速化するため）
-      _l2Normalize(pooled);
-
-      // 🚨 Nativeメモリ参照を断ち切るため標準の Float32List に安全コピーして返却
-      return Float32List.fromList(pooled.toList());
-    } finally {
-      // 🚨 推論終了時に必ず C++ Native メモリを解放する
-      await inputIdsTensor?.dispose();
-      await attentionMaskTensor?.dispose();
-      await tokenTypeIdsTensor?.dispose();
-      await outputTensor?.dispose();
-    }
-  }
-
-  /// 複数テキストを一括ベクトル化
-  /// 各 encode() 内で try-finally による OrtValue 解放済み
-  Future<List<Float32List>> encodeBatch(List<String> texts) async {
-    final futures = texts.map((t) => encode(t));
-    return Future.wait(futures);
-  }
-
-  /// BERTスタイルの簡易トークナイザー（WordPiece）
-  List<int> _tokenize(String text) {
-    final tokens = <String>[];
-
-    // 簡易的な前処理：小文字化、基本的なクリーニング
-    final normalized = text.toLowerCase().trim();
-
-    // 特殊トークンの取得（tokenizer.json / tokenizer_config.json から読み込まれたものを使用）
-    // tokenizer.json の added_tokens に基づく実際のトークン名を使用
-    final clsToken = _vocab.keys.firstWhere(
-      (k) => k == '<s>' || k == '[CLS]',
-      orElse: () => '<s>',
-    );
-    final sepToken = _vocab.keys.firstWhere(
-      (k) => k == '</s>' || k == '[SEP]',
-      orElse: () => '</s>',
-    );
-    final unkToken = _vocab.keys.firstWhere(
-      (k) => k == '<unk>' || k == '[UNK]',
-      orElse: () => '<unk>',
-    );
-
-    // [CLS] トークンを追加
-    tokens.add(clsToken);
-
-    // 単語分割（簡易：スペース区切り + 基本的な punctuation 処理）
-    // 実際の WordPiece 実装は複雑なため、ここでは簡易版とする
-    final words = normalized.split(RegExp(r'\s+'));
-    for (final word in words) {
-      if (word.isEmpty) continue;
-      // 単語をサブワードに分割（簡易版：語彙にあればそのまま、なければ文字ごとに分割）
-      if (_vocab.containsKey(word)) {
-        tokens.add(word);
-      } else {
-        // 簡易サブワード分割：最長一致で語彙から検索
-        final subwords = _wordPieceTokenize(word);
-        tokens.addAll(subwords);
-      }
-    }
-
-    // [SEP] トークンを追加
-    tokens.add(sepToken);
-
-    // トークンを ID に変換
-    return tokens.map((t) => _vocab[t] ?? _vocab[unkToken] ?? 0).toList();
-  }
-
-  /// 簡易 WordPiece トークナイズ（最長一致）
-  List<String> _wordPieceTokenize(String word) {
-    final result = <String>[];
-    int start = 0;
-    while (start < word.length) {
-      int end = word.length;
-      String? match;
-      while (end > start) {
-        final sub = word.substring(start, end);
-        final candidate = (start == 0) ? sub : '##$sub';
-        if (_vocab.containsKey(candidate)) {
-          match = candidate;
-          break;
-        }
-        end--;
-      }
-      if (match != null) {
-        result.add(match);
-        start = end;
-      } else {
-        // マッチしない文字は UNK 扱い
-        result.add(
-          _vocab.keys.firstWhere(
-            (k) => k == '<unk>' || k == '[UNK]',
-            orElse: () => '<unk>',
-          ),
+      final flat = await tokenEmb.asFlattenedList();
+      final expected = paddedLength * embeddingDimension;
+      if (flat.length != expected) {
+        throw StateError(
+          'token_embeddings の要素数が不正: ${flat.length} (期待 $expected)',
         );
-        start++;
+      }
+
+      // Mean pooling（attention_mask == 1 のトークンのみ）
+      final pooled = Float32List(embeddingDimension);
+      for (int t = 0; t < paddedLength; t++) {
+        if (built.attentionMask[t] != 1) continue;
+        final base = t * embeddingDimension;
+        for (int d = 0; d < embeddingDimension; d++) {
+          pooled[d] += (flat[base + d] as num).toDouble();
+        }
+      }
+      for (int d = 0; d < embeddingDimension; d++) {
+        pooled[d] = pooled[d] / validCount;
+      }
+
+      // L2 正規化
+      double sumSq = 0;
+      for (int d = 0; d < embeddingDimension; d++) {
+        sumSq += pooled[d] * pooled[d];
+      }
+      final norm = math.sqrt(sumSq);
+      if (!(norm > 1e-9)) {
+        throw StateError('L2 ノルムが極小のため正規化できません: $norm');
+      }
+      for (int d = 0; d < embeddingDimension; d++) {
+        pooled[d] = pooled[d] / norm;
+      }
+
+      // 出力検証
+      if (pooled.length != embeddingDimension) {
+        throw StateError('出力次元が不正: ${pooled.length}');
+      }
+      double check = 0;
+      for (int d = 0; d < embeddingDimension; d++) {
+        final v = pooled[d];
+        if (v.isNaN || v.isInfinite) {
+          throw StateError('出力に NaN/Inf が含まれます。');
+        }
+        check += v * v;
+      }
+      final outNorm = math.sqrt(check);
+      debugPrint(
+        '[EmbeddingService] validTokens=$validCount dim=${pooled.length} '
+        'norm=${outNorm.toStringAsFixed(6)}',
+      );
+      if ((outNorm - 1.0).abs() > 1e-3) {
+        debugPrint('[EmbeddingService] 警告: 正規化後ノルムが 1.0 から乖離 ($outNorm)');
+      }
+      return pooled;
+    } finally {
+      await idsTensor.dispose();
+      await maskTensor.dispose();
+      if (typeTensor != null) await typeTensor.dispose();
+      if (outputs != null) {
+        for (final v in outputs.values) {
+          await v.dispose();
+        }
       }
     }
-    return result;
   }
 
-  /// パディングまたは切り捨て
-  List<int> _padOrTruncate(List<int> input, int length, int padValue) {
-    if (input.length >= length) {
-      return input.sublist(0, length);
-    }
-    return [...input, ...List<int>.filled(length - input.length, padValue)];
-  }
-
-  /// L2正規化（インプレース）
-  void _l2Normalize(Float32List vector) {
-    double norm = 0.0;
-    for (final v in vector) {
-      norm += v * v;
-    }
-    norm = sqrt(norm);
-    if (norm > 0) {
-      for (int i = 0; i < vector.length; i++) {
-        vector[i] /= norm;
-      }
-    }
-  }
-
-  /// リソース解放
-  Future<void> dispose() async {
-    await _session?.close(); // OrtSession の Native メモリを確実に解放
+  Future<void> _disposeSession() async {
+    final s = _session;
     _session = null;
-    _isInitialized = false;
-    _vocab.clear();
-    if (!_initCompleter.isCompleted) {
-      _initCompleter.completeError(StateError('Disposed'));
+    if (s != null) {
+      await s.close();
     }
+  }
+
+  Future<void> dispose() async {
+    await _disposeSession();
+    _tokenizer = null;
+    _isInitialized = false;
+    _initCompleter = null;
   }
 }

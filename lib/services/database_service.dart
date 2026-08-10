@@ -1,7 +1,8 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
+import 'ruri_model_manager.dart';
 
 /// データベース初期化・管理用クラス
 class DatabaseService {
@@ -23,7 +24,7 @@ class DatabaseService {
     final path = join(dbPath, 'pixiv_viewer.db');
     return await openDatabase(
       path,
-      version: 3,
+      version: 7,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -36,6 +37,7 @@ class DatabaseService {
         title TEXT NOT NULL,
         type TEXT NOT NULL,
         work_id INTEGER NOT NULL,
+        author_name TEXT NOT NULL DEFAULT '',
         url TEXT,
         metadata TEXT,
         created_at TEXT NOT NULL
@@ -57,7 +59,12 @@ class DatabaseService {
         x_restrict INTEGER,
         novel_ai_type INTEGER,
         created_at TEXT,
-        updated_at TEXT
+        updated_at TEXT,
+        author_name TEXT NOT NULL DEFAULT '',
+        cover_url TEXT NOT NULL DEFAULT '',
+        page_count INTEGER NOT NULL DEFAULT 0,
+        total_bookmarks INTEGER NOT NULL DEFAULT 0,
+        create_date TEXT NOT NULL DEFAULT ''
       )
     ''');
 
@@ -74,6 +81,8 @@ class DatabaseService {
       CREATE TABLE novel_embeddings (
         work_id INTEGER PRIMARY KEY,
         embedding TEXT,
+        model_id TEXT NOT NULL DEFAULT '',
+        model_version INTEGER NOT NULL DEFAULT 0,
         updated_at TEXT NOT NULL
       )
     ''');
@@ -143,6 +152,84 @@ class DatabaseService {
       // novel_text に title / author_name 列を追加（既存DB互換）
       await db.execute('ALTER TABLE novel_text ADD COLUMN title TEXT');
       await db.execute('ALTER TABLE novel_text ADD COLUMN author_name TEXT');
+    }
+    if (oldVersion < 4) {
+      // history テーブルに author_name 列を追加（既存DB互換、既存データは保持）
+      final columns = await db.rawQuery('PRAGMA table_info(history)');
+      final hasAuthorName = columns.any((c) => c['name'] == 'author_name');
+      if (!hasAuthorName) {
+        await db.execute(
+          'ALTER TABLE history ADD COLUMN author_name TEXT NOT NULL DEFAULT \'\'',
+        );
+      }
+    }
+    if (oldVersion < 5) {
+      // novels テーブルにメタデータ列を追加（既存DB互換、既存データは保持）
+      final columns = await db.rawQuery('PRAGMA table_info(novels)');
+      final existing = columns.map((c) => c['name'] as String).toSet();
+      if (!existing.contains('author_name')) {
+        await db.execute(
+          'ALTER TABLE novels ADD COLUMN author_name TEXT NOT NULL DEFAULT \'\'',
+        );
+      }
+      if (!existing.contains('cover_url')) {
+        await db.execute(
+          'ALTER TABLE novels ADD COLUMN cover_url TEXT NOT NULL DEFAULT \'\'',
+        );
+      }
+      if (!existing.contains('page_count')) {
+        await db.execute(
+          'ALTER TABLE novels ADD COLUMN page_count INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+      if (!existing.contains('total_bookmarks')) {
+        await db.execute(
+          'ALTER TABLE novels ADD COLUMN total_bookmarks INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+      if (!existing.contains('create_date')) {
+        await db.execute(
+          'ALTER TABLE novels ADD COLUMN create_date TEXT NOT NULL DEFAULT \'\'',
+        );
+      }
+    }
+    if (oldVersion < 6) {
+      // 次元数バグ（encode() の hiddenSize 計算誤り）により
+      // 壊れた Embedding データを全削除する。novels 等のメタデータは保持。
+      await db.delete('novel_embeddings');
+      debugPrint('[Migration] novel_embeddings cleared (次元数バグの修正)');
+    }
+    if (oldVersion < 7) {
+      // Ruri v3-310m INT8（768次元）への移行。
+      // 旧モデル(MiniLM 384次元)の Embedding は互換性がないため全削除する。
+      // novels / novel_text / history / folders 等のデータは維持する。
+      final columns = await db.rawQuery('PRAGMA table_info(novel_embeddings)');
+      final existing = columns.map((c) => c['name'] as String).toSet();
+      if (!existing.contains('model_id')) {
+        await db.execute(
+          "ALTER TABLE novel_embeddings ADD COLUMN model_id TEXT NOT NULL DEFAULT ''",
+        );
+      }
+      if (!existing.contains('model_version')) {
+        await db.execute(
+          'ALTER TABLE novel_embeddings ADD COLUMN model_version INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+      final deleted = await db.delete('novel_embeddings');
+      debugPrint(
+        '[Migration v6->v7] novel_embeddings を全削除しました: $deleted 件 '
+        '(旧モデルのベクトルは Ruri v3 と非互換のため)',
+      );
+      debugPrint(
+        '[Migration v6->v7] モデル管理情報を更新: '
+        'modelId=${RuriModelManager.embeddingModelId} '
+        'modelVersion=${RuriModelManager.embeddingModelVersion} '
+        'embeddingDimension=${RuriModelManager.embeddingDimension} '
+        'prefixSchemeVersion=${RuriModelManager.prefixSchemeVersion}',
+      );
+      debugPrint(
+        '[Migration v6->v7] novels / novel_text / history / folders は維持',
+      );
     }
   }
 
@@ -425,6 +512,57 @@ class DatabaseService {
     return result.first;
   }
 
+  /// 小説のメタデータを novels テーブルに保存（UPSERT）
+  /// フィーリング検索で使用する author_name / cover_url / page_count 等を保持する。
+  /// 既存の title / description / text などは上書きしないよう既存行とマージする。
+  Future<int> saveNovelMeta({
+    required int workId,
+    required String title,
+    required String description,
+    required String authorName,
+    required String coverUrl,
+    required int pageCount,
+    required int totalBookmarks,
+    required String createDate,
+  }) async {
+    final db = await database;
+    final existing = await db.query(
+      'novels',
+      where: 'id = ?',
+      whereArgs: [workId],
+    );
+    final merged = <String, dynamic>{
+      'id': workId,
+      'title': title,
+      'description': description,
+      'author_name': authorName,
+      'cover_url': coverUrl,
+      'page_count': pageCount,
+      'total_bookmarks': totalBookmarks,
+      'create_date': createDate,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    if (existing.isNotEmpty) {
+      // 既存データを保持（NULL のものだけ新しい値で補完）
+      final row = existing.first;
+      merged['author_id'] = row['author_id'] ?? 0;
+      merged['series_id'] = row['series_id'] ?? 0;
+      merged['series_order'] = row['series_order'] ?? 0;
+      merged['text'] = row['text'] ?? '';
+      merged['text_length'] = row['text_length'] ?? 0;
+      merged['tags'] = row['tags'] ?? '';
+      merged['tags_json'] = row['tags_json'] ?? '';
+      merged['x_restrict'] = row['x_restrict'] ?? 0;
+      merged['novel_ai_type'] = row['novel_ai_type'] ?? 0;
+      merged['created_at'] = row['created_at'] ?? createDate;
+    }
+    return await db.insert(
+      'novels',
+      merged,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   /// 小説のベクトルを保存（UPSERT）
   Future<int> saveNovelEmbedding({
     required int workId,
@@ -434,8 +572,31 @@ class DatabaseService {
     return await db.insert('novel_embeddings', {
       'work_id': workId,
       'embedding': jsonEncode(embedding.toList()),
+      'model_id': RuriModelManager.embeddingModelId,
+      'model_version': RuriModelManager.embeddingModelVersion,
       'updated_at': DateTime.now().toIso8601String(),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// 指定した work_id のうち、novel_embeddings にベクトルが存在しないものを返す。
+  /// バックグラウンド Embedding 生成の対象抽出に使用する。
+  Future<List<int>> getWorkIdsWithoutEmbedding(List<int> workIds) async {
+    if (workIds.isEmpty) return [];
+    final db = await database;
+    final placeholders = List.filled(workIds.length, '?').join(',');
+    final rows = await db.query(
+      'novel_embeddings',
+      columns: ['work_id'],
+      where:
+          'work_id IN ($placeholders) AND model_id = ? AND model_version = ?',
+      whereArgs: [
+        ...workIds,
+        RuriModelManager.embeddingModelId,
+        RuriModelManager.embeddingModelVersion,
+      ],
+    );
+    final existing = rows.map((r) => r['work_id'] as int).toSet();
+    return workIds.where((id) => !existing.contains(id)).toList();
   }
 
   /// 購読タグを追加

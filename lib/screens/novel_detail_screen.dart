@@ -6,6 +6,7 @@ import 'novel_reader_screen.dart';
 import 'novel_series_episodes_screen.dart';
 import '../services/database_service.dart';
 import '../services/embedding_service.dart';
+import '../services/novel_document_text.dart';
 import '../services/pixiv_api_service.dart';
 import '../widgets/pixiv_image.dart';
 
@@ -57,12 +58,24 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
       // ベクトル生成・保存（キャプションを使用、バックグラウンドで実行）
       try {
         final embeddingService = EmbeddingService();
-        final textForEmbedding =
-            '${widget.novel.title}\n${widget.novel.caption}';
-        final embedding = await embeddingService.encode(textForEmbedding);
+        final textForEmbedding = buildNovelDocumentText(widget.novel);
+        final embedding = await embeddingService.encodeDocument(
+          textForEmbedding,
+        );
         await DatabaseService().saveNovelEmbedding(
           workId: widget.novel.id,
           embedding: embedding,
+        );
+        // フィーリング検索用メタデータを novels テーブルに保存
+        await DatabaseService().saveNovelMeta(
+          workId: widget.novel.id,
+          title: widget.novel.title,
+          description: widget.novel.caption,
+          authorName: widget.novel.author.name,
+          coverUrl: widget.novel.coverUrl,
+          pageCount: widget.novel.pageCount,
+          totalBookmarks: widget.novel.totalBookmarks,
+          createDate: widget.novel.createDate,
         );
       } catch (e) {
         debugPrint('ベクトル生成・保存に失敗しました（無視して続行）: $e');

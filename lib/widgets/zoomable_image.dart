@@ -8,6 +8,7 @@ class ZoomableImage extends StatefulWidget {
   final bool isLargeScreen;
   final double maxHeight;
   final ValueChanged<bool>? onZoomChanged;
+  final int? cacheWidth;
 
   const ZoomableImage({
     super.key,
@@ -15,6 +16,7 @@ class ZoomableImage extends StatefulWidget {
     required this.isLargeScreen,
     required this.maxHeight,
     this.onZoomChanged,
+    this.cacheWidth,
   });
 
   @override
@@ -71,6 +73,7 @@ class _ZoomableImageState extends State<ZoomableImage> {
       url: cleanedUrl,
       fit: BoxFit.contain,
       isThumbnail: false,
+      cacheWidth: widget.cacheWidth,
       errorWidget: Container(
         height: 300,
         color: Colors.grey[950],

@@ -295,12 +295,27 @@ extension _ReaderData on _NovelReaderScreenState {
       // ベクトル生成・保存（バックグラウンドで実行、失敗してもUIをブロックしない）
       try {
         final embeddingService = EmbeddingService();
-        final textForEmbedding =
-            '${_currentNovel.title}\n${_currentNovel.caption}\n${data.novelText}';
-        final embedding = await embeddingService.encode(textForEmbedding);
+        final textForEmbedding = buildNovelDocumentText(
+          _currentNovel,
+          bodyText: data.novelText,
+        );
+        final embedding = await embeddingService.encodeDocument(
+          textForEmbedding,
+        );
         await DatabaseService().saveNovelEmbedding(
           workId: data.id,
           embedding: embedding,
+        );
+        // フィーリング検索用メタデータを novels テーブルに保存
+        await DatabaseService().saveNovelMeta(
+          workId: data.id,
+          title: _currentNovel.title,
+          description: _currentNovel.caption,
+          authorName: _currentNovel.author.name,
+          coverUrl: _currentNovel.coverUrl,
+          pageCount: _currentNovel.pageCount,
+          totalBookmarks: _currentNovel.totalBookmarks,
+          createDate: _currentNovel.createDate,
         );
       } catch (e) {
         debugPrint('ベクトル生成・保存に失敗しました（無視して続行）: $e');
