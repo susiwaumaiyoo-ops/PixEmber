@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../illust_model.dart';
+import '../utils/datetime_format.dart';
 import '../widgets/pixiv_image.dart';
 import '../widgets/ugoira_player.dart';
 import '../widgets/zoomable_image.dart';
@@ -41,7 +43,10 @@ class IllustDetailUIComponents {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.bookmark_border, color: Colors.white),
+            icon: Icon(
+              state.isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+              color: Colors.white,
+            ),
             onPressed: () => state.handler.toggleBookmark(state),
           ),
           IconButton(
@@ -90,7 +95,10 @@ class IllustDetailUIComponents {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.bookmark_border, color: Colors.white),
+            icon: Icon(
+              state.isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+              color: Colors.white,
+            ),
             onPressed: () => state.handler.toggleBookmark(state),
           ),
           IconButton(
@@ -319,6 +327,8 @@ class IllustDetailUIComponents {
           children: state.illust.tags.map((tag) {
             return InkWell(
               onTap: () => state.onTagTap?.call(tag),
+              onLongPress: () =>
+                  state.handler.showSubscriptionDialog(context, tag),
               child: Chip(
                 label: Text(
                   tag,
@@ -359,7 +369,7 @@ class IllustDetailUIComponents {
             const SizedBox(width: 4),
             Expanded(
               child: Text(
-                state.illust.createDate,
+                DateTimeFormat.formatReadable(state.illust.createDate),
                 style: const TextStyle(color: Colors.grey, fontSize: 12),
               ),
             ),
@@ -485,6 +495,8 @@ class IllustDetailUIComponents {
           children: state.illust.tags.map((tag) {
             return InkWell(
               onTap: () => state.onTagTap?.call(tag),
+              onLongPress: () =>
+                  state.handler.showSubscriptionDialog(context, tag),
               child: Chip(
                 label: Text(
                   tag,
@@ -669,7 +681,7 @@ class IllustDetailUIComponents {
                 title: const Text('共有', style: TextStyle(color: Colors.white)),
                 onTap: () {
                   Navigator.pop(context);
-                  // TODO: 共有機能実装
+                  _shareArtwork(context, state);
                 },
               ),
               ListTile(
@@ -677,7 +689,7 @@ class IllustDetailUIComponents {
                 title: const Text('情報', style: TextStyle(color: Colors.white)),
                 onTap: () {
                   Navigator.pop(context);
-                  // TODO: 情報表示機能実装
+                  _showArtworkInfo(context, state);
                 },
               ),
             ],
@@ -705,6 +717,83 @@ class IllustDetailUIComponents {
           ),
         );
       },
+    );
+  }
+
+  void _shareArtwork(BuildContext context, IllustDetailState state) {
+    final url = 'https://www.pixiv.net/artworks/${state.illust.id}';
+    Clipboard.setData(ClipboardData(text: url));
+    if (state.context != null) {
+      ScaffoldMessenger.of(
+        state.context!,
+      ).showSnackBar(SnackBar(content: Text('作品URLをコピーしました: $url')));
+    }
+  }
+
+  void _showArtworkInfo(BuildContext context, IllustDetailState state) {
+    final illust = state.illust;
+    final tagsText = illust.tags.isNotEmpty
+        ? illust.tags.map((t) => '#$t').join('  ')
+        : '—';
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF222222),
+        title: Text(
+          illust.title,
+          style: const TextStyle(color: Colors.white, fontSize: 16),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _infoRow('作品ID', '${illust.id}'),
+              _infoRow(
+                '投稿日時',
+                DateTimeFormat.formatReadable(illust.createDate),
+              ),
+              _infoRow('画像サイズ', '${illust.width} × ${illust.height}'),
+              _infoRow('ブックマーク数', '${illust.totalBookmarks}'),
+              _infoRow('閲覧数', '${illust.totalView}'),
+              _infoRow('タグ', tagsText),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text(
+              '閉じる',
+              style: TextStyle(color: Colors.pinkAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

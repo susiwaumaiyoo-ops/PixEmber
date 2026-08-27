@@ -96,30 +96,28 @@ class _FolderItemsScreenState extends State<FolderItemsScreen> {
   }
 
   void _onItemTap(dynamic item) async {
-    final itemId = item['item_id'];
+    final itemId = item['work_id'] is int
+        ? item['work_id'] as int
+        : int.tryParse(item['work_id']?.toString() ?? '') ?? 0;
     final type = item['type'].toString();
 
     if (type == 'illust') {
       setState(() => _isLoading = true);
       try {
-        final result = await _pixivApiService.getRecommend(offset: 0);
-        final list = result.items;
-        final target = list.where((i) => i.id == itemId).firstOrNull;
-        if (target != null) {
-          if (!mounted) return;
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => IllustDetailScreen(
-                illust: target,
-                onTagTap: (tag) {},
-                onBookmarkChanged: (bookmarked) {
-                  _fetchItems();
-                },
-              ),
+        final target = await _pixivApiService.getIllustById(itemId);
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => IllustDetailScreen(
+              illust: target,
+              onTagTap: (tag) {},
+              onBookmarkChanged: (bookmarked) {
+                _fetchItems();
+              },
             ),
-          );
-        }
+          ),
+        );
       } catch (_) {}
       if (!mounted) return;
       setState(() => _isLoading = false);

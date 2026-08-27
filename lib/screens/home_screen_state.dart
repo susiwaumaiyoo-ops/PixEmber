@@ -8,8 +8,11 @@ import '../services/pixiv_api_service.dart';
 import 'bookmark_list_screen.dart';
 import 'history_screen.dart';
 import 'feeling_discovery_screen.dart';
+import 'ai_recommend_feed_screen.dart';
 import 'folder_list_screen.dart';
 import 'mute_settings_screen.dart';
+import 'subscriptions_screen.dart';
+import 'read_later_screen.dart';
 import 'home_ui_components.dart';
 import 'home_filter_handler.dart';
 import 'home_sync_handler.dart';
@@ -18,6 +21,7 @@ import 'dart:math';
 import 'package:http/http.dart' as http;
 import '../services/database_service.dart';
 import '../services/embedding_service.dart';
+import '../services/ruri_model_manager.dart';
 import '../services/novel_document_text.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:crypto/crypto.dart';
@@ -74,12 +78,51 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
       'partial_match_for_tags'; // partial_match_for_tags, exact_match_for_tags, title_and_caption
   String selectedSort = 'date_desc'; // date_desc, date_asc, popular_desc
 
+  // キーワード結合モード: and=スペース区切り(AND), or=' OR '区切り(OR)
+  String selectedKeywordMode = 'and';
+  // 除外キーワード（スペース区切り）。pixiv の "-word" 構文で送信される。
+  late final TextEditingController excludeKeywordController =
+      TextEditingController();
+
+  /// pixiv の検索ワードを組み立てる。
+  /// AND はスペース区切り、OR は ' OR ' 区切り、NOT は '-word'。
+  /// 単一キーワードの場合は従来と完全に同じ文字列になる。
+  static String buildSearchWord(
+    String raw, {
+    String mode = 'and',
+    String exclude = '',
+  }) {
+    final words = raw
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .toList();
+    var base = mode == 'or' ? words.join(' OR ') : words.join(' ');
+    final excludes = exclude
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .map((w) => w.startsWith('-') ? w : '-$w');
+    for (final e in excludes) {
+      base = base.isEmpty ? e : '$base $e';
+    }
+    return base;
+  }
+
   // 高度な検索フィルター設定
   String selectedWorkType = 'all'; // all, illust, manga, ugoira, novel
-  String selectedAgeLimit = 'all'; // all, safe, r18
+  // 年齢制限: all=全年齢のみ, include_r18=R-18含む, r18=R-18のみ, r18g=R-18G含む
+  String selectedAgeLimit = 'all';
   String selectedDuration =
       'all'; // all, within_last_day, within_last_week, within_last_month
+  // 最小ブックマーク数（0=指定なし）。検索ワードに "Nusers入り" として渡す。
+  // 最小ブックマーク数（0=指定なし）。検索ワードに "Nusers入り" として渡す。
   int selectedBookmarkFilter = 0; // 0, 100, 500, 1000, 5000, 10000
+  // 最小ブックマーク数の自由入力欄（UI用）。空なら selectedBookmarkFilter を使用。
+  late final TextEditingController minBookmarkController =
+      TextEditingController();
+  // イラスト AI フィルター（アプリ内ローカルで適用）: all, hide, only
+  String selectedIllustAiFilter = 'all';
 
   // 小説専用の検索フィルター設定
   String selectedNovelSearchTarget =
@@ -109,11 +152,12 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   // 表示密度：'comfortable'=可読性重視 / 'compact'=情報密度重視
   String novelDensityMode = 'comfortable';
 
-  // ボトムナビゲーション用 (0: イラスト，1: 小説，2: フィーリング発掘)
+  // ボトムナビゲーション用 (0: イラスト，1: 小説，2: フィーリング発掘，3: AIレコメンド)
   int currentIndex = 0;
   static const int illustIndex = 0;
   static const int novelIndex = 1;
   static const int feelingDiscoveryIndex = 2;
+  static const int recommendIndex = 3;
 
   // イラストタブ内のサブ表示モード (0: おすすめ，1: 検索結果，2: ランキング)
   int illustSubMode = 0;
@@ -123,6 +167,11 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   // データリスト
   List<Illust> illusts = [];
   List<Novel> novels = [];
+
+  /// アプリ内しおり（読書進捗）の小説ID集合。
+  /// 一覧描画時にカードごとの SharedPreferences 読み込みを防ぐため、
+  /// 起動時に1回だけ読み込んで保持する。
+  final Set<int> localBookmarkIds = {};
 
   // 百科事典データ
   SearchItem? searchItem;
@@ -158,16 +207,18 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     {'value': 'day_male', 'label': '男性向け'},
     {'value': 'day_female', 'label': '女性向け'},
     {'value': 'day_r18', 'label': 'R-18 デイリー'},
-    {'value': 'day_r18_male', 'label': 'R-18 男性向け'},
-    {'value': 'day_r18_female', 'label': 'R-18 女性向け'},
+    {'value': 'day_male_r18', 'label': 'R-18 男性向け'},
+    {'value': 'day_female_r18', 'label': 'R-18 女性向け'},
   ];
 
   final List<Map<String, String>> novelRankModes = [
     {'value': 'day', 'label': 'デイリー'},
     {'value': 'week', 'label': 'ウィークリー'},
-    {'value': 'month', 'label': 'マンスリー'},
-    {'value': 'day_new', 'label': '新作'},
+    {'value': 'day_male', 'label': '男性向け'},
+    {'value': 'day_female', 'label': '女性向け'},
     {'value': 'day_r18', 'label': 'R-18 デイリー'},
+    {'value': 'day_male_r18', 'label': 'R-18 男性向け'},
+    {'value': 'day_female_r18', 'label': 'R-18 女性向け'},
   ];
 
   // 検索履歴
@@ -198,14 +249,35 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     _uiComponents = HomeUIComponents(this);
     _syncHandler = HomeSyncHandler(this);
 
+    // 検索窓フォーカス時に候補オーバーレイを表示（空欄なら履歴全件）
+    searchFocusNode.addListener(() {
+      if (searchFocusNode.hasFocus && !_showHistoryList) {
+        setState(() => _showHistoryList = true);
+      }
+    });
+
     _loadSearchHistory();
     _initializeDriveSync();
     fetchData();
+    _loadLocalBookmarkIds();
+
+    // 起動時の1回限り軽量清掃：旧バグ版で保存された id=0 の無効小説レコードを削除。
+    // ブロックせずバックグラウンドで実行（失敗しても起動に影響なし）。
+    DatabaseService().cleanupInvalidNovelRecords();
 
     // 起動後、最初のフレーム描画後にトークンを確認し、
     // 未ログインなら PKCE ログイン画面を自動表示する
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       _checkLoginOnStart();
+
+      // アクティブAIモデルのキャッシュをSharedPreferencesから最新化（モデル切り替え後も反映）。
+      await RuriModelManager().getActiveModelId();
+
+      // 埋め込みモデルがダウンロード済みなら、起動時にバックグラウンドで初期化。
+      // これにより小説詳細を開いた際の「EmbeddingService が初期化されていません」を防ぐ。
+      if (await RuriModelManager().isModelReady()) {
+        unawaited(EmbeddingService().initialize());
+      }
     });
   }
 
@@ -219,6 +291,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     minSeriesTextLengthController?.dispose();
     maxSeriesTextLengthController?.dispose();
     _excludeTagController?.dispose();
+    minBookmarkController.dispose();
     _syncTimer?.cancel();
     super.dispose();
   }
@@ -270,8 +343,16 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   void onSearchSubmit(String query) {
     if (query.trim().isEmpty) return;
     _saveSearchHistory(query);
+    // DB 検索履歴にも保存（使用回数・最新日時付き）。失敗しても検索は継続。
+    DatabaseService()
+        .addSearchHistory(query.trim())
+        .catchError((e) => debugPrint('検索履歴DB保存に失敗（無視）: $e'));
     setState(() {
-      _currentSearchWord = query;
+      _currentSearchWord = buildSearchWord(
+        query,
+        mode: selectedKeywordMode,
+        exclude: excludeKeywordController.text,
+      );
       _showHistoryList = false;
       if (currentIndex == illustIndex) {
         illustSubMode = 1;
@@ -309,6 +390,19 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     onSearchSubmit(tag);
   }
 
+  // 購読タグ一覧からタグが選択されたときの処理。
+  // type に応じて適切なタブへ切り替えてから検索を実行する。
+  void onSubscribedTagSelected(String tag, String type) {
+    final targetIndex = type == 'novel' ? novelIndex : illustIndex;
+    if (currentIndex != targetIndex) {
+      setState(() {
+        currentIndex = targetIndex;
+      });
+    }
+    searchController.text = tag;
+    onSearchSubmit(tag);
+  }
+
   // タブ変更（subMode を指定した場合はそのサブモードへ切り替える）
   void changeTab(int index, [int? subMode]) {
     if (currentIndex == index) return;
@@ -321,8 +415,8 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
       } else if (index == novelIndex) {
         novelSubMode = subMode ?? 0;
       }
-      // フィーリング発掘は Pixiv API 一覧取得タブではないためローディングを解除
-      if (index == feelingDiscoveryIndex) {
+      // フィーリング発掘・AIレコメンドは Pixiv API 一覧取得タブではないためローディングを解除
+      if (index == feelingDiscoveryIndex || index == recommendIndex) {
         isLoading = false;
         errorMessage = null;
       }
@@ -345,14 +439,24 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     fetchData();
   }
 
-  /// 現在のタブのランキングモードを変更する公開 API。
   void changeRankMode(String? mode) {
     if (mode == null) return;
+    final validIllustValues = illustRankModes
+        .map((m) => m['value'])
+        .whereType<String>()
+        .toSet();
+    final validNovelValues = novelRankModes
+        .map((m) => m['value'])
+        .whereType<String>()
+        .toSet();
     setState(() {
       if (currentIndex == illustIndex) {
-        selectedIllustRankMode = mode;
+        // サポート外モードは既定値へフォールバック（後方互換）
+        selectedIllustRankMode = validIllustValues.contains(mode)
+            ? mode
+            : 'day';
       } else if (currentIndex == novelIndex) {
-        selectedNovelRankMode = mode;
+        selectedNovelRankMode = validNovelValues.contains(mode) ? mode : 'day';
       }
     });
     fetchData();
@@ -396,16 +500,29 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
           });
         } else if (illustSubMode == 1) {
           // 検索結果
+          // 最小ブックマーク数（自由入力）を bookmarkFilter に反映
+          final minBm = int.tryParse(minBookmarkController.text.trim());
+          final effectiveBookmarkFilter = minBm != null && minBm > 0
+              ? minBm
+              : selectedBookmarkFilter;
           final result = await _pixivApiService.searchIllust(
             _currentSearchWord,
             selectedSearchTarget,
             selectedSort,
             0,
             selectedAgeLimit,
-            bookmarkFilter: selectedBookmarkFilter,
+            bookmarkFilter: effectiveBookmarkFilter,
           );
+          // AIフィルター（アプリ内ローカル適用）
+          List<Illust> filtered = result.items;
+          if (selectedIllustAiFilter != 'all') {
+            filtered = filtered.where((it) {
+              final isAi = it.aiType == 2;
+              return selectedIllustAiFilter == 'only' ? isAi : !isAi;
+            }).toList();
+          }
           setState(() {
-            illusts = result.items;
+            illusts = filtered;
             nextOffset = result.nextOffset;
             searchItem = result.searchItem;
             isLoading = false;
@@ -512,15 +629,21 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   /// - エラーは debugPrint のみ（アプリを落とさない）
   void _generateEmbeddingsInBackground(List<Novel> novels) {
     if (novels.isEmpty) return;
-    // モデル未初期化なら何もしない（フィーリング発掘タブ未使用時の無駄な読込を回避）
+    // モデル未初期化なら何もしない（ユーザーが小説を開いた時の生成を優先）
     final embeddingService = EmbeddingService();
     if (!embeddingService.isInitialized) return;
 
     final candidateIds = novels.map((n) => n.id).where((id) => id > 0).toList();
     if (candidateIds.isEmpty) return;
 
-    // 非同期で抽出＋生成を実行（UI スレッドを止めない）
-    unawaited(_runBackgroundEmbeddingGeneration(candidateIds));
+    // 一覧取得直後は UI 描画が重いため、短いバッファを入れてから開始する。
+    // （mounted チェックは不要だが、画面遷移でキャンセルされる可能性を考慮）
+    unawaited(
+      Future.delayed(const Duration(seconds: 2)).then((_) async {
+        if (!EmbeddingService().isInitialized) return;
+        await _runBackgroundEmbeddingGeneration(candidateIds);
+      }),
+    );
   }
 
   Future<void> _runBackgroundEmbeddingGeneration(List<int> candidateIds) async {
@@ -544,23 +667,22 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
 
       for (final workId in toProcess) {
         try {
-          final novel = novels.firstWhere((n) => n.id == workId);
+          // 表示リストにない作品（DB上のIDのみ等）はスキップして続行
+          final matches = novels.where((n) => n.id == workId);
+          if (matches.isEmpty) {
+            debugPrint(
+              'vectorizeTagNovels: workId=$workId not found in displayed list, skip',
+            );
+            continue;
+          }
+          final novel = matches.first;
           final text = buildNovelDocumentText(novel);
           final vector = await embeddingService.encodeDocument(text);
           await DatabaseService().saveNovelEmbedding(
             workId: workId,
             embedding: vector,
           );
-          await DatabaseService().saveNovelMeta(
-            workId: workId,
-            title: novel.title,
-            description: novel.caption,
-            authorName: novel.author.name,
-            coverUrl: novel.coverUrl,
-            pageCount: novel.pageCount,
-            totalBookmarks: novel.totalBookmarks,
-            createDate: novel.createDate,
-          );
+          await DatabaseService().saveNovel(novel);
         } catch (e) {
           debugPrint('background embedding failed for workId=$workId: $e');
         } finally {
@@ -569,6 +691,109 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
       }
     } catch (e) {
       debugPrint('background embedding extraction failed: $e');
+    }
+  }
+
+  /// 表示中の小説タグ検索結果を一括でベクトル化（フィーリング検索の対象に追加）。
+  ///
+  /// - 小説タブの検索結果（[novels]）を対象とする
+  /// - 既に novel_embeddings にあるものはスキップ
+  /// - 1件ずつ順次処理し、各処理間に 200ms の間隔を空ける（ONNX 推論は重いため）
+  /// - 未初期化なら自動で initialize() してから開始
+  /// - 進捗は SnackBar で通知し、処理中も UI をブロックしない
+  /// - mounted チェックでキャンセル可能（画面遷移等で安全に中断）
+  Future<void> vectorizeTagNovels() async {
+    if (currentIndex != novelIndex) return;
+    if (searchItem == null) return;
+    if (novels.isEmpty) return;
+
+    final embeddingService = EmbeddingService();
+    if (!embeddingService.isInitialized) {
+      // 未初期化なら自動初期化（失敗したらメッセージを出して終了）
+      try {
+        await embeddingService.initialize();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('AIモデルの準備中に失敗しました: $e')));
+        }
+        return;
+      }
+      if (!embeddingService.isInitialized) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('AIモデルの準備中です。しばらくしてから再度お試しください。')),
+          );
+        }
+        return;
+      }
+    }
+
+    final candidateIds = novels.map((n) => n.id).where((id) => id > 0).toList();
+    if (candidateIds.isEmpty) return;
+
+    List<int> targets;
+    try {
+      targets = await DatabaseService().getWorkIdsWithoutEmbedding(
+        candidateIds,
+      );
+    } catch (e) {
+      debugPrint('vectorizeTagNovels: target extraction failed: $e');
+      return;
+    }
+    // 重複・生成中を除外
+    final toProcess = targets
+        .where((id) => !_backgroundEmbeddingInProgress.contains(id))
+        .toList();
+    if (toProcess.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('すべての小説はすでに学習済みです。')));
+      }
+      return;
+    }
+
+    final total = toProcess.length;
+    var done = 0;
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('AI学習中: 0/$total 件完了')));
+    }
+
+    for (final workId in toProcess) {
+      if (!mounted) break; // キャンセル（画面遷移等）
+      _backgroundEmbeddingInProgress.add(workId);
+      try {
+        final novel = novels.firstWhere((n) => n.id == workId);
+        final text = buildNovelDocumentText(novel);
+        final vector = await embeddingService.encodeDocument(text);
+        await DatabaseService().saveNovelEmbedding(
+          workId: workId,
+          embedding: vector,
+        );
+        await DatabaseService().saveNovel(novel);
+        done++;
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('AI学習中: $done/$total 件完了')));
+        }
+      } catch (e) {
+        debugPrint('vectorizeTagNovels: failed for workId=$workId: $e');
+      } finally {
+        _backgroundEmbeddingInProgress.remove(workId);
+      }
+      // 各処理間に 200ms の間隔を空ける（UI スレッドを解放）
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$done 件の小説をフィーリング検索の対象に追加しました')));
     }
   }
 
@@ -595,16 +820,27 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
           });
         } else if (illustSubMode == 1) {
           // 検索結果
+          final minBm = int.tryParse(minBookmarkController.text.trim());
+          final effectiveBookmarkFilter = minBm != null && minBm > 0
+              ? minBm
+              : selectedBookmarkFilter;
           final result = await _pixivApiService.searchIllust(
             _currentSearchWord,
             selectedSearchTarget,
             selectedSort,
             nextOffset!,
             selectedAgeLimit,
-            bookmarkFilter: selectedBookmarkFilter,
+            bookmarkFilter: effectiveBookmarkFilter,
           );
+          List<Illust> filtered = result.items;
+          if (selectedIllustAiFilter != 'all') {
+            filtered = filtered.where((it) {
+              final isAi = it.aiType == 2;
+              return selectedIllustAiFilter == 'only' ? isAi : !isAi;
+            }).toList();
+          }
           setState(() {
-            illusts.addAll(result.items);
+            illusts.addAll(filtered);
             nextOffset = result.nextOffset;
             searchItem = result.searchItem ?? searchItem;
             _isFetchingNextPage = false;
@@ -1080,42 +1316,17 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     }
   }
 
-  // 読書中（しおり）の小説の簡易情報を取得する
-  Future<List<Map<String, dynamic>>> getRecentBookmarks() async {
+  // アプリ内しおり（読書進捗）の小説IDを1回だけ SharedPreferences から読み込み、
+  // カード描画時に同期判定できるようメモリに保持する。
+  Future<void> _loadLocalBookmarkIds() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final List<String> bookmarkedIds =
-          prefs.getStringList('novel_bookmark_ids') ?? [];
-      final List<Map<String, dynamic>> results = [];
-
-      for (final idStr in bookmarkedIds) {
-        final id = int.tryParse(idStr);
-        if (id == null) continue;
-
-        final title = prefs.getString('novel_title_$id');
-        final author = prefs.getString('novel_author_$id');
-        final progress = prefs.getDouble('novel_progress_$id') ?? 0.0;
-        final lastRead = prefs.getInt('novel_last_read_$id') ?? 0;
-
-        if (title != null && progress > 0.0 && progress < 100.0) {
-          // 読了 (100%) していないものを対象
-          results.add({
-            'id': id,
-            'title': title,
-            'author': author ?? '不明',
-            'progress': progress,
-            'lastRead': lastRead,
-          });
-        }
-      }
-
-      // 最終読書日時（lastRead）が新しい順にソート
-      results.sort((a, b) => b['lastRead'].compareTo(a['lastRead']));
-
-      return results.take(5).toList();
+      final idStrs = prefs.getStringList('novel_bookmark_ids') ?? [];
+      localBookmarkIds
+        ..clear()
+        ..addAll(idStrs.map((s) => int.tryParse(s)).whereType<int>());
     } catch (e) {
-      debugPrint('しおり履歴の取得失敗：$e');
-      return [];
+      debugPrint('しおりIDの読み込み失敗：$e');
     }
   }
 
@@ -1193,30 +1404,6 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.image, color: Colors.pinkAccent),
-              title: const Text('イラスト (Illusts)'),
-              onTap: () {
-                Navigator.pop(context);
-                changeTab(illustIndex);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.menu_book, color: Colors.pinkAccent),
-              title: const Text('小説 (Novels)'),
-              onTap: () {
-                Navigator.pop(context);
-                changeTab(novelIndex); // スムーズな切り替え連動
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.auto_awesome, color: Colors.pinkAccent),
-              title: const Text('フィーリング発掘'),
-              onTap: () {
-                Navigator.pop(context);
-                changeTab(feelingDiscoveryIndex);
-              },
-            ),
-            ListTile(
               leading: const Icon(Icons.bookmark, color: Colors.pinkAccent),
               title: const Text('しおり一覧'),
               onTap: () {
@@ -1268,6 +1455,95 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                 );
               },
             ),
+            FutureBuilder<int>(
+              future: DatabaseService().getSubscriptionUnreadCount(),
+              initialData: 0,
+              builder: (context, snapshot) {
+                final unread = snapshot.data ?? 0;
+                return ListTile(
+                  leading: const Icon(Icons.stars, color: Colors.pinkAccent),
+                  title: const Text('購読タグ'),
+                  trailing: unread > 0
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.pinkAccent,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            unread > 999 ? '999+' : unread.toString(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        )
+                      : null,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => SubscriptionsScreen(
+                          onTagSelected: (tag, type) =>
+                              onSubscribedTagSelected(tag, type),
+                        ),
+                      ),
+                    ).then((_) {
+                      // 購読画面から戻った際に未読バッジを再取得・反映
+                      if (mounted) setState(() {});
+                    });
+                  },
+                );
+              },
+            ),
+            FutureBuilder<int>(
+              future: DatabaseService().getReadLaterUnreadCount(),
+              initialData: 0,
+              builder: (context, snapshot) {
+                final unread = snapshot.data ?? 0;
+                return ListTile(
+                  leading: const Icon(
+                    Icons.bookmark_add_outlined,
+                    color: Colors.pinkAccent,
+                  ),
+                  title: const Text('あとで読む'),
+                  trailing: unread > 0
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.pinkAccent,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            unread > 999 ? '999+' : unread.toString(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        )
+                      : null,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ReadLaterScreen(),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
             // ログイン/ログアウトボタン
             ListTile(
               leading: Icon(
@@ -1305,73 +1581,82 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
           Column(
             children: [
               // 検索バー (フィルターオプションボタン付き)
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: searchController,
-                        focusNode: searchFocusNode,
-                        decoration: InputDecoration(
-                          hintText: currentIndex == illustIndex
-                              ? 'イラスト、タグ、キーワードを検索...'
-                              : currentIndex == novelIndex
-                              ? '小説、タグ、キーワードを検索...'
-                              : '気分やキーワードを入力...',
-                          prefixIcon: const Icon(Icons.search, size: 20),
-                          suffixIcon: searchController.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear, size: 18),
-                                  onPressed: resetSearch,
-                                )
-                              : null,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
+              // フィーリング発掘タブでは、画面側(AppBar.bottom)に専用検索バーがあるため非表示
+              if (currentIndex != feelingDiscoveryIndex)
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: searchController,
+                          focusNode: searchFocusNode,
+                          decoration: InputDecoration(
+                            hintText: currentIndex == illustIndex
+                                ? 'イラスト、タグ、キーワードを検索...'
+                                : currentIndex == novelIndex
+                                ? '小説、タグ、キーワードを検索...'
+                                : '気分やキーワードを入力...',
+                            prefixIcon: const Icon(Icons.search, size: 20),
+                            suffixIcon: searchController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear, size: 18),
+                                    onPressed: resetSearch,
+                                  )
+                                : null,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest
+                                .withValues(alpha: 0.4),
+                            isDense: true,
                           ),
-                          filled: true,
-                          fillColor: Theme.of(context)
-                              .colorScheme
-                              .surfaceContainerHighest
-                              .withValues(alpha: 0.4),
-                          isDense: true,
+                          textInputAction: TextInputAction.search,
+                          onSubmitted: onSearchSubmit,
+                          onChanged: (val) {
+                            // 入力中は検索候補（DB履歴 + 購読タグ）オーバーレイを表示
+                            if (searchFocusNode.hasFocus && val.isNotEmpty) {
+                              if (!_showHistoryList) {
+                                setState(() => _showHistoryList = true);
+                              } else {
+                                setState(() {});
+                              }
+                            }
+                          },
                         ),
-                        textInputAction: TextInputAction.search,
-                        onSubmitted: onSearchSubmit,
-                        onChanged: (val) {
-                          setState(() {});
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: Icon(
+                          Icons.tune,
+                          color: currentIndex == illustIndex
+                              ? Colors.pinkAccent
+                              : currentIndex == novelIndex
+                              ? Colors.tealAccent
+                              : Colors.amberAccent,
+                        ),
+                        onPressed: () {
+                          FocusScope.of(context).unfocus();
+                          if (currentIndex == illustIndex) {
+                            showFilterBottomSheet();
+                          } else if (currentIndex == novelIndex) {
+                            showNovelFilterBottomSheet();
+                          }
+                          // フィーリング発掘タブではフィルターなし
                         },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: Icon(
-                        Icons.tune,
-                        color: currentIndex == illustIndex
-                            ? Colors.pinkAccent
+                        tooltip: currentIndex == illustIndex
+                            ? '検索フィルター'
                             : currentIndex == novelIndex
-                            ? Colors.tealAccent
-                            : Colors.amberAccent,
+                            ? '小説検索フィルター'
+                            : 'フィルターなし',
                       ),
-                      onPressed: () {
-                        FocusScope.of(context).unfocus();
-                        if (currentIndex == illustIndex) {
-                          showFilterBottomSheet();
-                        } else if (currentIndex == novelIndex) {
-                          showNovelFilterBottomSheet();
-                        }
-                        // フィーリング発掘タブではフィルターなし
-                      },
-                      tooltip: currentIndex == illustIndex
-                          ? '検索フィルター'
-                          : currentIndex == novelIndex
-                          ? '小説検索フィルター'
-                          : 'フィルターなし',
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
 
               // 3. サブモードセレクター (おすすめ / ランキング)。※検索結果時はサブタブは表示しません。
               // フィーリング発掘タブでは非表示
@@ -1389,16 +1674,14 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                   searchItem != null)
                 _uiComponents.buildEncyclopediaCard(context),
 
-              // 読書中（しおり）の小説セクション (小説タブかつ非検索時に表示)
-              if (currentIndex == novelIndex && activeSubMode != 1)
-                _uiComponents.buildRecentBookmarksSection(),
-
               // 6. メインデータコンテンツ
               // フィーリング発掘はホーム側の共通ローディング/エラーに遮断されない
               // 独立画面として扱う（判定を isLoading / errorMessage より前に置く）
               Expanded(
                 child: currentIndex == feelingDiscoveryIndex
                     ? const FeelingDiscoveryScreen()
+                    : currentIndex == recommendIndex
+                    ? const AiRecommendFeedScreen()
                     : isLoading
                     ? const Center(
                         child: Column(

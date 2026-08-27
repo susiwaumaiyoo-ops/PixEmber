@@ -125,30 +125,58 @@ class HomeFilterHandler {
                         runSpacing: 8,
                         children: [
                           _buildChoiceChip(
-                            label: 'タイトル',
-                            isSelected:
-                                state.selectedNovelSearchTarget == 'title',
-                            onSelected: (bool value) {
-                              setModalState(() {
-                                state.selectedNovelSearchTarget = 'title';
-                              });
-                              _saveNovelFilterPrefs();
-                            },
-                          ),
-                          _buildChoiceChip(
-                            label: '説明',
+                            label: 'タグ（部分一致）',
                             isSelected:
                                 state.selectedNovelSearchTarget ==
-                                'description',
+                                'partial_match_for_tags',
                             onSelected: (bool value) {
                               setModalState(() {
-                                state.selectedNovelSearchTarget = 'description';
+                                state.selectedNovelSearchTarget =
+                                    'partial_match_for_tags';
                               });
                               _saveNovelFilterPrefs();
                             },
                           ),
                           _buildChoiceChip(
-                            label: '全てのテキスト',
+                            label: 'タグ（完全一致）',
+                            isSelected:
+                                state.selectedNovelSearchTarget ==
+                                'exact_match_for_tags',
+                            onSelected: (bool value) {
+                              setModalState(() {
+                                state.selectedNovelSearchTarget =
+                                    'exact_match_for_tags';
+                              });
+                              _saveNovelFilterPrefs();
+                            },
+                          ),
+                          _buildChoiceChip(
+                            label: 'タグ・タイトル・説明',
+                            isSelected:
+                                state.selectedNovelSearchTarget ==
+                                'title_and_caption',
+                            onSelected: (bool value) {
+                              setModalState(() {
+                                state.selectedNovelSearchTarget =
+                                    'title_and_caption';
+                              });
+                              _saveNovelFilterPrefs();
+                            },
+                          ),
+                          // 本文検索は小説のみ有効
+                          _buildChoiceChip(
+                            label: '本文',
+                            isSelected:
+                                state.selectedNovelSearchTarget == 'text',
+                            onSelected: (bool value) {
+                              setModalState(() {
+                                state.selectedNovelSearchTarget = 'text';
+                              });
+                              _saveNovelFilterPrefs();
+                            },
+                          ),
+                          _buildChoiceChip(
+                            label: '全てのテキスト（タグ+本文）',
                             isSelected:
                                 state.selectedNovelSearchTarget == 'all_text',
                             onSelected: (bool value) {
@@ -525,39 +553,86 @@ class HomeFilterHandler {
                       ),
                       const SizedBox(height: 20),
 
+                      // キーワード結合モード（AND / OR）と除外キーワード（NOT）
+                      _buildFilterSectionTitle('キーワード条件'),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _buildChoiceChip(
+                            label: 'AND（すべて含む）',
+                            isSelected: state.selectedKeywordMode == 'and',
+                            onSelected: (bool value) {
+                              setModalState(() {
+                                state.selectedKeywordMode = 'and';
+                              });
+                            },
+                          ),
+                          _buildChoiceChip(
+                            label: 'OR（いずれか含む）',
+                            isSelected: state.selectedKeywordMode == 'or',
+                            onSelected: (bool value) {
+                              setModalState(() {
+                                state.selectedKeywordMode = 'or';
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: state.excludeKeywordController,
+                        decoration: const InputDecoration(
+                          labelText: '除外キーワード（NOT・スペース区切り）',
+                          hintText: '例: 腐向け ネタ',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
                       // 検索ターゲット
                       _buildFilterSectionTitle('検索ターゲット'),
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
                         children: [
+                          // pixiv App-API の search_target 有効値のみを選択させる
                           _buildChoiceChip(
-                            label: 'タイトル',
-                            isSelected: state.selectedSearchTarget == 'title',
-                            onSelected: (bool value) {
-                              setModalState(() {
-                                state.selectedSearchTarget = 'title';
-                              });
-                              _saveFilterPrefs();
-                            },
-                          ),
-                          _buildChoiceChip(
-                            label: '説明',
+                            label: 'タグ（部分一致）',
                             isSelected:
-                                state.selectedSearchTarget == 'description',
+                                state.selectedSearchTarget ==
+                                'partial_match_for_tags',
                             onSelected: (bool value) {
                               setModalState(() {
-                                state.selectedSearchTarget = 'description';
+                                state.selectedSearchTarget =
+                                    'partial_match_for_tags';
                               });
                               _saveFilterPrefs();
                             },
                           ),
                           _buildChoiceChip(
-                            label: 'タグ',
-                            isSelected: state.selectedSearchTarget == 'tags',
+                            label: 'タグ（完全一致）',
+                            isSelected:
+                                state.selectedSearchTarget ==
+                                'exact_match_for_tags',
                             onSelected: (bool value) {
                               setModalState(() {
-                                state.selectedSearchTarget = 'tags';
+                                state.selectedSearchTarget =
+                                    'exact_match_for_tags';
+                              });
+                              _saveFilterPrefs();
+                            },
+                          ),
+                          _buildChoiceChip(
+                            label: 'タグ・タイトル・説明',
+                            isSelected:
+                                state.selectedSearchTarget ==
+                                'title_and_caption',
+                            onSelected: (bool value) {
+                              setModalState(() {
+                                state.selectedSearchTarget =
+                                    'title_and_caption';
                               });
                               _saveFilterPrefs();
                             },
@@ -573,7 +648,7 @@ class HomeFilterHandler {
                         runSpacing: 8,
                         children: [
                           _buildChoiceChip(
-                            label: '全年齢',
+                            label: '全年齢のみ',
                             isSelected: state.selectedAgeLimit == 'all',
                             onSelected: (bool value) {
                               setModalState(() {
@@ -583,7 +658,17 @@ class HomeFilterHandler {
                             },
                           ),
                           _buildChoiceChip(
-                            label: 'R-18',
+                            label: 'R-18を含む',
+                            isSelected: state.selectedAgeLimit == 'include_r18',
+                            onSelected: (bool value) {
+                              setModalState(() {
+                                state.selectedAgeLimit = 'include_r18';
+                              });
+                              _saveFilterPrefs();
+                            },
+                          ),
+                          _buildChoiceChip(
+                            label: 'R-18のみ',
                             isSelected: state.selectedAgeLimit == 'r18',
                             onSelected: (bool value) {
                               setModalState(() {
@@ -593,7 +678,7 @@ class HomeFilterHandler {
                             },
                           ),
                           _buildChoiceChip(
-                            label: 'R-18G',
+                            label: 'R-18Gを含む',
                             isSelected: state.selectedAgeLimit == 'r18g',
                             onSelected: (bool value) {
                               setModalState(() {
@@ -601,6 +686,90 @@ class HomeFilterHandler {
                               });
                               _saveFilterPrefs();
                             },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+
+                      // AIフィルター（アプリ内ローカル適用）
+                      _buildFilterSectionTitle('AIフィルター'),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _buildChoiceChip(
+                            label: 'すべて',
+                            isSelected: state.selectedIllustAiFilter == 'all',
+                            onSelected: (bool value) {
+                              setModalState(() {
+                                state.selectedIllustAiFilter = 'all';
+                              });
+                              _saveFilterPrefs();
+                            },
+                          ),
+                          _buildChoiceChip(
+                            label: 'AI以外',
+                            isSelected: state.selectedIllustAiFilter == 'hide',
+                            onSelected: (bool value) {
+                              setModalState(() {
+                                state.selectedIllustAiFilter = 'hide';
+                              });
+                              _saveFilterPrefs();
+                            },
+                          ),
+                          _buildChoiceChip(
+                            label: 'AIのみ',
+                            isSelected: state.selectedIllustAiFilter == 'only',
+                            onSelected: (bool value) {
+                              setModalState(() {
+                                state.selectedIllustAiFilter = 'only';
+                              });
+                              _saveFilterPrefs();
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+
+                      // 最小ブックマーク数
+                      _buildFilterSectionTitle('最小ブックマーク数'),
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 140,
+                            child: TextField(
+                              controller: state.minBookmarkController,
+                              keyboardType: TextInputType.number,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: '例: 1000',
+                                hintStyle: TextStyle(
+                                  color: Colors.grey[500],
+                                  fontSize: 13,
+                                ),
+                                filled: true,
+                                fillColor: const Color(0xFF2E2E2E),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            '以上',
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 13,
+                            ),
                           ),
                         ],
                       ),
@@ -776,6 +945,34 @@ class HomeFilterHandler {
                         ],
                       ),
                       const SizedBox(height: 32),
+
+                      // リセットボタン
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Colors.pinkAccent),
+                          ),
+                          onPressed: () {
+                            setModalState(() {
+                              state.selectedSearchTarget =
+                                  'partial_match_for_tags';
+                              state.selectedWorkType = 'all';
+                              state.selectedAgeLimit = 'all';
+                              state.selectedDuration = 'all';
+                              state.selectedSort = 'date_desc';
+                              state.selectedBookmarkFilter = 0;
+                              state.selectedIllustAiFilter = 'all';
+                              state.minBookmarkController.clear();
+                            });
+                          },
+                          child: const Text(
+                            'フィルターをリセット',
+                            style: TextStyle(color: Colors.pinkAccent),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
 
                       // 適用ボタン
                       SizedBox(

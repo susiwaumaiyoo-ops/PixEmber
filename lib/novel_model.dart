@@ -35,6 +35,7 @@ class Novel {
   final NovelSeriesInfo? series; // シリーズ情報
   final int? seriesOrder; // シリーズ内の順序
   final int aiType; // pixiv: novel_ai_type. 0=非AI, 2=AI生成作品
+  final int xRestrict; // pixiv: x_restrict. 0=全年齢, 1=R-18, 2=R-18G
 
   Novel({
     required this.id,
@@ -55,6 +56,7 @@ class Novel {
     this.series,
     this.seriesOrder,
     this.aiType = 0,
+    this.xRestrict = 0,
   });
 
   /// 互換用ゲッター（古いコード救済）。実体は totalBookmarks。
@@ -141,6 +143,7 @@ class Novel {
       series: parsedSeries,
       seriesOrder: seriesOrder,
       aiType: json['novel_ai_type'] as int? ?? 0,
+      xRestrict: json['x_restrict'] as int? ?? 0,
     );
   }
 
@@ -163,6 +166,7 @@ class Novel {
     if (series != null) 'series': series!.toJson(),
     if (seriesOrder != null) 'series_order': seriesOrder,
     'novel_ai_type': aiType,
+    'x_restrict': xRestrict,
   };
 }
 

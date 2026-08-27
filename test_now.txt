@@ -1,0 +1,63 @@
+00:00 +0: loading c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart
+00:00 +0: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: (setUpAll)
+00:00 +0: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: download_queue_groups CRUD insertDownloadQueueGroup + getDownloadQueueGroups
+00:00 +1: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: download_queue_groups CRUD insertDownloadQueueGroup + getDownloadQueueGroups
+00:00 +2: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: download_queue_groups CRUD insertDownloadQueueGroup + getDownloadQueueGroups
+00:00 +3: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: download_queue_groups CRUD insertDownloadQueueGroup + getDownloadQueueGroups
+00:00 +4: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: download_queue_groups CRUD insertDownloadQueueGroup + getDownloadQueueGroups
+00:00 +5: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: download_queue_groups CRUD insertDownloadQueueGroup + getDownloadQueueGroups
+00:00 +6: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: download_queue_groups CRUD insertDownloadQueueGroup + getDownloadQueueGroups
+00:00 +7: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: download_queue_groups CRUD insertDownloadQueueGroup + getDownloadQueueGroups
+00:00 +8: c:/Users/you10/Desktop/asd/pixiv_viewer/test/recommendation_math_test.dart: sqrt (自前実装) 既知の平方根を計算
+00:00 +9: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: download_queue_groups CRUD findDownloadQueueGroup で重複検索
+00:00 +10: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: download_queue_groups CRUD findDownloadQueueGroup で重複検索
+00:00 +11: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: download_queue_groups CRUD findDownloadQueueGroup で重複検索
+00:00 +12: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: download_queue_groups CRUD findDownloadQueueGroup で重複検索
+00:00 +13: c:/Users/you10/Desktop/asd/pixiv_viewer/test/recommendation_math_test.dart: cosineSimilarity 反対方向ベクトルの類似度は-1
+00:00 +14: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: download_queue_groups CRUD deleteDownloadQueueGroup で子も削除（CASCADE）
+00:00 +15: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: download_queue_groups CRUD deleteDownloadQueueGroup で子も削除（CASCADE）
+00:00 +16: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: download_queue_groups CRUD deleteDownloadQueueGroup で子も削除（CASCADE）
+00:00 +17: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: download_queue_groups CRUD deleteDownloadQueueGroup で子も削除（CASCADE）
+00:00 +18: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: download_queue_groups CRUD deleteDownloadQueueGroup で子も削除（CASCADE）
+00:00 +19: c:/Users/you10/Desktop/asd/pixiv_viewer/test/recommendation_math_test.dart: buildPreferenceVector (加重平均 + L2正規化) 全てゼロベクトルの場合はゼロベクトルを返す（NaNなし）
+00:00 +20: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 状態遷移: 単一アイテム pending -> running -> completed
+00:00 +21: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 状態遷移: 単一アイテム pending -> running -> completed
+00:00 +22: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 状態遷移: 単一アイテム pending -> running -> completed
+00:00 +23: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 状態遷移: 単一アイテム pending -> running -> completed
+00:00 +24: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 状態遷移: 単一アイテム pending -> running -> completed
+00:00 +25: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 状態遷移: 単一アイテム pending -> running -> completed
+00:00 +26: c:/Users/you10/Desktop/asd/pixiv_viewer/test/recommendation_math_test.dart: mergeAndRank (統合とランク付け) ローカル候補とAPI候補を統合しスコア降順で返す
+00:00 +27: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 状態遷移: 単一アイテム running -> failed -> pending (retry)
+00:00 +28: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 状態遷移: 単一アイテム running -> failed -> pending (retry)
+00:00 +29: c:/Users/you10/Desktop/asd/pixiv_viewer/test/widget_test.dart: Placeholder smoke test
+00:00 +30: c:/Users/you10/Desktop/asd/pixiv_viewer/test/widget_test.dart: Placeholder smoke test
+00:00 +31: c:/Users/you10/Desktop/asd/pixiv_viewer/test/widget_test.dart: Placeholder smoke test
+00:00 +32: c:/Users/you10/Desktop/asd/pixiv_viewer/test/widget_test.dart: Placeholder smoke test
+00:00 +33: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 状態遷移: 単一アイテム running -> paused -> pending (resume)
+00:00 +34: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 状態遷移: 単一アイテム running -> paused -> pending (resume)
+00:00 +35: c:/Users/you10/Desktop/asd/pixiv_viewer/test/recommendation_math_test.dart: excludeFiltered (除外処理) ミュート中の作者を除外する
+00:00 +36: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 親子関係（複数ページ） 全子 completed で親も completed
+00:00 +37: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 親子関係（複数ページ） 全子 completed で親も completed
+00:00 +38: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 親子関係（複数ページ） 全子 completed で親も completed
+00:00 +39: c:/Users/you10/Desktop/asd/pixiv_viewer/test/recommendation_math_test.dart: excludeFiltered (除外処理) 複数の除外条件が同時に適用される
+00:00 +40: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 親子関係（複数ページ） 一部失敗: 親は failed
+00:00 +41: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 親子関係（複数ページ） 一部失敗: 親は failed
+00:00 +42: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 親子関係（複数ページ） 一部失敗: 親は failed
+00:00 +43: c:/Users/you10/Desktop/asd/pixiv_viewer/test/recommendation_math_test.dart: suppressAuthorSeriesBias (多様性制御) 同一作者の連続が2件まではペナルティなし
+00:00 +44: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 起動時復旧 (recoverInterruptedDownloads) running を pending に巻き戻す（downloaded_bytes 維持）
+00:00 +45: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 起動時復旧 (recoverInterruptedDownloads) running を pending に巻き戻す（downloaded_bytes 維持）
+00:00 +46: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 起動時復旧 (recoverInterruptedDownloads) running を pending に巻き戻す（downloaded_bytes 維持）
+00:00 +47: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 起動時復旧 (recoverInterruptedDownloads) running を pending に巻き戻す（downloaded_bytes 維持）
+[DownloadQueue] 復旧: running→pending (1 件)
+00:00 +48: c:/Users/you10/Desktop/asd/pixiv_viewer/test/recommendation_math_test.dart: suppressAuthorSeriesBias (多様性制御) 異なる作者に切り替わるとストリークリセットされる
+00:00 +49: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: クリーンアップ deleteDownloadQueueGroupsByStatus で完了を削除
+00:00 +50: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: クリーンアップ deleteDownloadQueueGroupsByStatus で完了を削除
+00:00 +51: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: クリーンアップ deleteDownloadQueueGroupsByStatus で完了を削除
+00:00 +52: c:/Users/you10/Desktop/asd/pixiv_viewer/test/recommendation_math_test.dart: RecommendCandidate authorId getter: API モデル形式（author.id）からフォールバック
+00:00 +53: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 整合性チェック (integrityCheck) completed だが local_path が空の行は検出される
+00:00 +54: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 整合性チェック (integrityCheck) completed だが local_path が空の行は検出される
+00:00 +55: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: 整合性チェック (integrityCheck) completed だが local_path が空の行は検出される
+00:00 +56: c:/Users/you10/Desktop/asd/pixiv_viewer/test/recommendation_math_test.dart: RecommendCandidate seriesId getter: Novel モデル形式（series.id）からフォールバック
+00:00 +57: c:/Users/you10/Desktop/asd/pixiv_viewer/test/download_queue_test.dart: (tearDownAll)
+00:00 +57: c:/Users/you10/Desktop/asd/pixiv_viewer/test/recommendation_math_test.dart: RecommendCandidate copyWith で score のみ更新できる
+00:00 +58: All tests passed!

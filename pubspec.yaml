@@ -81,11 +81,19 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   googleapis_auth: any
   image_gallery_saver_plus: ^5.1.1
-cupertino_icons: ^1.0.8
+  cupertino_icons: ^1.0.8
+
+  # バックグラウンドダウンロード（Androidのみ有効化、他OSはフォアグラウンド縮退）
+  # federated化済み: workmanager_platform_interface / workmanager_android / workmanager_apple が透過解決
+  # experimental (workmanager_web / workmanager_linux) は追加しない
+  workmanager: ^0.10.9
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+
+  # テスト用インメモリSQLite（DB状態遷移テスト）
+  sqflite_common_ffi: ^2.3.0
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

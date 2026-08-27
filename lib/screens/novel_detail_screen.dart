@@ -1,13 +1,16 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../novel_model.dart';
 import 'author_profile_screen.dart';
 import 'novel_reader_screen.dart';
 import 'novel_series_episodes_screen.dart';
+import 'read_later_screen.dart';
 import '../services/database_service.dart';
 import '../services/embedding_service.dart';
 import '../services/novel_document_text.dart';
 import '../services/pixiv_api_service.dart';
+import '../services/ruri_model_manager.dart';
 import '../widgets/pixiv_image.dart';
 
 class NovelDetailScreen extends StatefulWidget {
@@ -31,15 +34,67 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   int _bookmarkCountOffset = 0;
   bool _isToggling = false;
   double? _readingProgress;
+  bool _isReadLater = false;
 
   @override
   void initState() {
     debugPrint('📍 [DEBUG Detail] initState 開始: ${widget.novel.title}');
     super.initState();
     _isBookmarked = widget.novel.isBookmarked;
+    _loadReadLaterState();
     _loadReadingProgress();
     _recordHistory();
     debugPrint('📍 [DEBUG Detail] initState 終了');
+  }
+
+  Future<void> _loadReadLaterState() async {
+    try {
+      final registered = await DatabaseService().isReadLater(widget.novel.id);
+      if (mounted) {
+        setState(() => _isReadLater = registered);
+      }
+    } catch (e) {
+      debugPrint('あとで読む状態の取得に失敗しました（無視）: $e');
+    }
+  }
+
+  Future<void> _toggleReadLater() async {
+    if (_isReadLater) {
+      await DatabaseService().removeReadLater(widget.novel.id);
+      if (mounted) setState(() => _isReadLater = false);
+      _showSuccessSnackBar('「あとで読む」から削除しました');
+    } else {
+      await DatabaseService().addReadLater(widget.novel);
+      if (mounted) setState(() => _isReadLater = true);
+      _showSuccessSnackBar('「あとで読む」に追加しました');
+      // オフライン本棚用に本文をバックグラウンドでキャッシュ（失敗は無視）
+      _cacheNovelTextInBackground(widget.novel);
+    }
+  }
+
+  /// 「あとで読む」登録時のバックグラウンド本文キャッシュ。
+  /// PixivApiService で本文を取得し、DatabaseService に保存を委譲する。
+  /// 例外は一切投げない（UI ブロック禁止）。
+  Future<void> _cacheNovelTextInBackground(Novel novel) async {
+    try {
+      final api = PixivApiService();
+      final textData = await api.getNovelText(novel.id);
+      if (textData.novelText.isEmpty) return;
+      await DatabaseService().saveNovelText(
+        workId: textData.id,
+        title: novel.title,
+        authorName: novel.author.name,
+        text: textData.novelText,
+        pagesJson: jsonEncode(textData.novelPages),
+      );
+      try {
+        await DatabaseService().saveNovel(novel);
+      } catch (e) {
+        debugPrint('オフラインキャッシュ用メタ保存に失敗（無視）: $e');
+      }
+    } catch (e) {
+      debugPrint('オフラインキャッシュのバックグラウンド取得に失敗（無視）: $e');
+    }
   }
 
   Future<void> _recordHistory() async {
@@ -56,27 +111,21 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
       debugPrint('📍 [DEBUG Detail] _recordHistory 終了 (SQLite書き込み成功)');
 
       // ベクトル生成・保存（キャプションを使用、バックグラウンドで実行）
+      // AIモデル未ダウンロード時はスキップ（裏処理なのでユーザー動作をブロックしない）
       try {
-        final embeddingService = EmbeddingService();
-        final textForEmbedding = buildNovelDocumentText(widget.novel);
-        final embedding = await embeddingService.encodeDocument(
-          textForEmbedding,
-        );
-        await DatabaseService().saveNovelEmbedding(
-          workId: widget.novel.id,
-          embedding: embedding,
-        );
-        // フィーリング検索用メタデータを novels テーブルに保存
-        await DatabaseService().saveNovelMeta(
-          workId: widget.novel.id,
-          title: widget.novel.title,
-          description: widget.novel.caption,
-          authorName: widget.novel.author.name,
-          coverUrl: widget.novel.coverUrl,
-          pageCount: widget.novel.pageCount,
-          totalBookmarks: widget.novel.totalBookmarks,
-          createDate: widget.novel.createDate,
-        );
+        if (await RuriModelManager().isModelPresent()) {
+          final embeddingService = EmbeddingService();
+          final textForEmbedding = buildNovelDocumentText(widget.novel);
+          final embedding = await embeddingService.encodeDocument(
+            textForEmbedding,
+          );
+          await DatabaseService().saveNovelEmbedding(
+            workId: widget.novel.id,
+            embedding: embedding,
+          );
+          // フィーリング検索用メタデータを novels テーブルに保存
+          await DatabaseService().saveNovel(widget.novel);
+        }
       } catch (e) {
         debugPrint('ベクトル生成・保存に失敗しました（無視して続行）: $e');
       }
@@ -101,7 +150,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
             ),
           ),
           content: const Text(
-            'このタグを購読登録しますか？\n登録すると、ローカルデータベースに保存され、バックグラウンド同期や新着チェックの対象になります。',
+            'このタグを購読登録しますか？\n端末内のローカルデータベースに保存され、購読タグ一覧からタップで検索できます。',
             style: TextStyle(color: Colors.white70, fontSize: 13),
           ),
           actions: [
@@ -141,7 +190,25 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
         content: Text(message),
         backgroundColor: Colors.green.shade800,
         duration: const Duration(seconds: 4),
+        // 「あとで読む」追加時は一覧へ直接飛べるアクションを付与
+        action: _isReadLaterAction,
       ),
+    );
+  }
+
+  /// 「あとで読む」登録時のみ表示する「一覧を見る」アクション。
+  /// 未登録の成功メッセージ（削除等）には null を返してアクション非表示。
+  SnackBarAction? get _isReadLaterAction {
+    if (!_isReadLater) return null;
+    return SnackBarAction(
+      label: '一覧を見る',
+      textColor: Colors.white,
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ReadLaterScreen()),
+        );
+      },
     );
   }
 
@@ -296,6 +363,14 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                   ),
             onPressed: _toggleBookmark,
             tooltip: 'ブックマーク',
+          ),
+          IconButton(
+            icon: Icon(
+              _isReadLater ? Icons.bookmark_added : Icons.bookmark_add_outlined,
+              color: _isReadLater ? Colors.pinkAccent : Colors.white,
+            ),
+            onPressed: _toggleReadLater,
+            tooltip: _isReadLater ? 'あとで読むから削除' : 'あとで読むに追加',
           ),
         ],
       ),

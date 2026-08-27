@@ -25,6 +25,8 @@ class Illust {
   final int totalBookmarks;
   final String createDate;
   final String type;
+  final int aiType; // pixiv: illust_ai_type. 0=非AI, 2=AI生成作品
+  final int xRestrict; // pixiv: x_restrict. 0=全年齢, 1=R-18, 2=R-18G
   bool isBookmarked; // リアルタイム切り替えのため非final
 
   Illust({
@@ -42,6 +44,8 @@ class Illust {
     required this.totalBookmarks,
     required this.createDate,
     required this.type,
+    this.aiType = 0,
+    this.xRestrict = 0,
     required this.isBookmarked,
   });
 
@@ -109,6 +113,8 @@ class Illust {
       totalBookmarks: json['total_bookmarks'] as int? ?? 0,
       createDate: json['create_date'] as String? ?? '',
       type: json['type'] as String? ?? 'illust',
+      aiType: json['illust_ai_type'] as int? ?? 0,
+      xRestrict: json['x_restrict'] as int? ?? 0,
       isBookmarked: json['is_bookmarked'] as bool? ?? false,
     );
   }
@@ -133,6 +139,8 @@ class Illust {
     'total_bookmarks': totalBookmarks,
     'create_date': createDate,
     'type': type,
+    'illust_ai_type': aiType,
+    'x_restrict': xRestrict,
     'is_bookmarked': isBookmarked,
   };
 }

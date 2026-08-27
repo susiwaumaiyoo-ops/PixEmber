@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../illust_model.dart';
 import '../novel_model.dart';
 import '../services/pixiv_api_service.dart';
+import '../services/database_service.dart';
 import '../widgets/pixiv_image.dart';
 import 'novel_detail_screen.dart';
 
@@ -34,29 +35,48 @@ class _BookmarkListScreenState extends State<BookmarkListScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final ids = prefs.getStringList('novel_bookmark_ids') ?? [];
+      final db = DatabaseService();
       final List<Novel> loaded = [];
       for (final idStr in ids) {
         final id = int.tryParse(idStr);
         if (id == null) continue;
-        final title = prefs.getString('novel_title_$id') ?? '無題';
-        final author = prefs.getString('novel_author_$id') ?? '不明';
+
+        // 1. DB に完全な Novel スナップショットがあればそれを使う（API 不要）
+        final cached = await db.getNovelMeta(id);
+        if (cached != null) {
+          loaded.add(cached);
+          continue;
+        }
+
+        // 2. 旧データ（メタ欠損）は一覧読み込み時に一度だけ API 補完して永続化する
         try {
-          loaded.add(await _api.getNovelById(id));
+          final novel = await _api.getNovelById(id);
+          await db.saveNovel(novel);
+          await prefs.setString('novel_title_$id', novel.title);
+          await prefs.setString('novel_author_$id', novel.author.name);
+          await prefs.setString('novel_cover_$id', novel.coverUrl);
+          await prefs.setInt('novel_page_count_$id', novel.pageCount);
+          await prefs.setInt('novel_text_length_$id', novel.textLength);
+          loaded.add(novel);
         } catch (e) {
-          // オフライン/未ログイン等は保存情報のみで表示
+          // 3. 取得失敗時は削除せず、保存済み情報のみのプレースホルダを表示
           loaded.add(
             Novel(
               id: id,
-              title: title,
+              title: prefs.getString('novel_title_$id') ?? '無題',
               caption: '',
-              author: Author(id: 0, name: author, account: ''),
+              author: Author(
+                id: 0,
+                name: prefs.getString('novel_author_$id') ?? '不明',
+                account: '',
+              ),
               tags: [],
-              coverUrl: '',
+              coverUrl: prefs.getString('novel_cover_$id') ?? '',
               createDate: '',
-              textCount: 0,
+              textCount: prefs.getInt('novel_text_length_$id') ?? 0,
               wordCount: 0,
-              textLength: 0,
-              pageCount: 0,
+              textLength: prefs.getInt('novel_text_length_$id') ?? 0,
+              pageCount: prefs.getInt('novel_page_count_$id') ?? 0,
               totalBookmarks: 0,
               totalView: 0,
               isBookmarked: false,
@@ -203,16 +223,74 @@ class _BookmarkListScreenState extends State<BookmarkListScreen> {
                       onPressed: () => _confirmDelete(novel),
                       tooltip: 'しおりを削除',
                     ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => NovelDetailScreen(novel: novel),
-                        ),
-                      ).then((_) {
+                    onTap: () async {
+                      // タップ時に最新の完全メタデータを取得して検証する。
+                      // 404（削除済み/データが古い）の場合は一覧から遅延削除して通知。
+                      final id = novel.id;
+                      if (id <= 0) {
                         if (!mounted) return;
-                        _loadBookmarks();
-                      });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('この作品のIDを取得できませんでした')),
+                        );
+                        return;
+                      }
+                      final scaffold = ScaffoldMessenger.of(context);
+                      Novel? fullNovel;
+                      try {
+                        fullNovel = await _api.getNovelById(id);
+                        await DatabaseService().saveNovel(fullNovel);
+                      } on RateLimitException {
+                        if (!mounted) return;
+                        scaffold.showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'アクセスが一時的に制限されています。しばらくしてから再度お試しください',
+                            ),
+                          ),
+                        );
+                        return;
+                      } on Exception catch (e) {
+                        // 真に削除された小説（404/見つかりませんでした）のみ一覧から削除。
+                        final isGone = DatabaseService.isGenuineNovelMissing(
+                          e.toString(),
+                        );
+                        if (isGone) {
+                          await DatabaseService().removeInvalidNovel(
+                            id,
+                            errorMessage: e.toString(),
+                          );
+                          _novels.removeWhere((n) => n.id == id);
+                        }
+                        if (!mounted) return;
+                        scaffold.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              isGone
+                                  ? 'この小説は削除されたか、データが古いため一覧から削除しました'
+                                  : '作品情報の取得に失敗しました。通信状況を確認してください',
+                            ),
+                          ),
+                        );
+                        return;
+                      } catch (e) {
+                        if (!mounted) return;
+                        scaffold.showSnackBar(
+                          SnackBar(content: Text('作品情報の取得に失敗しました: $e')),
+                        );
+                        return;
+                      }
+                      if (!mounted) return;
+                      final ctx = context;
+                      if (!ctx.mounted) return;
+                      await Navigator.push(
+                        ctx,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              NovelDetailScreen(novel: fullNovel!),
+                        ),
+                      );
+                      if (!mounted) return;
+                      _loadBookmarks();
                     },
                   ),
                 );

@@ -2,12 +2,11 @@
 import 'dart:convert';
 import 'dart:isolate';
 import 'package:crypto/crypto.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'database_service.dart';
+import 'pixiv_api_http.dart';
 import '../illust_model.dart';
 import '../novel_model.dart';
-import 'pixiv_api_http.dart';
 
 /// 429 Rate Limit エラー用のカスタム例外クラス
 class RateLimitException implements Exception {
@@ -47,6 +46,7 @@ class PixivApiService {
     'App-OS-Version': '11',
     'App-Version': '6.71.1',
     'Accept-Language': 'ja-JP',
+    'Accept-Encoding': 'gzip',
   };
 
   final DatabaseService _dbService = DatabaseService();
@@ -81,6 +81,7 @@ class PixivApiService {
         "X-Client-Time": clientTime,
         "X-Client-Hash": clientHash,
         "Accept-Language": "ja-JP",
+        "Accept-Encoding": "gzip",
         "Content-Type": "application/x-www-form-urlencoded",
       };
 
@@ -91,7 +92,11 @@ class PixivApiService {
         "refresh_token": refreshToken,
       };
 
-      final response = await http.post(url, headers: headers, body: data);
+      final response = await PixivHttpClient().client.post(
+        url,
+        headers: headers,
+        body: data,
+      );
 
       if (response.statusCode == 200) {
         final resData = jsonDecode(response.body);
@@ -141,7 +146,7 @@ class PixivApiService {
     final uri = Uri.parse(
       _baseUrl + endpoint,
     ).replace(queryParameters: queryParams);
-    final response = await http.get(uri, headers: headers);
+    final response = await PixivHttpClient().client.get(uri, headers: headers);
 
     if (response.statusCode == 429) {
       throw RateLimitException('Rate limit exceeded', statusCode: 429);
@@ -551,7 +556,7 @@ class PixivApiService {
     final token = await getAccessToken(await getRefreshToken());
     final headers = {'Authorization': 'Bearer $token', ..._clientHeaders};
 
-    final response = await http.get(
+    final response = await PixivHttpClient().client.get(
       Uri.parse('https://app-api.pixiv.net/v1/novel/pages?novel_id=$novelId'),
       headers: headers,
     );
@@ -640,16 +645,26 @@ class PixivApiService {
   }
 
   /// 小説単体取得（ディープリンク用）
+  ///
+  /// エンドポイントは /v2/novel/detail を使用（/v1 は廃止済みで
+  /// 「指定されたエンドポイントは存在しません」の 404 を返す）。
   Future<Novel> getNovelById(int id) async {
-    final body = await _get(
-      '/v1/novel/detail',
-      params: {'novel_id': id.toString()},
-    );
-    final resData = jsonDecode(body) as Map<String, dynamic>;
-    final bodyData = resData['body'] as Map<String, dynamic>;
-    final novel = bodyData['novel'] as Map<String, dynamic>;
+    const endpoint = '/v2/novel/detail';
+    try {
+      final body = await _get(endpoint, params: {'novel_id': id.toString()});
+      final resData = jsonDecode(body) as Map<String, dynamic>;
+      final bodyData = resData['body'] as Map<String, dynamic>;
+      final novel = bodyData['novel'] as Map<String, dynamic>;
 
-    return Novel.fromJson(novel);
+      return Novel.fromJson(novel);
+    } on RateLimitException {
+      rethrow;
+    } on Exception catch (e) {
+      print(
+        '[NovelDetail] 小説詳細取得失敗: endpoint=$endpoint, novel_id=$id, error=$e',
+      );
+      rethrow;
+    }
   }
 
   /// ユーザー詳細取得

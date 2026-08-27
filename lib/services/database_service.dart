@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'ruri_model_manager.dart';
+import '../novel_model.dart';
+import '../illust_model.dart';
 
 /// データベース初期化・管理用クラス
 class DatabaseService {
@@ -19,14 +21,400 @@ class DatabaseService {
     return _database!;
   }
 
+  /// テスト用: 外部からDBインスタンスを注入する（sqflite_ffi のインメモリDB等）。
+  /// 注入後は `database` getter がこのインスタンスを返す。
+  void setTestDatabase(Database db) {
+    _database = db;
+  }
+
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'pixiv_viewer.db');
     return await openDatabase(
       path,
-      version: 7,
+      version: 17,
+      onConfigure: (db) async {
+        // 外部キー制約（ON DELETE CASCADE 等）を有効化。
+        // SQLite はデフォルトで無効のため接続毎に設定が必要。
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
+      onOpen: _ensureTablesExist,
+    );
+  }
+
+  /// オープン時に全テーブル・全カラムを冪等に保証する。
+  ///
+  /// 1) CREATE TABLE IF NOT EXISTS で不足テーブルを補完。
+  /// 2) 過去のマイグレーションで追加されたカラムを PRAGMA table_info で検証し、
+  ///    不足があれば ALTER TABLE ADD COLUMN で追加。
+  ///
+  /// これにより「マイグレーションを飛ばしてしまった破損DB」
+  /// （例: v13 だが prefix_scheme_version が欠落したままの DB）も
+  /// onOpen 時に自動修復される。既存データは一切削除しない。
+  Future<void> _ensureTablesExist(Database db) async {
+    await _createSubscribedTags(db);
+    await _createSubscriptionNewItems(db);
+    await _createReadLater(db);
+    await _ensureNovelsColumns(db);
+    await _ensureNovelTextColumns(db);
+    await _ensureNovelEmbeddingsColumns(db);
+    await _ensureIllustEmbeddingsColumns(db);
+    await _ensureIllustsColumns(db);
+    await _ensureReadLaterColumns(db);
+    await _ensureHistoryColumns(db);
+    await _ensureSubscribedTagsColumns(db);
+    await _ensureMutesColumns(db);
+    // 検索履歴テーブルが存在しない場合は先に作成してからカラム確認を行う
+    await _createSearchHistory(db);
+    await _ensureSearchHistoryColumns(db);
+    // ダウンロードキュー（v17 追加）
+    await _createDownloadQueueGroups(db);
+    await _createDownloadQueues(db);
+  }
+
+  /// ダウンロードキューグループテーブルを作成する（_onCreate / v17 migration / onOpen 共用）。
+  /// 1 作品（複数ページ含む）= 1 グループ。親ジョブの進捗・ステータスを管理する。
+  Future<void> _createDownloadQueueGroups(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS download_queue_groups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_id INTEGER NOT NULL,
+        work_type TEXT NOT NULL,
+        title TEXT NOT NULL DEFAULT '',
+        author_name TEXT NOT NULL DEFAULT '',
+        page_total INTEGER NOT NULL DEFAULT 1,
+        page_completed INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'pending',
+        priority INTEGER NOT NULL DEFAULT 5,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        max_retry INTEGER NOT NULL DEFAULT 3,
+        error_code TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        completed_at TEXT,
+        UNIQUE(work_id, work_type)
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_dqg_status ON download_queue_groups(status)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_dqg_work ON download_queue_groups(work_id, work_type)',
+    );
+  }
+
+  /// ダウンロードキューテーブルを作成する（_onCreate / v17 migration / onOpen 共用）。
+  /// 1 ページ = 1 行。親グループに紐づく。ファイル実体のダウンロード状態を管理する。
+  Future<void> _createDownloadQueues(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS download_queues (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        group_id INTEGER NOT NULL,
+        work_id INTEGER NOT NULL,
+        work_type TEXT NOT NULL,
+        page_index INTEGER NOT NULL DEFAULT 0,
+        url TEXT NOT NULL DEFAULT '',
+        local_path TEXT NOT NULL DEFAULT '',
+        file_size INTEGER NOT NULL DEFAULT 0,
+        downloaded_bytes INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'pending',
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        max_retry INTEGER NOT NULL DEFAULT 3,
+        error_code TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        completed_at TEXT,
+        FOREIGN KEY (group_id) REFERENCES download_queue_groups(id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_dq_group ON download_queues(group_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_dq_status ON download_queues(status)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_dq_work ON download_queues(work_id, work_type)',
+    );
+  }
+
+  /// 指定テーブルに指定カラムが無ければ ALTER TABLE ADD COLUMN する（冪等）。
+  Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String column,
+    String alterSql,
+  ) async {
+    final cols = await db.rawQuery('PRAGMA table_info($table)');
+    final existing = cols.map((c) => c['name'] as String).toSet();
+    if (!existing.contains(column)) {
+      await db.execute(alterSql);
+    }
+  }
+
+  /// novels の必須カラムを検証・補完（v5/v8 で追加された列）。
+  Future<void> _ensureNovelsColumns(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'novels',
+      'author_name',
+      "ALTER TABLE novels ADD COLUMN author_name TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'novels',
+      'cover_url',
+      "ALTER TABLE novels ADD COLUMN cover_url TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'novels',
+      'page_count',
+      'ALTER TABLE novels ADD COLUMN page_count INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'novels',
+      'total_bookmarks',
+      'ALTER TABLE novels ADD COLUMN total_bookmarks INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'novels',
+      'create_date',
+      "ALTER TABLE novels ADD COLUMN create_date TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'novels',
+      'total_view',
+      'ALTER TABLE novels ADD COLUMN total_view INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'novels',
+      'meta_json',
+      'ALTER TABLE novels ADD COLUMN meta_json TEXT',
+    );
+  }
+
+  /// novel_text の必須カラムを検証・補完（v3 で追加された列）。
+  Future<void> _ensureNovelTextColumns(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'novel_text',
+      'title',
+      'ALTER TABLE novel_text ADD COLUMN title TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      'novel_text',
+      'author_name',
+      'ALTER TABLE novel_text ADD COLUMN author_name TEXT',
+    );
+  }
+
+  /// novel_embeddings の必須カラムを検証・補完（v7/v13 で追加された列）。
+  /// 共有ヘルパーとして、ALTER 判定をここに一元化する。
+  /// 既存行は prefix 方式互換を前提に現行バージョンで一括バックフィル。
+  Future<void> _ensureNovelEmbeddingsColumns(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'novel_embeddings',
+      'model_id',
+      "ALTER TABLE novel_embeddings ADD COLUMN model_id TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'novel_embeddings',
+      'model_version',
+      'ALTER TABLE novel_embeddings ADD COLUMN model_version INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'novel_embeddings',
+      'prefix_scheme_version',
+      'ALTER TABLE novel_embeddings ADD COLUMN prefix_scheme_version INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'novel_embeddings',
+      'embedding_dim',
+      'ALTER TABLE novel_embeddings ADD COLUMN embedding_dim INTEGER NOT NULL DEFAULT 0',
+    );
+    // 既存行を現行プレフィックスバージョンに一括更新（互換性維持）
+    await db.update(
+      'novel_embeddings',
+      {'prefix_scheme_version': RuriModelManager.prefixSchemeVersion},
+      where: 'prefix_scheme_version != ?',
+      whereArgs: [RuriModelManager.prefixSchemeVersion],
+    );
+  }
+
+  /// illust_embeddings の必須カラムを検証・補完。
+  /// novel_embeddings と同一設計方針（モデル互換カラム・冪等ALTER）。
+  Future<void> _ensureIllustEmbeddingsColumns(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'illust_embeddings',
+      'model_id',
+      "ALTER TABLE illust_embeddings ADD COLUMN model_id TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'illust_embeddings',
+      'model_version',
+      'ALTER TABLE illust_embeddings ADD COLUMN model_version INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'illust_embeddings',
+      'prefix_scheme_version',
+      'ALTER TABLE illust_embeddings ADD COLUMN prefix_scheme_version INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'illust_embeddings',
+      'embedding_dim',
+      'ALTER TABLE illust_embeddings ADD COLUMN embedding_dim INTEGER NOT NULL DEFAULT 0',
+    );
+    // 既存行を現行プレフィックスバージョンに一括更新（互換性維持）
+    await db.update(
+      'illust_embeddings',
+      {'prefix_scheme_version': RuriModelManager.prefixSchemeVersion},
+      where: 'prefix_scheme_version != ?',
+      whereArgs: [RuriModelManager.prefixSchemeVersion],
+    );
+  }
+
+  /// illusts の必須カラムを検証・補完（v16 新規テーブル）。
+  /// novels と同名カラムを保持し、ハイブリッド検索を共有化する。
+  Future<void> _ensureIllustsColumns(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'illusts',
+      'author_name',
+      "ALTER TABLE illusts ADD COLUMN author_name TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'illusts',
+      'cover_url',
+      "ALTER TABLE illusts ADD COLUMN cover_url TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'illusts',
+      'page_count',
+      'ALTER TABLE illusts ADD COLUMN page_count INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'illusts',
+      'total_bookmarks',
+      'ALTER TABLE illusts ADD COLUMN total_bookmarks INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'illusts',
+      'create_date',
+      "ALTER TABLE illusts ADD COLUMN create_date TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'illusts',
+      'total_view',
+      'ALTER TABLE illusts ADD COLUMN total_view INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'illusts',
+      'meta_json',
+      'ALTER TABLE illusts ADD COLUMN meta_json TEXT',
+    );
+  }
+
+  /// read_later の必須カラムを検証・補完（v12 で追加された列）。
+  Future<void> _ensureReadLaterColumns(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'read_later',
+      'progress',
+      'ALTER TABLE read_later ADD COLUMN progress REAL DEFAULT 0.0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'read_later',
+      'last_page',
+      'ALTER TABLE read_later ADD COLUMN last_page INTEGER DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'read_later',
+      'last_offset',
+      'ALTER TABLE read_later ADD COLUMN last_offset INTEGER DEFAULT 0',
+    );
+  }
+
+  /// history の必須カラムを検証・補完（v4 で追加された列）。
+  Future<void> _ensureHistoryColumns(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'history',
+      'author_name',
+      "ALTER TABLE history ADD COLUMN author_name TEXT NOT NULL DEFAULT ''",
+    );
+  }
+
+  /// subscribed_tags の必須カラムを検証・補完（v9 で追加された列）。
+  Future<void> _ensureSubscribedTagsColumns(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'subscribed_tags',
+      'last_checked_at',
+      'ALTER TABLE subscribed_tags ADD COLUMN last_checked_at TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      'subscribed_tags',
+      'last_newest_date',
+      'ALTER TABLE subscribed_tags ADD COLUMN last_newest_date TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      'subscribed_tags',
+      'last_new_count',
+      'ALTER TABLE subscribed_tags ADD COLUMN last_new_count INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+
+  /// mutes の必須カラムを検証・補完（v2 で追加された列）。
+  Future<void> _ensureMutesColumns(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'mutes',
+      'label',
+      'ALTER TABLE mutes ADD COLUMN label TEXT',
+    );
+  }
+
+  /// search_history の必須カラムを検証・補完（v14 で追加された列）。
+  Future<void> _ensureSearchHistoryColumns(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'search_history',
+      'last_searched_at',
+      "ALTER TABLE search_history ADD COLUMN last_searched_at TEXT",
+    );
+    await _addColumnIfMissing(
+      db,
+      'search_history',
+      'use_count',
+      'ALTER TABLE search_history ADD COLUMN use_count INTEGER NOT NULL DEFAULT 1',
     );
   }
 
@@ -64,7 +452,9 @@ class DatabaseService {
         cover_url TEXT NOT NULL DEFAULT '',
         page_count INTEGER NOT NULL DEFAULT 0,
         total_bookmarks INTEGER NOT NULL DEFAULT 0,
-        create_date TEXT NOT NULL DEFAULT ''
+        create_date TEXT NOT NULL DEFAULT '',
+        total_view INTEGER NOT NULL DEFAULT 0,
+        meta_json TEXT
       )
     ''');
 
@@ -83,7 +473,42 @@ class DatabaseService {
         embedding TEXT,
         model_id TEXT NOT NULL DEFAULT '',
         model_version INTEGER NOT NULL DEFAULT 0,
+        prefix_scheme_version INTEGER NOT NULL DEFAULT 0,
         updated_at TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE illust_embeddings (
+        work_id INTEGER PRIMARY KEY,
+        embedding TEXT,
+        model_id TEXT NOT NULL DEFAULT '',
+        model_version INTEGER NOT NULL DEFAULT 0,
+        prefix_scheme_version INTEGER NOT NULL DEFAULT 0,
+        embedding_dim INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE illusts (
+        id INTEGER PRIMARY KEY,
+        title TEXT,
+        description TEXT,
+        author_id INTEGER,
+        tags TEXT,
+        tags_json TEXT,
+        x_restrict INTEGER,
+        novel_ai_type INTEGER,
+        created_at TEXT,
+        updated_at TEXT,
+        author_name TEXT NOT NULL DEFAULT '',
+        cover_url TEXT NOT NULL DEFAULT '',
+        page_count INTEGER NOT NULL DEFAULT 0,
+        total_bookmarks INTEGER NOT NULL DEFAULT 0,
+        create_date TEXT NOT NULL DEFAULT '',
+        total_view INTEGER NOT NULL DEFAULT 0,
+        meta_json TEXT
       )
     ''');
 
@@ -127,10 +552,257 @@ class DatabaseService {
       )
     ''');
 
+    // 購読タグ（新規インストール時はここで最新スキーマを一括作成）
+    await _createSubscribedTags(db);
+
+    // 購読タグの新着作品キャッシュ
+    await _createSubscriptionNewItems(db);
+
+    // あとで読む（小説）
+    await _createReadLater(db);
+
+    // 検索履歴（v14 新規テーブル）
+    await _createSearchHistory(db);
+
     // 検索用インデックス
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS illusts (
+        id INTEGER PRIMARY KEY,
+        title TEXT,
+        description TEXT,
+        author_id INTEGER,
+        tags TEXT,
+        tags_json TEXT,
+        x_restrict INTEGER,
+        novel_ai_type INTEGER,
+        created_at TEXT,
+        updated_at TEXT,
+        author_name TEXT NOT NULL DEFAULT '',
+        cover_url TEXT NOT NULL DEFAULT '',
+        page_count INTEGER NOT NULL DEFAULT 0,
+        total_bookmarks INTEGER NOT NULL DEFAULT 0,
+        create_date TEXT NOT NULL DEFAULT '',
+        total_view INTEGER NOT NULL DEFAULT 0,
+        meta_json TEXT
+      )
+    ''');
+    // ダウンロードキュー（v17 追加）
+    await _createDownloadQueueGroups(db);
+    await _createDownloadQueues(db);
+
     await db.execute('CREATE INDEX idx_history_workid ON history(work_id)');
     await db.execute(
       'CREATE INDEX idx_folder_items_folderid ON folder_items(folder_id)',
+    );
+  }
+
+  /// 検索履歴テーブルを作成する（_onCreate / v14 migration / onOpen 共用）。
+  Future<void> _createSearchHistory(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS search_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        keyword TEXT NOT NULL UNIQUE,
+        last_searched_at TEXT,
+        use_count INTEGER DEFAULT 1
+      )
+    ''');
+  }
+
+  /// あとで読む（小説）テーブルを作成する（_onCreate / v11 migration / onOpen 共用）。
+  Future<void> _createReadLater(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS read_later (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_id INTEGER NOT NULL UNIQUE,
+        title TEXT,
+        author_name TEXT,
+        author_id INTEGER,
+        cover_url TEXT,
+        text_length INTEGER,
+        tags_json TEXT,
+        x_restrict INTEGER DEFAULT 0,
+        status INTEGER DEFAULT 0,
+        added_at TEXT,
+        last_opened_at TEXT,
+        finished_at TEXT,
+        progress REAL DEFAULT 0.0,
+        last_page INTEGER DEFAULT 0,
+        last_offset INTEGER DEFAULT 0
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_read_later_status ON read_later(status)',
+    );
+  }
+
+  // ==========================================================================
+  // あとで読む（小説）（read_later）CRUD
+  // ==========================================================================
+
+  /// あとで読むに登録する（重複登録は無視）。
+  /// [novel] から必要なメタデータをスナップショット保存する。
+  /// 既に登録済みの場合は何もせず既存レコードを維持する。
+  Future<void> addReadLater(Novel novel) async {
+    final db = await database;
+    await db.insert('read_later', {
+      'work_id': novel.id,
+      'title': novel.title,
+      'author_name': novel.author.name,
+      'author_id': novel.author.id,
+      'cover_url': novel.coverUrl,
+      'text_length': novel.textLength,
+      'tags_json': jsonEncode(novel.tags),
+      'x_restrict': novel.xRestrict,
+      'status': 0,
+      'added_at': DateTime.now().toUtc().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  /// あとで読むから削除する。
+  Future<int> removeReadLater(int workId) async {
+    final db = await database;
+    return await db.delete(
+      'read_later',
+      where: 'work_id = ?',
+      whereArgs: [workId],
+    );
+  }
+
+  /// 登録済みか判定する。
+  Future<bool> isReadLater(int workId) async {
+    final db = await database;
+    final rows = await db.query(
+      'read_later',
+      columns: ['work_id'],
+      where: 'work_id = ?',
+      whereArgs: [workId],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
+  /// 一覧を取得する。[status] が null なら全件、指定ならフィルタ。
+  /// 追加日時の新しい順でソート。
+  Future<List<Map<String, dynamic>>> getReadLaterList({int? status}) async {
+    final db = await database;
+    // sqflite の db.query() は read-only（Unmodifiable）リストを返すため、
+    // 呼び出し側で書き換え・破壊的操作される前提で可変コピーを返す。
+    final rows = await db.query(
+      'read_later',
+      where: status == null ? null : 'status = ?',
+      whereArgs: status == null ? null : [status],
+      orderBy: 'added_at DESC, id DESC',
+    );
+    return List<Map<String, dynamic>>.from(rows);
+  }
+
+  /// ステータスを更新する。
+  /// [status] が 1(読書中) なら last_opened_at を更新。
+  /// [status] が 2(読了) なら finished_at を更新。
+  Future<int> updateReadLaterStatus(int workId, int status) async {
+    final db = await database;
+    final now = DateTime.now().toUtc().toIso8601String();
+    final values = <String, dynamic>{'status': status};
+    if (status == 1) values['last_opened_at'] = now;
+    if (status == 2) values['finished_at'] = now;
+    return await db.update(
+      'read_later',
+      values,
+      where: 'work_id = ?',
+      whereArgs: [workId],
+    );
+  }
+
+  /// ステータス別件数を取得する（タブバッジ用）。
+  /// key: 0=未読 / 1=読書中 / 2=読了。
+  Future<Map<int, int>> getReadLaterCounts() async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT status, COUNT(*) AS c FROM read_later GROUP BY status',
+    );
+    final Map<int, int> result = {0: 0, 1: 0, 2: 0};
+    for (final row in rows) {
+      final s = (row['status'] as int?) ?? 0;
+      final c = (row['c'] as int?) ?? 0;
+      result[s] = c;
+    }
+    return result;
+  }
+
+  /// 読書進捗（0.0〜1.0）を保存する。頻繁な呼び出しを想定し、呼び出し側で
+  /// 「1%以上変化したときのみ」等の頻度制御を行うこと。
+  Future<int> updateReadLaterProgress(int workId, double progress) async {
+    final db = await database;
+    return await db.update(
+      'read_later',
+      {'progress': progress.clamp(0.0, 1.0)},
+      where: 'work_id = ?',
+      whereArgs: [workId],
+    );
+  }
+
+  /// 最後に読んでいたページ・文字オフセットを保存する（再開用）。
+  Future<int> updateReadLaterPosition(int workId, int page, int offset) async {
+    final db = await database;
+    return await db.update(
+      'read_later',
+      {'last_page': page, 'last_offset': offset},
+      where: 'work_id = ?',
+      whereArgs: [workId],
+    );
+  }
+
+  /// 未読件数のみを取得する（Drawer バッジ用）。
+  Future<int> getReadLaterUnreadCount() async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM read_later WHERE status = 0',
+    );
+    if (rows.isEmpty) return 0;
+    return (rows.first['c'] as int?) ?? 0;
+  }
+
+  /// 購読タグテーブルを作成する（_onCreate / v3 migration / onOpen 共用）。
+  /// 最新スキーマ（v9 以降: last_checked_at / last_newest_date / last_new_count 含む）。
+  Future<void> _createSubscribedTags(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS subscribed_tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tag TEXT NOT NULL,
+        type TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        last_checked_at TEXT,
+        last_newest_date TEXT,
+        last_new_count INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+  }
+
+  /// 購読タグの新着作品キャッシュテーブルを作成する（_onCreate / v10 共用）。
+  Future<void> _createSubscriptionNewItems(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS subscription_new_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subscribed_tag_id INTEGER NOT NULL,
+        work_id INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        title TEXT,
+        author_name TEXT,
+        preview_url TEXT,
+        create_date TEXT,
+        x_restrict INTEGER DEFAULT 0,
+        found_at TEXT,
+        is_read INTEGER DEFAULT 0,
+        UNIQUE(subscribed_tag_id, work_id)
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sni_tagid '
+      'ON subscription_new_items(subscribed_tag_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sni_isread '
+      'ON subscription_new_items(is_read)',
     );
   }
 
@@ -230,6 +902,387 @@ class DatabaseService {
       debugPrint(
         '[Migration v6->v7] novels / novel_text / history / folders は維持',
       );
+    }
+    if (oldVersion < 8) {
+      // novels に total_view / meta_json（完全な Novel スナップショット）を追加。
+      // 既存データは削除せず、列追加のみの非破壊マイグレーション。
+      final columns = await db.rawQuery('PRAGMA table_info(novels)');
+      final existing = columns.map((c) => c['name'] as String).toSet();
+      if (!existing.contains('total_view')) {
+        await db.execute(
+          'ALTER TABLE novels ADD COLUMN total_view INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+      if (!existing.contains('meta_json')) {
+        await db.execute('ALTER TABLE novels ADD COLUMN meta_json TEXT');
+      }
+      debugPrint('[Migration v7->v8] novels に total_view / meta_json を追加');
+    }
+    if (oldVersion < 9) {
+      // 購読タグの新着チェック用カラムを追加（非破壊マイグレーション）。
+      // 既存データは維持し、新カラムは NULL/0 で初期化される。
+      final columns = await db.rawQuery('PRAGMA table_info(subscribed_tags)');
+      final existing = columns.map((c) => c['name'] as String).toSet();
+      if (!existing.contains('last_checked_at')) {
+        await db.execute(
+          'ALTER TABLE subscribed_tags ADD COLUMN last_checked_at TEXT',
+        );
+      }
+      if (!existing.contains('last_newest_date')) {
+        await db.execute(
+          'ALTER TABLE subscribed_tags ADD COLUMN last_newest_date TEXT',
+        );
+      }
+      if (!existing.contains('last_new_count')) {
+        await db.execute(
+          'ALTER TABLE subscribed_tags ADD COLUMN last_new_count INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+      debugPrint('[Migration v8->v9] subscribed_tags に新着チェック用カラムを追加');
+    }
+    if (oldVersion < 10) {
+      // 購読タグの新着作品キャッシュテーブルを追加（既存データ非破壊）。
+      await _createSubscriptionNewItems(db);
+      debugPrint('[Migration v9->v10] subscription_new_items を追加');
+    }
+    if (oldVersion < 11) {
+      // あとで読む（小説）テーブルを追加（既存データ非破壊）。
+      await _createReadLater(db);
+      debugPrint('[Migration v10->v11] read_later を追加');
+    }
+    if (oldVersion < 12) {
+      // 読書進捗・再開位置の保存用カラムを追加（既存データ非破壊）。
+      // _createReadLater は IF NOT EXISTS のため既存テーブルには効かず、
+      // 既存列の有無を確認して ALTER TABLE で後付けする。
+      final cols = await db.rawQuery('PRAGMA table_info(read_later)');
+      final existing = cols.map((c) => c['name'] as String).toSet();
+      if (!existing.contains('progress')) {
+        await db.execute(
+          'ALTER TABLE read_later ADD COLUMN progress REAL DEFAULT 0.0',
+        );
+      }
+      if (!existing.contains('last_page')) {
+        await db.execute(
+          'ALTER TABLE read_later ADD COLUMN last_page INTEGER DEFAULT 0',
+        );
+      }
+      if (!existing.contains('last_offset')) {
+        await db.execute(
+          'ALTER TABLE read_later ADD COLUMN last_offset INTEGER DEFAULT 0',
+        );
+      }
+      debugPrint(
+        '[Migration v11->v12] read_later に progress/last_page/last_offset を追加',
+      );
+    }
+    if (oldVersion < 13) {
+      // prefixSchemeVersion が変わった場合、古い埋め込みを検索時にスキップするため。
+      final cols = await db.rawQuery('PRAGMA table_info(novel_embeddings)');
+      final existing = cols.map((c) => c['name'] as String).toSet();
+      if (!existing.contains('prefix_scheme_version')) {
+        await db.execute(
+          'ALTER TABLE novel_embeddings ADD COLUMN prefix_scheme_version INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+      // prefix 方式（検索クエリ/検索文書プレフィックス）は過去から一貫しているため、
+      // 既存の埋め込みも現行 scheme と互換。強制再インデックスを避けるため、
+      // 既存行を現行バージョンに一括更新する。
+      await db.update(
+        'novel_embeddings',
+        {'prefix_scheme_version': RuriModelManager.prefixSchemeVersion},
+        where: 'prefix_scheme_version != ?',
+        whereArgs: [RuriModelManager.prefixSchemeVersion],
+      );
+      debugPrint(
+        '[Migration v12->v13] novel_embeddings に prefix_scheme_version を追加',
+      );
+    }
+    if (oldVersion < 14) {
+      // 検索履歴テーブルを追加（既存データ非破壊）。
+      // 先に CREATE TABLE IF NOT EXISTS でテーブル本体を確保してから、
+      // 既存列の有無を確認して ALTER TABLE で後付けする（順序逆転バグ防止）。
+      await _createSearchHistory(db);
+      final cols = await db.rawQuery('PRAGMA table_info(search_history)');
+      final existing = cols.map((c) => c['name'] as String).toSet();
+      if (!existing.contains('last_searched_at')) {
+        await db.execute(
+          'ALTER TABLE search_history ADD COLUMN last_searched_at TEXT',
+        );
+      }
+      if (!existing.contains('use_count')) {
+        await db.execute(
+          'ALTER TABLE search_history ADD COLUMN use_count INTEGER NOT NULL DEFAULT 1',
+        );
+      }
+      debugPrint('[Migration v13->v14] search_history を追加');
+    }
+    if (oldVersion < 15) {
+      // イラスト意味検索用の illust_embeddings テーブルを追加（既存データ非破壊）。
+      // novel_embeddings と完全同スキーマ。
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS illust_embeddings (
+          work_id INTEGER PRIMARY KEY,
+          embedding TEXT,
+          model_id TEXT NOT NULL DEFAULT '',
+          model_version INTEGER NOT NULL DEFAULT 0,
+          prefix_scheme_version INTEGER NOT NULL DEFAULT 0,
+          embedding_dim INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL
+        )
+      ''');
+      debugPrint('[Migration v14->v15] illust_embeddings を追加');
+    }
+    if (oldVersion < 16) {
+      // イラスト意味検索用の illusts メタデータテーブルを追加（既存データ非破壊）。
+      // novels と同名列でハイブリッド検索を共有化する。
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS illusts (
+          id INTEGER PRIMARY KEY,
+          title TEXT,
+          description TEXT,
+          author_id INTEGER,
+          tags TEXT,
+          tags_json TEXT,
+          x_restrict INTEGER,
+          novel_ai_type INTEGER,
+          created_at TEXT,
+          updated_at TEXT,
+          author_name TEXT NOT NULL DEFAULT '',
+          cover_url TEXT NOT NULL DEFAULT '',
+          page_count INTEGER NOT NULL DEFAULT 0,
+          total_bookmarks INTEGER NOT NULL DEFAULT 0,
+          create_date TEXT NOT NULL DEFAULT '',
+          total_view INTEGER NOT NULL DEFAULT 0,
+          meta_json TEXT
+        )
+      ''');
+      debugPrint('[Migration v15->v16] illusts を追加');
+    }
+    if (oldVersion < 17) {
+      // ダウンロードキューテーブルを追加（既存データ非破壊）。
+      // download_queue_groups: 親ジョブ（1作品=1グループ）
+      // download_queues: 子ジョブ（1ページ=1行）、FK group_id ON DELETE CASCADE
+      await _createDownloadQueueGroups(db);
+      await _createDownloadQueues(db);
+      debugPrint(
+        '[Migration v16->v17] download_queue_groups / download_queues を追加',
+      );
+    }
+  }
+
+  // ==========================================================================
+  // 購読タグの新着作品キャッシュ（subscription_new_items）
+  // ==========================================================================
+
+  /// タグごとの保存上限件数。超えた分は古い順に削除する。
+  static const int subscriptionNewItemsLimitPerTag = 100;
+
+  /// 新着作品を保存する（UNIQUE(subscribed_tag_id, work_id) で重複無視）。
+  /// 戻り値は実際に新規挿入された件数。
+  Future<int> insertSubscriptionNewItems(
+    int subscribedTagId,
+    List<Map<String, dynamic>> items,
+  ) async {
+    if (items.isEmpty) return 0;
+    final db = await database;
+    final now = DateTime.now().toUtc().toIso8601String();
+    var inserted = 0;
+    for (final item in items) {
+      final id = await db.insert('subscription_new_items', {
+        'subscribed_tag_id': subscribedTagId,
+        'work_id': item['work_id'],
+        'type': item['type'],
+        'title': item['title'],
+        'author_name': item['author_name'],
+        'preview_url': item['preview_url'],
+        'create_date': item['create_date'],
+        'x_restrict': item['x_restrict'] ?? 0,
+        'found_at': now,
+        'is_read': 0,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      if (id != 0) inserted++;
+    }
+    await cleanupSubscriptionNewItems(subscribedTagId);
+    return inserted;
+  }
+
+  /// タグの新着作品を新しい順に取得する。
+  Future<List<Map<String, dynamic>>> getSubscriptionNewItems(
+    int subscribedTagId,
+  ) async {
+    final db = await database;
+    // read-only リストを可変コピーにして返す（呼び出し側の安全のため）。
+    final rows = await db.query(
+      'subscription_new_items',
+      where: 'subscribed_tag_id = ?',
+      whereArgs: [subscribedTagId],
+      orderBy: 'create_date DESC, id DESC',
+    );
+    return List<Map<String, dynamic>>.from(rows);
+  }
+
+  /// 全タグの未読件数。Drawer バッジ用。
+  Future<int> getSubscriptionUnreadCount() async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM subscription_new_items WHERE is_read = 0',
+    );
+    return (rows.first['c'] as int?) ?? 0;
+  }
+
+  /// タグ単位の未読件数をまとめて取得する（tag_id -> count）。
+  Future<Map<int, int>> getSubscriptionUnreadCountByTag() async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT subscribed_tag_id AS tid, COUNT(*) AS c '
+      'FROM subscription_new_items WHERE is_read = 0 '
+      'GROUP BY subscribed_tag_id',
+    );
+    final result = <int, int>{};
+    for (final r in rows) {
+      final tid = r['tid'] as int?;
+      if (tid != null) result[tid] = (r['c'] as int?) ?? 0;
+    }
+    return result;
+  }
+
+  /// 1 件を既読にする。
+  Future<int> markSubscriptionNewItemRead(int id) async {
+    final db = await database;
+    return await db.update(
+      'subscription_new_items',
+      {'is_read': 1},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// タグ内のすべてを既読にする。
+  Future<int> markAllSubscriptionNewItemsRead(int subscribedTagId) async {
+    final db = await database;
+    return await db.update(
+      'subscription_new_items',
+      {'is_read': 1},
+      where: 'subscribed_tag_id = ?',
+      whereArgs: [subscribedTagId],
+    );
+  }
+
+  /// 肥大化防止: タグごとに上限件数を超えた古いレコードを削除する。
+  Future<int> cleanupSubscriptionNewItems(int subscribedTagId) async {
+    final db = await database;
+    return await db.rawDelete(
+      'DELETE FROM subscription_new_items WHERE subscribed_tag_id = ? '
+      'AND id NOT IN ('
+      '  SELECT id FROM subscription_new_items WHERE subscribed_tag_id = ? '
+      '  ORDER BY create_date DESC, id DESC LIMIT ?'
+      ')',
+      [subscribedTagId, subscribedTagId, subscriptionNewItemsLimitPerTag],
+    );
+  }
+
+  /// 新着キャッシュを全削除する（バックアップ復元時の参照切れ防止）。
+  Future<int> clearSubscriptionNewItems() async {
+    final db = await database;
+    return await db.delete('subscription_new_items');
+  }
+
+  /// 起動時に1回だけ実行する軽量なデータ修復。
+  ///
+  /// 旧バグ版で保存された「id=0（無効）」の小説レコードを novels / novel_embeddings
+  /// から削除する。これらは getNovelById(0) で必ず 404 になるため、検索結果に
+  /// 二度と出ないよう排除する。DBバージョンは変更しない（単純な DELETE のみ）。
+  /// 費用は最大でも既存件数分の数行 DELETE なので、起動時のブロックは無視できる。
+  Future<void> cleanupInvalidNovelRecords() async {
+    try {
+      final db = await database;
+      // id=0 は明らかに無効なレコード
+      final deletedNovels = await db.delete(
+        'novels',
+        where: 'id = ?',
+        whereArgs: [0],
+      );
+      final deletedEmbeddings = await db.delete(
+        'novel_embeddings',
+        where: 'work_id = ?',
+        whereArgs: [0],
+      );
+      final deletedText = await db.delete(
+        'novel_text',
+        where: 'work_id = ?',
+        whereArgs: [0],
+      );
+      if (deletedNovels > 0 || deletedEmbeddings > 0 || deletedText > 0) {
+        debugPrint(
+          '[Cleanup] 無効な小説レコード(id=0)を削除しました: '
+          'novels=$deletedNovels, embeddings=$deletedEmbeddings, text=$deletedText',
+        );
+      }
+    } catch (e) {
+      debugPrint('[Cleanup] 無効レコード削除中にエラー: $e');
+    }
+  }
+
+  /// 指定した小説IDが「削除済み / 存在しない（404）」と判定された場合に呼び出し、
+  /// novels / novel_embeddings / novel_text から該当レコードを遅延削除する。
+  ///
+  /// 一括APIバリデーションは行わず、ユーザーが実際にタップして 404 になった時点で
+  /// のみ呼ぶ（レート制限回避）。次回検索・一覧からは該当作品が出なくなる。
+  /// 小説詳細取得エラーから「本当にローカル削除してよいか」を判定する。
+  ///
+  /// 削除してよい（真の削除・非公開・閲覧不可）:
+  ///   - エラー本文が「小説が見つかりませんでした」等、作品単位の不存在
+  ///   - 404 かつエンドポイント不存在系の文言を含まない
+  ///
+  /// 削除してはいけない（API側仕様変更・認証・通信・レート制限の疑い）:
+  ///   - 「指定されたエンドポイントは存在しません」「エンドポイントが存在しない」
+  ///   - 401 / 403 / 429（認証・権限・レート制限）
+  ///   - それ以外の通信エラー・例外
+  static bool isGenuineNovelMissing(String errorMessage) {
+    final msg = errorMessage.toLowerCase();
+    // エンドポイント不存在系は絶対に削除しない（API仕様変更の誤判定）
+    if (msg.contains('指定されたエンドポイント') ||
+        msg.contains('エンドポイント') ||
+        msg.contains('endpoint') ||
+        msg.contains('存在しません')) {
+      return false;
+    }
+    // 認証・権限・レート制限は削除しない
+    if (msg.contains('401') ||
+        msg.contains('403') ||
+        msg.contains('429') ||
+        msg.contains('unauthorized') ||
+        msg.contains('forbidden') ||
+        msg.contains('rate limit')) {
+      return false;
+    }
+    // 作品が存在しない（404 / 見つかりませんでした）のみ削除対象
+    return msg.contains('404') || msg.contains('見つかりませんでした');
+  }
+
+  /// 404等で存在しないと判定された小説のローカル残骸を遅延削除（novels/embeddings/text）。
+  /// ただし [errorMessage] が与えられた場合は [isGenuineNovelMissing] で
+  /// 真の削除かどうかを厳格に判定し、API側仕様変更等の疑いがあれば削除しない。
+  Future<void> removeInvalidNovel(int novelId, {String? errorMessage}) async {
+    if (novelId <= 0) return;
+    if (errorMessage != null && !isGenuineNovelMissing(errorMessage)) {
+      debugPrint(
+        '[Cleanup] エラーが「真の小説削除」ではないため削除を見送りました: id=$novelId (error=$errorMessage)',
+      );
+      return;
+    }
+    try {
+      final db = await database;
+      await db.delete('novels', where: 'id = ?', whereArgs: [novelId]);
+      await db.delete(
+        'novel_embeddings',
+        where: 'work_id = ?',
+        whereArgs: [novelId],
+      );
+      await db.delete('novel_text', where: 'work_id = ?', whereArgs: [novelId]);
+      debugPrint('[Cleanup] 404 小説を削除しました: id=$novelId');
+    } catch (e) {
+      debugPrint('[Cleanup] 404 小説削除中にエラー(id=$novelId): $e');
     }
   }
 
@@ -435,6 +1488,30 @@ class DatabaseService {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+  /// 旧履歴レコードの欠損メタデータ（サムネイル・作者名）を非破壊で補完する。
+  /// 既存行は削除せず、指定された列のみ更新する。
+  Future<int> updateHistoryMeta({
+    required int workId,
+    String? title,
+    String? authorName,
+    String? url,
+  }) async {
+    final db = await database;
+    final values = <String, dynamic>{};
+    if (title != null && title.isNotEmpty) values['title'] = title;
+    if (authorName != null && authorName.isNotEmpty) {
+      values['author_name'] = authorName;
+    }
+    if (url != null && url.isNotEmpty) values['url'] = url;
+    if (values.isEmpty) return 0;
+    return await db.update(
+      'history',
+      values,
+      where: 'work_id = ?',
+      whereArgs: [workId],
+    );
+  }
+
   /// ダウンロード済みイラストを登録
   Future<int> insertDownloadedIllust({
     required int workId,
@@ -453,6 +1530,229 @@ class DatabaseService {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+  // ==========================================================================
+  // ダウンロードキュー（download_queue_groups / download_queues）CRUD
+  // ==========================================================================
+
+  /// ダウンロードキューグループ（親ジョブ）を登録する（UPSERT）。
+  /// work_id + work_type の組み合わせで UNIQUE 制約により重複を弾く。
+  /// 既存の場合は conflictAlgorithm.ignore で既存レコードを維持する。
+  Future<int> insertDownloadQueueGroup({
+    required int workId,
+    required String workType,
+    required String title,
+    required String authorName,
+    required int pageTotal,
+    int priority = 5,
+    int maxRetry = 3,
+  }) async {
+    final db = await database;
+    final now = DateTime.now().toUtc().toIso8601String();
+    return await db.insert('download_queue_groups', {
+      'work_id': workId,
+      'work_type': workType,
+      'title': title,
+      'author_name': authorName,
+      'page_total': pageTotal,
+      'page_completed': 0,
+      'status': 'pending',
+      'priority': priority,
+      'retry_count': 0,
+      'max_retry': maxRetry,
+      'created_at': now,
+      'updated_at': now,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  /// ダウンロードキューアイテム（子ジョブ）を一括登録する。
+  /// 同一グループ内の page_index は UNIQUE でなければならない。
+  Future<void> insertDownloadQueueItems(
+    int groupId,
+    List<Map<String, dynamic>> items,
+  ) async {
+    final db = await database;
+    final batch = db.batch();
+    final now = DateTime.now().toUtc().toIso8601String();
+    for (final item in items) {
+      batch.insert('download_queues', {
+        'group_id': groupId,
+        'work_id': item['work_id'] as int,
+        'work_type': item['work_type'] as String,
+        'page_index': item['page_index'] as int,
+        'url': item['url'] as String? ?? '',
+        'local_path': '',
+        'file_size': item['file_size'] as int? ?? 0,
+        'downloaded_bytes': 0,
+        'status': 'pending',
+        'retry_count': 0,
+        'max_retry': item['max_retry'] as int? ?? 3,
+        'created_at': now,
+        'updated_at': now,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// 全ダウンロードキューグループを取得する（status で絞り込み可能）。
+  /// priority 降順、created_at 昇順でソートする。
+  Future<List<Map<String, dynamic>>> getDownloadQueueGroups({
+    String? status,
+  }) async {
+    final db = await database;
+    if (status != null) {
+      return await db.query(
+        'download_queue_groups',
+        where: 'status = ?',
+        whereArgs: [status],
+        orderBy: 'priority DESC, created_at ASC',
+      );
+    }
+    return await db.query(
+      'download_queue_groups',
+      orderBy: 'priority DESC, created_at ASC',
+    );
+  }
+
+  /// 指定グループのダウンロードキューアイテムを全件取得する。
+  Future<List<Map<String, dynamic>>> getDownloadQueueItems(int groupId) async {
+    final db = await database;
+    return await db.query(
+      'download_queues',
+      where: 'group_id = ?',
+      whereArgs: [groupId],
+      orderBy: 'page_index ASC',
+    );
+  }
+
+  /// ダウンロードキューアイテムのステータス・進捗を更新する。
+  Future<int> updateDownloadQueueItem({
+    required int itemId,
+    String? status,
+    int? downloadedBytes,
+    String? localPath,
+    int? fileSize,
+    String? errorCode,
+    String? errorMessage,
+    int? retryCount,
+  }) async {
+    final db = await database;
+    final now = DateTime.now().toUtc().toIso8601String();
+    final values = <String, dynamic>{'updated_at': now};
+    if (status != null) {
+      values['status'] = status;
+      if (status == 'completed' || status == 'failed') {
+        values['completed_at'] = now;
+      }
+    }
+    if (downloadedBytes != null) values['downloaded_bytes'] = downloadedBytes;
+    if (localPath != null) values['local_path'] = localPath;
+    if (fileSize != null) values['file_size'] = fileSize;
+    if (errorCode != null) values['error_code'] = errorCode;
+    if (errorMessage != null) values['error_message'] = errorMessage;
+    if (retryCount != null) values['retry_count'] = retryCount;
+    return await db.update(
+      'download_queues',
+      values,
+      where: 'id = ?',
+      whereArgs: [itemId],
+    );
+  }
+
+  /// ダウンロードキューグループのステータス・進捗を更新する。
+  /// page_completed は子アイテム完了時に外部からカウントして渡す。
+  Future<int> updateDownloadQueueGroup({
+    required int groupId,
+    String? status,
+    int? pageCompleted,
+    String? errorCode,
+    String? errorMessage,
+    int? retryCount,
+  }) async {
+    final db = await database;
+    final now = DateTime.now().toUtc().toIso8601String();
+    final values = <String, dynamic>{'updated_at': now};
+    if (status != null) {
+      values['status'] = status;
+      if (status == 'completed' || status == 'failed') {
+        values['completed_at'] = now;
+      }
+      // 再開(pending)に戻す際はエラー情報をクリアする
+      if (status == 'pending') {
+        values['error_code'] = null;
+        values['error_message'] = null;
+      }
+    }
+    if (pageCompleted != null) values['page_completed'] = pageCompleted;
+    if (errorCode != null) values['error_code'] = errorCode;
+    if (errorMessage != null) values['error_message'] = errorMessage;
+    if (retryCount != null) values['retry_count'] = retryCount;
+    return await db.update(
+      'download_queue_groups',
+      values,
+      where: 'id = ?',
+      whereArgs: [groupId],
+    );
+  }
+
+  /// 起動時復旧: status='running' のグループ・アイテムを全て 'pending' に戻す。
+  /// 前回アプリ異常終了時に実行中だったジョブを再開可能にする。
+  Future<int> recoverInterruptedDownloads() async {
+    final db = await database;
+    final now = DateTime.now().toUtc().toIso8601String();
+    final count = await db.update(
+      'download_queue_groups',
+      {'status': 'pending', 'updated_at': now},
+      where: 'status = ?',
+      whereArgs: ['running'],
+    );
+    if (count > 0) {
+      await db.update(
+        'download_queues',
+        {'status': 'pending', 'updated_at': now},
+        where: 'status = ?',
+        whereArgs: ['running'],
+      );
+      debugPrint('[DownloadQueue] 復旧: running→pending ($count 件)');
+    }
+    return count;
+  }
+
+  /// 指定グループを削除する（FK CASCADE で子アイテムも自動削除）。
+  /// ファイル実体の削除は DownloadService 側で行ってから呼ぶこと。
+  Future<int> deleteDownloadQueueGroup(int groupId) async {
+    final db = await database;
+    return await db.delete(
+      'download_queue_groups',
+      where: 'id = ?',
+      whereArgs: [groupId],
+    );
+  }
+
+  /// 指定ステータスのグループを一括削除する（完了/失敗済みのクリア用）。
+  Future<int> deleteDownloadQueueGroupsByStatus(String status) async {
+    final db = await database;
+    return await db.delete(
+      'download_queue_groups',
+      where: 'status = ?',
+      whereArgs: [status],
+    );
+  }
+
+  /// work_id + work_type でグループを検索する（重複登録チェック用）。
+  Future<Map<String, dynamic>?> findDownloadQueueGroup(
+    int workId,
+    String workType,
+  ) async {
+    final db = await database;
+    final rows = await db.query(
+      'download_queue_groups',
+      where: 'work_id = ? AND work_type = ?',
+      whereArgs: [workId, workType],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
   // ==========================================
   // バックアップ/リストア（Google Drive 連携用）
   // ==========================================
@@ -469,6 +1769,9 @@ class DatabaseService {
       'mutes',
       'folders',
       'folder_items',
+      'subscribed_tags',
+      'read_later',
+      'search_history',
     ];
     final Map<String, dynamic> result = {};
     for (final table in tables) {
@@ -512,55 +1815,219 @@ class DatabaseService {
     return result.first;
   }
 
-  /// 小説のメタデータを novels テーブルに保存（UPSERT）
-  /// フィーリング検索で使用する author_name / cover_url / page_count 等を保持する。
-  /// 既存の title / description / text などは上書きしないよう既存行とマージする。
-  Future<int> saveNovelMeta({
-    required int workId,
-    required String title,
-    required String description,
-    required String authorName,
-    required String coverUrl,
-    required int pageCount,
-    required int totalBookmarks,
-    required String createDate,
+  // ==========================================================================
+  // 検索履歴（search_history）CRUD
+  // ==========================================================================
+
+  /// 検索実行時にキーワードを保存・更新する。
+  /// 既存キーワードなら last_searched_at を更新し use_count を +1、
+  /// 新規なら insert（use_count=1）。[keyword] が空なら何もしない。
+  Future<void> addSearchHistory(String keyword) async {
+    final k = keyword.trim();
+    if (k.isEmpty) return;
+    final db = await database;
+    final now = DateTime.now().toUtc().toIso8601String();
+    final existing = await db.query(
+      'search_history',
+      columns: ['id', 'use_count'],
+      where: 'keyword = ?',
+      whereArgs: [k],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) {
+      final prevCount = (existing.first['use_count'] as int?) ?? 0;
+      await db.update(
+        'search_history',
+        {'last_searched_at': now, 'use_count': prevCount + 1},
+        where: 'keyword = ?',
+        whereArgs: [k],
+      );
+    } else {
+      await db.insert('search_history', {
+        'keyword': k,
+        'last_searched_at': now,
+        'use_count': 1,
+      });
+    }
+  }
+
+  /// 検索候補（部分一致）を取得する。
+  /// [query] が空なら全件（[orderBy]=use_count なら使用回数順、
+  /// それ以外は最新日時順）を返す。
+  Future<List<Map<String, dynamic>>> searchSearchHistory({
+    String query = '',
+    String orderBy = 'recent',
   }) async {
+    final db = await database;
+    final where = query.trim().isEmpty ? null : 'keyword LIKE ?';
+    final whereArgs = query.trim().isEmpty ? null : ['%${query.trim()}%'];
+    final order = orderBy == 'use_count'
+        ? 'use_count DESC, last_searched_at DESC'
+        : 'last_searched_at IS NULL, last_searched_at DESC';
+    return await db.query(
+      'search_history',
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: order,
+      limit: 30,
+    );
+  }
+
+  /// 検索履歴を個別削除する。
+  Future<int> deleteSearchHistory(String keyword) async {
+    final db = await database;
+    return await db.delete(
+      'search_history',
+      where: 'keyword = ?',
+      whereArgs: [keyword],
+    );
+  }
+
+  /// 検索履歴を全件削除する。
+  Future<int> clearSearchHistory() async {
+    final db = await database;
+    return await db.delete('search_history');
+  }
+
+  // ==========================================================================
+  // オフライン本棚（novel_text キャッシュ）CRUD
+  // ==========================================================================
+
+  /// キャッシュされた小説本文の一覧を取得する。
+  /// 各要素には 'work_id' / 'title' / 'author_name' / 'updated_at' /
+  /// 'text'（文字列長からバイト数を概算）/ 'char_count'（本文文字数）を含む。
+  /// updated_at の新しい順でソート。
+  Future<List<Map<String, dynamic>>> getCachedNovelTexts() async {
+    final db = await database;
+    final rows = await db.query(
+      'novel_text',
+      columns: ['work_id', 'title', 'author_name', 'updated_at', 'text'],
+      orderBy: 'updated_at DESC',
+    );
+    // 概算バイト数・文字数を付与して返す
+    return rows.map((r) {
+      final text = (r['text'] as String?) ?? '';
+      // UTF-8 バイト長で概算キャッシュサイズを算出
+      final bytes = text.isEmpty ? 0 : text.length * 3;
+      return <String, dynamic>{
+        ...r,
+        'char_count': text.length,
+        'approx_bytes': bytes,
+      };
+    }).toList();
+  }
+
+  /// キャッシュされた小説本文を1件削除する。
+  Future<int> deleteCachedNovelText(int workId) async {
+    final db = await database;
+    return await db.delete(
+      'novel_text',
+      where: 'work_id = ?',
+      whereArgs: [workId],
+    );
+  }
+
+  /// [beforeDays] 日以上前に保存されたキャッシュを一括削除する。
+  /// [beforeDays] に 0 以下を指定した場合はすべて削除する。
+  /// 削除件数を返す。
+  Future<int> deleteOldCachedNovelTexts({int beforeDays = 0}) async {
+    final db = await database;
+    if (beforeDays <= 0) {
+      return await db.delete('novel_text');
+    }
+    final threshold = DateTime.now()
+        .toUtc()
+        .subtract(Duration(days: beforeDays))
+        .toIso8601String();
+    return await db.delete(
+      'novel_text',
+      where: 'updated_at IS NOT NULL AND updated_at < ?',
+      whereArgs: [threshold],
+    );
+  }
+
+  /// 全キャッシュの概算バイト数合計を取得する（文字列長 × 3 で UTF-8 概算）。
+  Future<int> getCachedNovelTextsTotalBytes() async {
+    final list = await getCachedNovelTexts();
+    return list.fold<int>(
+      0,
+      (sum, r) => sum + ((r['approx_bytes'] as int?) ?? 0),
+    );
+  }
+
+  /// 完全な Novel モデルを novels テーブルへ保存（UPSERT）。
+  /// アプリ内の小説メタデータ保存はこのメソッドに一本化する。
+  /// meta_json に Novel.toJson() 全体を保存し、getNovelMeta() で完全復元できる。
+  Future<int> saveNovel(Novel novel) async {
     final db = await database;
     final existing = await db.query(
       'novels',
       where: 'id = ?',
-      whereArgs: [workId],
+      whereArgs: [novel.id],
     );
-    final merged = <String, dynamic>{
-      'id': workId,
-      'title': title,
-      'description': description,
-      'author_name': authorName,
-      'cover_url': coverUrl,
-      'page_count': pageCount,
-      'total_bookmarks': totalBookmarks,
-      'create_date': createDate,
-      'updated_at': DateTime.now().toIso8601String(),
+    final now = DateTime.now().toIso8601String();
+    final row = <String, dynamic>{
+      'id': novel.id,
+      'title': novel.title,
+      'description': novel.caption,
+      'author_id': novel.author.id,
+      'author_name': novel.author.name,
+      'series_id': novel.series?.id ?? 0,
+      'series_order': novel.seriesOrder ?? 0,
+      'text_length': novel.textLength,
+      'tags': novel.tags.join(','),
+      'tags_json': jsonEncode(novel.tags),
+      'x_restrict': novel.xRestrict,
+      'novel_ai_type': novel.aiType,
+      'cover_url': novel.coverUrl,
+      'page_count': novel.pageCount,
+      'total_bookmarks': novel.totalBookmarks,
+      'total_view': novel.totalView,
+      'create_date': novel.createDate,
+      'meta_json': jsonEncode({
+        ...novel.toJson(),
+        if (novel.series != null) 'series_title': novel.series!.title,
+      }),
+      'updated_at': now,
     };
     if (existing.isNotEmpty) {
-      // 既存データを保持（NULL のものだけ新しい値で補完）
-      final row = existing.first;
-      merged['author_id'] = row['author_id'] ?? 0;
-      merged['series_id'] = row['series_id'] ?? 0;
-      merged['series_order'] = row['series_order'] ?? 0;
-      merged['text'] = row['text'] ?? '';
-      merged['text_length'] = row['text_length'] ?? 0;
-      merged['tags'] = row['tags'] ?? '';
-      merged['tags_json'] = row['tags_json'] ?? '';
-      merged['x_restrict'] = row['x_restrict'] ?? 0;
-      merged['novel_ai_type'] = row['novel_ai_type'] ?? 0;
-      merged['created_at'] = row['created_at'] ?? createDate;
+      // 本文など API から取得しない列は既存値を保持する
+      final old = existing.first;
+      row['text'] = old['text'] ?? '';
+      row['created_at'] = old['created_at'] ?? now;
+      if (novel.textLength == 0) {
+        row['text_length'] = old['text_length'] ?? 0;
+      }
+    } else {
+      row['text'] = '';
+      row['created_at'] = now;
     }
     return await db.insert(
       'novels',
-      merged,
+      row,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  /// novels テーブルから完全な Novel を復元する（meta_json 優先）。
+  /// meta_json がない旧データは null を返し、呼び出し側で API 補完させる。
+  Future<Novel?> getNovelMeta(int workId) async {
+    final db = await database;
+    final rows = await db.query(
+      'novels',
+      where: 'id = ?',
+      whereArgs: [workId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final metaJson = rows.first['meta_json'] as String?;
+    if (metaJson == null || metaJson.isEmpty) return null;
+    try {
+      final map = jsonDecode(metaJson) as Map<String, dynamic>;
+      return Novel.fromJson(map);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// 小説のベクトルを保存（UPSERT）
@@ -574,6 +2041,8 @@ class DatabaseService {
       'embedding': jsonEncode(embedding.toList()),
       'model_id': RuriModelManager.embeddingModelId,
       'model_version': RuriModelManager.embeddingModelVersion,
+      'prefix_scheme_version': RuriModelManager.prefixSchemeVersion,
+      'embedding_dim': RuriModelManager.embeddingDimension,
       'updated_at': DateTime.now().toIso8601String(),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
@@ -588,24 +2057,185 @@ class DatabaseService {
       'novel_embeddings',
       columns: ['work_id'],
       where:
-          'work_id IN ($placeholders) AND model_id = ? AND model_version = ?',
+          'work_id IN ($placeholders) AND model_id = ? AND model_version = ? AND prefix_scheme_version = ?',
       whereArgs: [
         ...workIds,
         RuriModelManager.embeddingModelId,
         RuriModelManager.embeddingModelVersion,
+        RuriModelManager.prefixSchemeVersion,
       ],
     );
     final existing = rows.map((r) => r['work_id'] as int).toSet();
     return workIds.where((id) => !existing.contains(id)).toList();
   }
 
-  /// 購読タグを追加
+  /// イラストのベクトルを保存（UPSERT）。novel 版と同型。
+  Future<int> saveIllustEmbedding({
+    required int workId,
+    required Float32List embedding,
+  }) async {
+    final db = await database;
+    return await db.insert('illust_embeddings', {
+      'work_id': workId,
+      'embedding': jsonEncode(embedding.toList()),
+      'model_id': RuriModelManager.embeddingModelId,
+      'model_version': RuriModelManager.embeddingModelVersion,
+      'prefix_scheme_version': RuriModelManager.prefixSchemeVersion,
+      'embedding_dim': RuriModelManager.embeddingDimension,
+      'updated_at': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// 指定した work_id のうち、illust_embeddings にベクトルが存在しないものを返す。
+  /// バックグラウンド Embedding 生成の対象抽出に使用する。
+  Future<List<int>> getIllustIdsWithoutEmbedding(List<int> workIds) async {
+    if (workIds.isEmpty) return [];
+    final db = await database;
+    final placeholders = List.filled(workIds.length, '?').join(',');
+    final rows = await db.query(
+      'illust_embeddings',
+      columns: ['work_id'],
+      where:
+          'work_id IN ($placeholders) AND model_id = ? AND model_version = ? AND prefix_scheme_version = ?',
+      whereArgs: [
+        ...workIds,
+        RuriModelManager.embeddingModelId,
+        RuriModelManager.embeddingModelVersion,
+        RuriModelManager.prefixSchemeVersion,
+      ],
+    );
+    final existing = rows.map((r) => r['work_id'] as int).toSet();
+    return workIds.where((id) => !existing.contains(id)).toList();
+  }
+
+  /// イラストの検索用メタデータを保存（UPSERT）。
+  /// illust_embeddings とセットで書き込み、ハイブリッド検索（illust モード）の
+  /// 結合元とする。novels と同名カラムでスコア計算を共有化する。
+  Future<int> saveIllustMeta(Illust illust) async {
+    final db = await database;
+    return await db.insert('illusts', {
+      'id': illust.id,
+      'title': illust.title,
+      'description': illust.caption,
+      'author_id': illust.author.id,
+      'tags': illust.tags.join(','),
+      'tags_json': jsonEncode(illust.tags),
+      'x_restrict': illust.xRestrict,
+      'novel_ai_type': illust.aiType,
+      'created_at': illust.createDate,
+      'updated_at': DateTime.now().toIso8601String(),
+      'author_name': illust.author.name,
+      'cover_url': illust.urls.preview ?? '',
+      'page_count': illust.pageCount,
+      'total_bookmarks': illust.totalBookmarks,
+      'create_date': illust.createDate,
+      'total_view': illust.totalView,
+      'meta_json': jsonEncode(illust.toJson()),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// イラストの検索用メタデータを取得する。
+  /// 存在しない場合は null を返す。
+  Future<Map<String, dynamic>?> getIllustMeta(int workId) async {
+    final db = await database;
+    final rows = await db.query(
+      'illusts',
+      where: 'id = ?',
+      whereArgs: [workId],
+      limit: 1,
+    );
+    return rows.isNotEmpty ? rows.first : null;
+  }
+
+  /// 購読タグを追加（重複登録を防止）
+  ///
+  /// 同じ (tag, type) の組み合わせが既に存在する場合は登録せず、
+  /// 既存レコードの id を返す。存在しない場合は新規 insert する。
+  /// created_at は登録時刻（UTC ISO8601）で自動付与する。
   Future<int> addSubscribedTag(String tag, String type) async {
     final db = await database;
+
+    final existing = await db.query(
+      'subscribed_tags',
+      columns: ['id'],
+      where: 'tag = ? AND type = ?',
+      whereArgs: [tag, type],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) {
+      // 重複: 既存レコードの id を返す（登録済み）
+      return existing.first['id'] as int;
+    }
+
     return await db.insert('subscribed_tags', {
       'tag': tag,
       'type': type,
-    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  /// 登録済み購読タグを全件取得（created_at 昇順）
+  Future<List<Map<String, dynamic>>> getSubscribedTags() async {
+    final db = await database;
+    // read-only リストを可変コピーにして返す（呼び出し側で _tags[idx]=... 等の
+    // 要素代入が行われるため必須）。
+    final rows = await db.query(
+      'subscribed_tags',
+      orderBy: 'created_at ASC, id ASC',
+    );
+    return List<Map<String, dynamic>>.from(rows);
+  }
+
+  /// 指定した購読タグが存在するか（重複チェック用）
+  Future<bool> isSubscribedTag(String tag, String type) async {
+    final db = await database;
+    final rows = await db.query(
+      'subscribed_tags',
+      columns: ['id'],
+      where: 'tag = ? AND type = ?',
+      whereArgs: [tag, type],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
+  /// id 指定で購読タグを削除
+  Future<int> removeSubscribedTag(int id) async {
+    final db = await database;
+    return await db.delete('subscribed_tags', where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// 購読タグの新着チェック結果を保存する。
+  ///
+  /// [lastNewestDate] は前回チェック時の最新作品 create_date（UTC ISO8601）、
+  /// [lastNewCount] は新着件数（初回は 0）。[lastCheckedAt] はチェック実行時刻。
+  Future<int> updateSubscribedTagCheck(
+    int id, {
+    required String lastCheckedAt,
+    String? lastNewestDate,
+    int lastNewCount = 0,
+  }) async {
+    final db = await database;
+    return await db.update(
+      'subscribed_tags',
+      {
+        'last_checked_at': lastCheckedAt,
+        'last_newest_date': lastNewestDate,
+        'last_new_count': lastNewCount,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// (tag, type) 指定で購読タグを削除
+  Future<int> removeSubscribedTagByValue(String tag, String type) async {
+    final db = await database;
+    return await db.delete(
+      'subscribed_tags',
+      where: 'tag = ? AND type = ?',
+      whereArgs: [tag, type],
+    );
   }
 
   /// エクスポートされた全データをインポート（マージ）する。
@@ -640,9 +2270,23 @@ class DatabaseService {
         'novel_ai_type',
         'created_at',
         'updated_at',
+        'author_name',
+        'cover_url',
+        'page_count',
+        'total_bookmarks',
+        'create_date',
+        'total_view',
+        'meta_json',
       ],
       'novel_text': ['work_id', 'pages_json', 'text', 'updated_at'],
-      'novel_embeddings': ['work_id', 'embedding', 'updated_at'],
+      'novel_embeddings': [
+        'work_id',
+        'embedding',
+        'model_id',
+        'model_version',
+        'prefix_scheme_version',
+        'updated_at',
+      ],
       'downloaded_illust': [
         'illust_id',
         'local_path',
@@ -661,10 +2305,34 @@ class DatabaseService {
         'type',
         'added_at',
       ],
+      'read_later': [
+        'id',
+        'work_id',
+        'title',
+        'author_name',
+        'author_id',
+        'cover_url',
+        'text_length',
+        'tags_json',
+        'x_restrict',
+        'status',
+        'added_at',
+        'last_opened_at',
+        'finished_at',
+      ],
     };
+
+    // subscribed_tags は専用処理（他テーブルは汎用ループで処理）
+    await _importSubscribedTags(data, db, summary);
+
+    // 新着キャッシュ（subscription_new_items）は端末ローカル扱いでバックアップ
+    // 対象外。subscribed_tags の id が再採番されるため、参照切れレコードを
+    // 残さないよう復元時にクリアする。
+    await db.delete('subscription_new_items');
 
     for (final entry in tableSchemes.entries) {
       final table = entry.key;
+      if (table == 'subscribed_tags') continue; // 専用ブロックで処理済み
       final columns = entry.value;
       final rows = data[table];
       if (rows is! List) continue;
@@ -683,6 +2351,71 @@ class DatabaseService {
             cleaned[col] = row[col];
           }
         }
+        // 旧バックアップ互換: モデル識別列が無い/空/0 の場合の補完（Task 6 強化）。
+        // ただし「実際に現在の Ruri モデルで生成された互換ベクトル」のみ上書きし、
+        // 壊れた/旧モデル(MiniLM等)の非互換ベクトルは偽装せず再インデックス対象に残す。
+        if (table == 'novel_embeddings') {
+          final rawEmb = cleaned['embedding'];
+          var validDim = false;
+          if (rawEmb is String && rawEmb.isNotEmpty) {
+            try {
+              final decoded = jsonDecode(rawEmb) as List<dynamic>;
+              validDim =
+                  decoded.length == RuriModelManager.embeddingDimension &&
+                  RuriModelManager.embeddingModelId.isNotEmpty;
+            } catch (_) {
+              validDim = false;
+            }
+          }
+          if (validDim) {
+            final mid = cleaned['model_id'];
+            if (mid == null || mid is! String || mid.isEmpty) {
+              cleaned['model_id'] = RuriModelManager.embeddingModelId;
+            }
+            final mv = cleaned['model_version'];
+            if (mv == null || (mv is int && mv <= 0)) {
+              cleaned['model_version'] = RuriModelManager.embeddingModelVersion;
+            }
+            final ps = cleaned['prefix_scheme_version'];
+            if (ps == null || (ps is int && ps <= 0)) {
+              cleaned['prefix_scheme_version'] =
+                  RuriModelManager.prefixSchemeVersion;
+            }
+          }
+          // 非互換(dim不一致/壊れ)は識別値を埋めず、検索時にスキップされる
+        } else if (table == 'novels') {
+          // 旧バックアップでメタデータ列が欠落していた場合でも、
+          // 明示的な安全値で補完して復元時の不完全挿入を防ぐ。
+          // （本来は saveNovel 経由で全メタデータが保存されるため、
+          //  現在のバックアップには全列が含まれる。この補完は
+          //  過去バックアップ互換・堅牢性のための措置。）
+          final defaults = <String, dynamic>{
+            'author_name': '',
+            'cover_url': '',
+            'page_count': 0,
+            'total_bookmarks': 0,
+            'total_view': 0,
+            'create_date': '',
+            'created_at': DateTime.now().toIso8601String(),
+            'text_length': 0,
+            'tags': '',
+            'tags_json': '[]',
+            'x_restrict': 0,
+            'novel_ai_type': 0,
+          };
+          defaults.forEach((k, v) {
+            if (!cleaned.containsKey(k)) cleaned[k] = v;
+          });
+          if (!cleaned.containsKey('meta_json') ||
+              (cleaned['meta_json'] as String? ?? '').isEmpty) {
+            // meta_json が無い場合は既存の列から最小限の JSON を構築
+            cleaned['meta_json'] = jsonEncode({
+              'id': cleaned['id'],
+              'title': cleaned['title'] ?? '',
+              'caption': cleaned['description'] ?? '',
+            });
+          }
+        }
         batch.insert(
           table,
           cleaned,
@@ -694,6 +2427,83 @@ class DatabaseService {
       summary[table] = count;
     }
 
+    // 復元検証ログ（デバッグ用）: フィーリング発掘関連カラムの欠落を検出
+    final restoredNovels = await db.query('novels');
+    final restoredEmb = await db.query('novel_embeddings');
+    final textLenOk = restoredNovels
+        .where((r) => (r['text_length'] as int? ?? 0) > 0)
+        .length;
+    final pageOk = restoredNovels
+        .where((r) => (r['page_count'] as int? ?? 0) > 0)
+        .length;
+    final metaOk = restoredNovels
+        .where((r) => (r['meta_json'] as String? ?? '').toString().isNotEmpty)
+        .length;
+    final embModelOk = restoredEmb
+        .where((r) => (r['model_id'] as String? ?? '').toString().isNotEmpty)
+        .length;
+    debugPrint(
+      '[importAllData] 復元検証: novels=${restoredNovels.length} '
+      '(text_length>0: $textLenOk, page_count>0: $pageOk, meta_json: $metaOk), '
+      'novel_embeddings=${restoredEmb.length} (model_id設定: $embModelOk)'
+      '${embModelOk < restoredEmb.length ? " [警告] モデル不整合の埋め込みあり" : ""}, '
+      'summary=$summary',
+    );
+
     return summary;
+  }
+
+  /// subscribed_tags をインポートする（Google Drive バックアップ/復元用）。
+  ///
+  /// 方針:
+  /// - テーブルを一旦消去し、バックアップから再構築（他テーブルと同じ流れ）。
+  /// - id は固定復元せず環境ごとに再採番する（AUTOINCREMENT）。
+  /// - tag/type が空のレコードは skip（壊れた1件で全体を落とさない）。
+  /// - created_at が欠損/空なら現在時刻(UTC)で補完。
+  /// - last_checked_at / last_newest_date が無くても落ちない（NULL で許容）。
+  /// - last_new_count が無ければ 0 で補完。
+  /// - 後方互換: バックアップ JSON に subscribed_tags が無い場合は何もしない。
+  Future<void> _importSubscribedTags(
+    Map<String, dynamic> data,
+    Database db,
+    Map<String, int> summary,
+  ) async {
+    final rows = data['subscribed_tags'];
+    if (rows is! List) {
+      summary['subscribed_tags'] = 0;
+      return;
+    }
+
+    // 既存データを消去
+    await db.delete('subscribed_tags');
+
+    final now = DateTime.now().toUtc().toIso8601String();
+    var count = 0;
+    final batch = db.batch();
+    for (final raw in rows) {
+      if (raw is! Map) continue;
+      final row = Map<String, dynamic>.from(raw);
+      final tag = (row['tag'] as String?)?.toString() ?? '';
+      final type = (row['type'] as String?)?.toString() ?? '';
+      // 空の tag/type はスキップ（不正データ）
+      if (tag.isEmpty || type.isEmpty) continue;
+
+      final createdAt = (row['created_at'] as String?)?.isNotEmpty == true
+          ? row['created_at'] as String
+          : now;
+      final lastNewCount = (row['last_new_count'] as int?) ?? 0;
+
+      batch.insert('subscribed_tags', {
+        'tag': tag,
+        'type': type,
+        'created_at': createdAt,
+        'last_checked_at': row['last_checked_at'],
+        'last_newest_date': row['last_newest_date'],
+        'last_new_count': lastNewCount,
+      });
+      count++;
+    }
+    await batch.commit(noResult: true);
+    summary['subscribed_tags'] = count;
   }
 }

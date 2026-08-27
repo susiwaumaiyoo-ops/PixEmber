@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
-import '../widgets/pixiv_image.dart';
+import '../widgets/novel_list_card.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sqflite/sqflite.dart';
 import '../novel_model.dart';
-import '../illust_model.dart' show Author, cleanCaption;
+import '../illust_model.dart';
 import 'novel_detail_screen.dart';
+import 'illust_detail_state.dart' show IllustDetailScreen;
+import 'ai_index_maintenance_screen.dart';
 import '../services/database_service.dart';
-import '../services/database_search.dart';
 import '../services/embedding_service.dart';
+import '../services/hybrid_search_service.dart';
+import '../config/feature_flags.dart';
+import '../services/feeling_search_query.dart';
 import '../services/ruri_model_manager.dart';
+import '../services/pixiv_api_service.dart';
+import '../services/rerank_model_manager.dart';
+import '../utils/score_format.dart';
 
 /// タブレット判定閾値: <700=1列, 700以上=2列
 /// （home_ui_components.dart の _kTabletBreakpoint は private かつ循環参照を
@@ -21,7 +27,36 @@ const double kMinDisplaySimilarity = 0.75;
 const double kTabletBreakpoint = 700.0;
 const double kTabletContentMaxWidth = 800.0;
 
+/// 検索候補の1件（履歴 or 購読タグ）
+class _SearchSuggestion {
+  final String keyword;
+  final bool isTag;
+
+  const _SearchSuggestion({required this.keyword, required this.isTag});
+}
+
+/// 検索結果カードの事前計算済みデータ（build の同期コスト削減用）。
+class _PreparedCard {
+  final Novel novel;
+  final String? matchLabel;
+  final List<Widget> extraBadges;
+  final String? displayExplanation;
+  final bool isKeywordMatch;
+  final bool isAiUnanalyzed;
+  const _PreparedCard({
+    required this.novel,
+    required this.matchLabel,
+    required this.extraBadges,
+    required this.displayExplanation,
+    this.isKeywordMatch = false,
+    this.isAiUnanalyzed = false,
+  });
+}
+
 /// フィーリング発掘画面
+///
+/// UI層のみ（検索に集中・速い）。AIインデックス診断・修復UIは
+/// [AiIndexMaintenanceScreen] へ分離した。
 class FeelingDiscoveryScreen extends StatefulWidget {
   const FeelingDiscoveryScreen({super.key});
 
@@ -32,10 +67,10 @@ class FeelingDiscoveryScreen extends StatefulWidget {
 class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
   final TextEditingController _queryController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  // 検索窓候補（DB履歴 + 購読タグ）オーバーレイの表示フラグ
+  bool _showSuggestions = false;
 
   bool _isSearching = false;
-  bool _isLoadingMore = false;
-  bool _hasMore = true;
   bool _isModelReady = false;
   bool _isModelInitializing = false; // AIモデル初期化中フラグ
   bool _isModelDownloaded = false; // モデルファイルが端末に存在し検証済みか
@@ -45,13 +80,32 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
   String _dlLabel = '';
   String? _dlError;
   ValueNotifier<bool>? _dlCancel;
+  String? _error;
   String _lastQuery = '';
   List<Map<String, dynamic>> _results = [];
-  double? _lastMinSimilarity;
+  // 段階表示用: 全検索結果を保持し、別フレームで少しずつ _results に追加する。
+  List<Map<String, dynamic>> _pendingResults = [];
+  // 1回のフレームで一気に描画する件数上限（build 負荷分散用）。
+  static const int _initialDisplayCount = 12;
+  static const int _stepDisplayCount = 8;
   // 重複排除用：表示済み work_id を保持（検索クエリ変更時にクリア）
   final Set<int> _displayedWorkIds = {};
+  // build の同期コストを抑えるため、index ごとに事前計算済みカードをキャッシュする。
+  final Map<int, _PreparedCard> _preparedCache = {};
 
-  static const int _pageSize = 20;
+  // v2: 構造化クエリ
+  FeelingSearchQuery _query = const FeelingSearchQuery();
+  // 検索対象種別（デフォルト小説）。イラスト意味検索は flag 有効時のみ切替可。
+  WorkType _workType = WorkType.novel;
+  // キーワード/タグ入力用テンポラリコントローラ
+  final TextEditingController _mustController = TextEditingController();
+  final TextEditingController _shouldController = TextEditingController();
+  final TextEditingController _excludeController = TextEditingController();
+  final TextEditingController _exactTagController = TextEditingController();
+  final TextEditingController _partialTagController = TextEditingController();
+  final TextEditingController _minBookmarkController = TextEditingController();
+  final TextEditingController _minLenController = TextEditingController();
+  final TextEditingController _maxLenController = TextEditingController();
 
   @override
   void initState() {
@@ -59,7 +113,9 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
     _scrollController.addListener(_onScroll);
     _loadSearchHistory();
 
-    // ONNXモデルをバックグラウンドで事前初期化（ウォームアップ）
+    // ONNXモデルをバックグラウンドで事前初期化（ウォームアップ）。
+    // 未ダウンロードなら初期化せず、DL 導線を表示する。
+    // ※ 診断は行わない（メンテ画面側の責務）。
     _initializeModel();
   }
 
@@ -102,6 +158,14 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
     _dlCancel?.dispose();
     _queryController.dispose();
     _scrollController.dispose();
+    _mustController.dispose();
+    _shouldController.dispose();
+    _excludeController.dispose();
+    _exactTagController.dispose();
+    _partialTagController.dispose();
+    _minBookmarkController.dispose();
+    _minLenController.dispose();
+    _maxLenController.dispose();
     super.dispose();
   }
 
@@ -171,14 +235,15 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
               Icon(Icons.auto_awesome, size: 64, color: subColor),
               const SizedBox(height: 16),
               const Text(
-                'フィーリング発掘を使うには AI モデルが必要です',
+                'AIモデルをダウンロードすると意味検索が使えます',
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
               Text(
                 '日本語に特化した検索用 AI モデル（${RuriModelManager.modelSizeDescription}）を'
-                '端末にダウンロードします。ダウンロード後はオフラインでも意味検索が使えます。',
+                '端末にダウンロードします。ダウンロード後はオフラインでも意味検索が使えます。\n'
+                '（ダウンロードせずともキーワード検索は今すぐ使えます）',
                 style: TextStyle(fontSize: 14, color: subColor),
                 textAlign: TextAlign.center,
               ),
@@ -268,228 +333,307 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
   }
 
   void _onScroll() {
-    if (!_hasMore || _isLoadingMore) return;
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200) {
-      _loadMore();
+    // v2 は単発検索のため追加読込なし
+  }
+
+  /// 検索結果を段階的に描画する（UI フリーズ防止）。
+  /// 初回フレームで上位 [_initialDisplayCount] 件を表示し、以降は毎フレーム
+  /// [_stepDisplayCount] 件ずつ追加して build のピーク負荷を分散させる。
+  void _scheduleRemainingResults() {
+    if (!mounted) return;
+    if (_pendingResults.isEmpty) return;
+    final already = _results.length;
+    if (already >= _pendingResults.length) {
+      _pendingResults.clear();
+      return;
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_pendingResults.isEmpty) return;
+      final next = (_results.length + _stepDisplayCount).clamp(
+        0,
+        _pendingResults.length,
+      );
+      setState(() {
+        _results = _pendingResults.sublist(0, next);
+      });
+      if (_results.length < _pendingResults.length) {
+        _scheduleRemainingResults();
+      } else {
+        _pendingResults.clear();
+      }
+    });
   }
 
   Future<void> _search({bool isLoadMore = false}) async {
-    final query = _queryController.text.trim();
-    if (query.isEmpty) return;
-
-    // モデルが未準備または初期化中なら検索不可
-    if ((!_isModelReady || _isModelInitializing) && !isLoadMore) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('AIモデルの準備中です。少々お待ちください。')));
+    if (isLoadMore) {
+      // v2 は単発検索で十分量を返すため、追加読込は行わない
       return;
     }
 
-    if (!isLoadMore) {
-      // キーボードを閉じる
-      FocusScope.of(context).unfocus();
-      SystemChannels.textInput.invokeMethod('TextInput.hide');
+    // 構造化クエリを組み立て（semanticText は検索窓のテキスト、他はフィルタシート）
+    final semanticText = _queryController.text.trim();
+    _query = _query.copyWith(semanticText: semanticText, workType: _workType);
+    if (_query.isEmpty) return;
 
-      setState(() {
-        _isSearching = true;
-        _results.clear();
-        _lastQuery = query;
-        _lastMinSimilarity = null;
-        _displayedWorkIds.clear();
-        _hasMore = true;
-      });
-    } else {
-      if (_isLoadingMore) return;
-      setState(() => _isLoadingMore = true);
-    }
+    // キーボードを閉じる
+    FocusScope.of(context).unfocus();
+    SystemChannels.textInput.invokeMethod('TextInput.hide');
+    if (mounted) setState(() => _showSuggestions = false);
+
+    if (!mounted) return;
+    setState(() {
+      _isSearching = true;
+      _error = null;
+      _results.clear();
+      _pendingResults.clear();
+      _lastQuery = semanticText;
+      _displayedWorkIds.clear();
+      _preparedCache.clear();
+    });
 
     // UIの描画とキーボードが閉じるアニメーションを完了させるために少し待機
-    if (!isLoadMore) {
-      await Future.delayed(const Duration(milliseconds: 300));
-      if (!mounted) return;
-    }
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
 
     try {
-      final embeddingService = EmbeddingService();
-      await embeddingService.initialize();
-
-      final queryEmbedding = await embeddingService.encodeQuery(query);
-
-      final db = await DatabaseService().database;
-      final results = await searchNovelsByEmbedding(
-        db: db,
-        userEmbedding: queryEmbedding,
-        limit: _pageSize,
-        minSimilarity: _lastMinSimilarity ?? kMinDisplaySimilarity,
+      // モデル未導入でも lexical 検索で動作する（modelReady を渡す）
+      final modelReady = _isModelReady;
+      final results = await HybridSearchService().search(
+        _query,
+        modelReady: modelReady,
       );
 
-      List<Map<String, dynamic>> merged = results;
-
-      // フォールバックはベクトル検索が本当に少ない場合のみ（最初の検索のみ）
-      if (!isLoadMore && results.length < 5) {
-        final excludeIds = results.map((r) => r['id'] as int).toSet();
-        final fallback = await searchNovelsByKeywordFallback(
-          db: db,
-          query: query,
-          excludeWorkIds: excludeIds,
-        );
-        // 既存結果の後ろにキーワード一致を追加（work_id 重複は除外済み）
-        merged = [...results, ...fallback];
-      }
-
-      // 重複排除：既に表示済みの work_id を除外（ページネーションのループ防止）
-      final newItems = merged
+      final newItems = results
           .where((item) => !_displayedWorkIds.contains(item['id'] as int))
           .toList();
 
-      if (newItems.isEmpty) {
-        // これ以上新しい結果がない
-        if (mounted) {
-          setState(() {
-            _hasMore = false;
-            _isSearching = false;
-            _isLoadingMore = false;
-          });
-        }
-        return;
-      }
-
-      _displayedWorkIds.addAll(newItems.map((item) => item['id'] as int));
-
-      if (!isLoadMore) {
-        if (mounted) {
-          setState(() {
-            _results = newItems;
-            _isSearching = false;
-            // ベクトル検索結果（similarity非null）があればそれで閾値を更新
-            final vectorMax = results
-                .where((r) => r['similarity'] != null)
-                .map((r) => r['similarity'] as double)
-                .fold<double?>(
-                  null,
-                  (max, v) => max == null || v > max ? v : max,
-                );
-            if (vectorMax != null) {
-              _lastMinSimilarity = vectorMax;
-            }
-            // ベクトル検索が0件なら終端（フォールバックのみなので追加読込しない）
-            _hasMore = results.isNotEmpty;
-          });
-          _saveSearchHistory(query);
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _results.addAll(newItems);
-            _isLoadingMore = false;
-            // 次ページの閾値はベクトル検索結果（similarity非null）の最小値
-            final vectorSims = results
-                .where((r) => r['similarity'] != null)
-                .map((r) => r['similarity'] as double)
-                .toList();
-            if (vectorSims.isNotEmpty) {
-              _lastMinSimilarity = vectorSims.last;
-            }
-          });
-        }
+      if (!mounted) return;
+      // 描画を次フレーム（addPostFrameCallback）に遅延させ、検索完了処理と
+      // build を別フレームに分ける。これにより search_return_to_ui 直後の
+      // setState -> build が同一フレームで一気に走ることによるメインスレッド
+      // ブロック（信号3 / ANR）を回避する。
+      final itemsToShow = newItems;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          // 段階表示: 初回は上位 _initialDisplayCount 件のみ描画し、
+          // 残りは次フレームで追加して build 負荷を分散する。
+          final initial = itemsToShow.length > _initialDisplayCount
+              ? itemsToShow.sublist(0, _initialDisplayCount)
+              : itemsToShow;
+          _results = initial;
+          _pendingResults = itemsToShow;
+          _isSearching = false;
+          _preparedCache.clear();
+        });
+        // 残りの結果を次フレームで段階追加（UI フリーズ防止）
+        _scheduleRemainingResults();
+      });
+      if (semanticText.isNotEmpty) {
+        _saveSearchHistory(semanticText);
+        // DB 検索履歴にも保存。失敗しても検索結果表示は継続。
+        DatabaseService()
+            .addSearchHistory(semanticText)
+            .catchError((e) => debugPrint('検索履歴DB保存に失敗（無視）: $e'));
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _isSearching = false;
-          _isLoadingMore = false;
+          _error = e.toString();
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('検索エラー: $e'),
-            backgroundColor: Colors.red.shade800,
-          ),
-        );
       }
     }
-  }
-
-  Future<void> _loadMore() async {
-    if (_lastQuery.isEmpty) return;
-    await _search(isLoadMore: true);
   }
 
   void _onQuerySubmitted(String query) {
     _search();
   }
 
-  void _navigateToDetail(Map<String, dynamic> item) {
-    // 検索結果 item は novels テーブルの行（主キーは id）＋ similarity。
-    // 誤って item['work_id'] を参照すると null になり novel.id=0 で
-    // /v1/novel/detail?novel_id=0 が 404 になるため、正しく item['id'] を使う。
+  /// 検索窓候補オーバーレイを組み立てる（DB履歴 + 購読タグの部分一致）。
+  Widget _buildSuggestionsOverlay(bool isDark) {
+    final query = _queryController.text.trim();
+    return FutureBuilder<List<_SearchSuggestion>>(
+      future: _buildSearchSuggestions(query),
+      builder: (ctx, snap) {
+        final suggestions = snap.data ?? <_SearchSuggestion>[];
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          constraints: const BoxConstraints(maxHeight: 280),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black38,
+                blurRadius: 8,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: suggestions.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    '候補がありません',
+                    style: TextStyle(color: Colors.grey, fontSize: 13),
+                  ),
+                )
+              : ListView.builder(
+                  shrinkWrap: true,
+                  padding: EdgeInsets.zero,
+                  itemCount: suggestions.length,
+                  itemBuilder: (ctx, idx) {
+                    final s = suggestions[idx];
+                    return ListTile(
+                      dense: true,
+                      leading: Icon(
+                        s.isTag ? Icons.tag : Icons.history,
+                        size: 16,
+                        color: s.isTag ? Colors.orangeAccent : Colors.grey,
+                      ),
+                      title: Text(
+                        s.keyword,
+                        style: TextStyle(
+                          color: isDark ? Colors.white : Colors.black,
+                          fontSize: 13,
+                        ),
+                      ),
+                      onTap: () {
+                        _queryController.text = s.keyword;
+                        setState(() => _showSuggestions = false);
+                        _search();
+                      },
+                    );
+                  },
+                ),
+        );
+      },
+    );
+  }
+
+  /// 検索候補を組み立てる（DB検索履歴の部分一致 + 購読タグの部分一致）。
+  Future<List<_SearchSuggestion>> _buildSearchSuggestions(String query) async {
+    final db = DatabaseService();
+    try {
+      final histRows = await db.searchSearchHistory(query: query);
+      final tags = await db.getSubscribedTags();
+      final seen = <String>{};
+      final result = <_SearchSuggestion>[];
+      for (final r in histRows) {
+        final kw = (r['keyword'] as String?) ?? '';
+        if (kw.isNotEmpty && seen.add(kw)) {
+          result.add(_SearchSuggestion(keyword: kw, isTag: false));
+        }
+      }
+      final q = query.toLowerCase();
+      for (final t in tags) {
+        final tag = (t['tag'] as String?) ?? '';
+        if (tag.isEmpty || !seen.add(tag)) continue;
+        if (query.isEmpty || tag.toLowerCase().contains(q)) {
+          result.add(_SearchSuggestion(keyword: tag, isTag: true));
+        }
+      }
+      return result;
+    } catch (e) {
+      debugPrint('検索候補の構築に失敗（無視）: $e');
+      return <_SearchSuggestion>[];
+    }
+  }
+
+  /// カードタップ時は DB Map から不完全な Novel を組み立てず、
+  /// item['id'] を使って API から完全な Novel を取得してから遷移する。
+  /// 取得した完全メタデータは DB に保存し、次回以降のカード表示にも利用する。
+  Future<void> _navigateToDetail(Map<String, dynamic> item) async {
+    // 検索結果 item は novels / illusts テーブルの行（主キーは id）＋ similarity。
+    // 誤って item['work_id'] を参照すると null になり id=0 で 404 になる。
     final int id = item['id'] as int? ?? 0;
-    final String description = item['description'] as String? ?? '';
-
-    // tags は DB に 'tags'（カンマ区切り）または 'tags_json'（JSON）で保存されている。
-    List<String> tags = const <String>[];
-    final tagsJson = item['tags_json'] as String?;
-    if (tagsJson != null && tagsJson.isNotEmpty) {
-      try {
-        final decoded = jsonDecode(tagsJson) as List<dynamic>;
-        tags = decoded
-            .map(
-              (e) => e is Map<String, dynamic>
-                  ? (e['name'] as String? ?? '')
-                  : e.toString(),
-            )
-            .where((t) => t.isNotEmpty)
-            .toList();
-      } catch (_) {
-        // tags_json パース失敗はスルー（空リストでフォールバック）
-      }
-    }
-    if (tags.isEmpty) {
-      final rawTags = item['tags'] as String?;
-      if (rawTags != null && rawTags.isNotEmpty) {
-        tags = rawTags.split(',').where((t) => t.isNotEmpty).toList();
-      }
+    if (id == 0) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('この作品のIDを取得できませんでした')));
+      return;
     }
 
-    // シリーズ情報（DB に series_id / series_order のみ保存されている場合の復元）
-    NovelSeriesInfo? series;
-    final seriesId = item['series_id'] as int? ?? 0;
-    if (seriesId != 0) {
-      series = NovelSeriesInfo(
-        id: seriesId,
-        title: item['series_title'] as String? ?? '',
-      );
-    }
-
-    final novel = Novel(
-      id: id,
-      title: item['title'] as String? ?? '',
-      caption: cleanCaption(description),
-      author: Author(
-        // novels テーブルには author_id 列がないため、取得不可時は 0 にフォールバック
-        id: item['author_id'] as int? ?? 0,
-        name: item['author_name'] as String? ?? '不明',
-        account: '',
-      ),
-      tags: tags,
-      coverUrl: item['cover_url'] as String? ?? '',
-      textCount: item['text_length'] as int? ?? 0,
-      wordCount: 0,
-      textLength: item['text_length'] as int? ?? 0,
-      pageCount: item['page_count'] as int? ?? 0,
-      createDate: item['create_date'] as String? ?? '',
-      totalView: item['total_view'] as int? ?? 0,
-      totalBookmarks: item['total_bookmarks'] as int? ?? 0,
-      isBookmarked: false,
-      series: series,
-      aiType: item['novel_ai_type'] as int? ?? 0,
+    // ローディング表示（バリア付きダイアログ）
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
     );
 
-    Navigator.push(
+    // 検索対象種別で遷移先を分岐（イラスト意味検索 flag on + トグル選択時）。
+    if (_workType == WorkType.illust) {
+      Illust? illust;
+      try {
+        illust = await PixivApiService().getIllustById(id);
+        // 完全なメタデータをローカル DB に保存（次回以降の表示補完に利用）
+        await DatabaseService().saveIllustMeta(illust);
+      } catch (e) {
+        illust = null;
+      }
+
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+
+      if (illust == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('作品情報の取得に失敗しました。通信状況を確認してください')),
+        );
+        return;
+      }
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => IllustDetailScreen(illust: illust!)),
+      );
+      return;
+    }
+
+    Novel? novel;
+    bool isGone = false;
+    try {
+      novel = await PixivApiService().getNovelById(id);
+      // 完全なメタデータをローカル DB に保存（次回以降の表示補完に利用）
+      await DatabaseService().saveNovel(novel);
+    } on RateLimitException {
+      // レート制限は削除せず、通信失敗として扱う
+      novel = null;
+    } on Exception catch (e) {
+      // 404（小説が削除された / データが古い）の場合のみ、以降検索に出ないよう遅延削除する。
+      final msg = e.toString();
+      if (DatabaseService.isGenuineNovelMissing(msg)) {
+        isGone = true;
+        await DatabaseService().removeInvalidNovel(id, errorMessage: msg);
+      }
+      novel = null;
+    } catch (e) {
+      novel = null;
+    }
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop(); // ローディングを閉じる
+
+    if (novel == null) {
+      // 不完全なデータでの強制遷移はしない
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isGone
+                ? 'この作品は削除されたか、データが古いため一覧から削除しました'
+                : '作品情報の取得に失敗しました。通信状況を確認してください',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final fullNovel = novel;
+    await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: novel)),
+      MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: fullNovel)),
     );
   }
 
@@ -497,7 +641,11 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final built = _buildScaffold(isDark, theme);
+    return built;
+  }
 
+  Widget _buildScaffold(bool isDark, ThemeData theme) {
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF1A1A1A) : Colors.grey.shade50,
       appBar: AppBar(
@@ -505,75 +653,177 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
         backgroundColor: isDark ? const Color(0xFF222222) : Colors.white,
         foregroundColor: isDark ? Colors.white : Colors.black,
         elevation: 0.5,
+        actions: [
+          // 検索対象種別トグル（イラスト意味検索は flag 有効時のみ表示）。
+          // flag off 時はトグル非表示で小説のみ（既存挙動維持）。
+          if (FeatureFlags.illustSemanticSearch)
+            SegmentedButton<WorkType>(
+              segments: const [
+                ButtonSegment<WorkType>(
+                  value: WorkType.novel,
+                  label: Text('小説'),
+                  icon: Icon(Icons.menu_book),
+                ),
+                ButtonSegment<WorkType>(
+                  value: WorkType.illust,
+                  label: Text('イラスト'),
+                  icon: Icon(Icons.image),
+                ),
+              ],
+              selected: {_workType},
+              onSelectionChanged: (selected) {
+                if (selected.isEmpty) return;
+                setState(() => _workType = selected.first);
+              },
+              style: ButtonStyle(
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          // 複数条件フィルタシート
+          IconButton(
+            icon: Badge(
+              isLabelVisible: _query.hasHardFilter,
+              smallSize: 8,
+              child: const Icon(Icons.tune),
+            ),
+            tooltip: '詳細条件',
+            onPressed: () => _showFilterBottomSheet(isDark),
+          ),
+          // AIインデックス管理（診断・修復）へ遷移
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'maintenance') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AiIndexMaintenanceScreen(),
+                  ),
+                );
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem<String>(
+                value: 'maintenance',
+                child: Row(
+                  children: [
+                    Icon(Icons.health_and_safety, size: 20),
+                    SizedBox(width: 12),
+                    Text('AIインデックス管理'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: TextField(
-              controller: _queryController,
-              enabled: !_isModelInitializing, // AI初期化中は入力無効
-              decoration: InputDecoration(
-                hintText: _isModelInitializing
-                    ? 'AIモデルを初期化中... 少々お待ちください'
-                    : '今の気分・キーワードを入力（例: 切ない春、ドキドキする恋愛、癒やされる日常）',
-                hintStyle: TextStyle(
-                  color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
-                  fontSize: 14,
-                ),
-                prefixIcon: _isModelInitializing
-                    ? Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _queryController,
+                        enabled: !_isModelInitializing, // AI初期化中は入力無効
+                        decoration: InputDecoration(
+                          hintText: _isModelInitializing
+                              ? 'AIモデルを初期化中... 少々お待ちください'
+                              : '今の気分・キーワードを入力（例: 切ない春、ドキドキする恋愛、癒やされる日常）',
+                          hintStyle: TextStyle(
                             color: isDark
                                 ? Colors.grey.shade500
                                 : Colors.grey.shade600,
+                            fontSize: 14,
+                          ),
+                          prefixIcon: _isModelInitializing
+                              ? Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: isDark
+                                          ? Colors.grey.shade500
+                                          : Colors.grey.shade600,
+                                    ),
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.search,
+                                  color: isDark
+                                      ? Colors.grey.shade500
+                                      : Colors.grey.shade600,
+                                ),
+                          suffixIcon:
+                              _queryController.text.isNotEmpty &&
+                                  !_isModelInitializing
+                              ? IconButton(
+                                  icon: Icon(
+                                    Icons.clear,
+                                    color: isDark
+                                        ? Colors.grey.shade500
+                                        : Colors.grey.shade600,
+                                  ),
+                                  onPressed: () {
+                                    _queryController.clear();
+                                    setState(() {});
+                                  },
+                                )
+                              : null,
+                          filled: true,
+                          fillColor: isDark
+                              ? const Color(0xFF2A2A2A)
+                              : Colors.grey.shade100,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
                           ),
                         ),
-                      )
-                    : Icon(
-                        Icons.search,
-                        color: isDark
-                            ? Colors.grey.shade500
-                            : Colors.grey.shade600,
-                      ),
-                suffixIcon:
-                    _queryController.text.isNotEmpty && !_isModelInitializing
-                    ? IconButton(
-                        icon: Icon(
-                          Icons.clear,
-                          color: isDark
-                              ? Colors.grey.shade500
-                              : Colors.grey.shade600,
+                        style: TextStyle(
+                          color: isDark ? Colors.white : Colors.black,
+                          fontSize: 15,
                         ),
-                        onPressed: () {
-                          _queryController.clear();
-                          setState(() {});
+                        onSubmitted: _isModelInitializing
+                            ? null
+                            : (q) {
+                                setState(() => _showSuggestions = false);
+                                _onQuerySubmitted(q);
+                              },
+                        onChanged: (_) {
+                          if (!_showSuggestions) {
+                            setState(() => _showSuggestions = true);
+                          } else {
+                            setState(() {});
+                          }
                         },
-                      )
-                    : null,
-                filled: true,
-                fillColor: isDark
-                    ? const Color(0xFF2A2A2A)
-                    : Colors.grey.shade100,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      onPressed: _isModelInitializing
+                          ? null
+                          : () {
+                              setState(() => _showSuggestions = false);
+                              _search();
+                            },
+                      icon: const Icon(Icons.search),
+                      label: const Text('検索'),
+                    ),
+                  ],
                 ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-              ),
-              style: TextStyle(
-                color: isDark ? Colors.white : Colors.black,
-                fontSize: 15,
-              ),
-              onSubmitted: _isModelInitializing ? null : _onQuerySubmitted,
-              onChanged: (_) => setState(() {}),
+                // 検索窓候補オーバーレイ（DB履歴 + 購読タグ）
+                if (_showSuggestions) _buildSuggestionsOverlay(isDark),
+              ],
             ),
           ),
         ),
@@ -583,16 +833,18 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
   }
 
   Widget _buildBody(bool isDark) {
-    // モデル未ダウンロード → DL 導線
-    if (!_isModelDownloaded) {
-      return _buildModelDownloadPrompt(isDark);
-    }
     // DL 済みだが未初期化 → 初期化中表示
     if (_isModelInitializing) {
       return _buildModelInitializing(isDark);
     }
+    // モデル未導入かつまだ検索していない場合のみ DL 誘導を表示。
+    // v2 ではモデル未導入でもキーワード検索（lexical フォールバック）が動くため、
+    // 一度検索すれば結果画面へ遷移する。
+    if (!_isModelDownloaded && _lastQuery.isEmpty && _results.isEmpty) {
+      return _buildModelDownloadPrompt(isDark);
+    }
 
-    if (_lastQuery.isEmpty) {
+    if (_lastQuery.isEmpty && _results.isEmpty) {
       return _buildEmptyState(isDark);
     }
 
@@ -603,8 +855,59 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('意味ベクトルで検索中...', style: TextStyle(color: Colors.grey)),
+            Text('検索中...', style: TextStyle(color: Colors.grey)),
           ],
+        ),
+      );
+    }
+
+    // エラー状態
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: isDark ? Colors.redAccent.shade200 : Colors.redAccent,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '検索中にエラーが発生しました',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _error!,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () => _search(),
+                icon: const Icon(Icons.refresh),
+                label: const Text('再試行'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isDark
+                      ? Colors.pinkAccent.shade200
+                      : Colors.pinkAccent,
+                  foregroundColor: isDark ? Colors.black : Colors.white,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -663,14 +966,16 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth >= kTabletBreakpoint;
     final crossAxisCount = isTablet ? 2 : 1;
-    final horiz = isTablet ? 24.0 : 16.0;
+    final horiz = isTablet ? 32.0 : 16.0;
     final vert = isTablet ? 12.0 : 16.0;
 
-    return RefreshIndicator(
+    final listWidget = RefreshIndicator(
       onRefresh: () => _search(),
       child: CustomScrollView(
         controller: _scrollController,
         physics: const ClampingScrollPhysics(),
+        // ignore: deprecated_member_use
+        cacheExtent: 600.0,
         slivers: [
           SliverPadding(
             padding: EdgeInsets.symmetric(horizontal: horiz, vertical: vert),
@@ -680,38 +985,35 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                       crossAxisCount: crossAxisCount,
                       crossAxisSpacing: 12.0,
                       mainAxisSpacing: 12.0,
-                      childAspectRatio: 2.6,
+                      // カバー高さいっぱい + テキスト収まる余裕（Overflow防止）
+                      mainAxisExtent: 156.0,
                     ),
                     delegate: SliverChildBuilderDelegate(
-                      (ctx, index) =>
-                          _buildGridOrListCard(index, isDark, isTablet: true),
-                      childCount:
-                          _results.length +
-                          ((_isLoadingMore && _hasMore) ? 1 : 0),
+                      (ctx, index) => _buildGridOrListCard(index, isDark),
+                      childCount: _results.length,
                     ),
                   )
                 : SliverList(
                     delegate: SliverChildBuilderDelegate(
-                      (ctx, index) =>
-                          _buildGridOrListCard(index, isDark, isTablet: false),
-                      childCount:
-                          _results.length +
-                          ((_isLoadingMore && _hasMore) ? 1 : 0),
+                      (ctx, index) => _buildGridOrListCard(index, isDark),
+                      childCount: _results.length,
                     ),
                   ),
           ),
         ],
       ),
     );
+    return listWidget;
   }
 
-  /// インデックスに応じたカードまたはローディングインジケータを返す
+  /// インデックスに応じたカードまたはローディングインジケータを返す。
   /// （タブレット=2列グリッド、スマホ=1列リスト共通）
-  Widget _buildGridOrListCard(
-    int index,
-    bool isDark, {
-    required bool isTablet,
-  }) {
+  ///
+  /// カード UI はホームと同一の [NovelListCard] を使用する。
+  /// DB の novels 行情報から [Novel] を復元し（meta_json 優先、なければ部分列から構築）、
+  /// 不完全なモデルを直接組み立てるのではなく、共通カードへ渡す。
+  /// タップ時は [_navigateToDetail] が API から完全な Novel を取得して遷移する。
+  Widget _buildGridOrListCard(int index, bool isDark) {
     if (index >= _results.length) {
       return const Center(
         child: Padding(
@@ -722,99 +1024,182 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
     }
 
     final item = _results[index];
-    final similarity = item['similarity'] as double?;
-    final similarityPercent = similarity != null
-        ? (similarity * 100).toStringAsFixed(1)
-        : null;
-    final isKeywordMatch = item['is_keyword_match'] == 1;
+    // build のたびに jsonDecode / ScoreFormat を走らせないよう、最初に
+    // 計算した結果をキャッシュする（スクロール時の再構築でも同期コストを抑える）。
+    final prepared = _preparedCache[index] ??= _prepareCard(item);
+    final extraBadges = prepared.extraBadges;
+    final displayExplanation = prepared.displayExplanation;
+    final novel = prepared.novel;
 
-    return _buildResultCard(
-      item,
-      similarityPercent,
-      isDark,
-      index,
-      isKeywordMatch: isKeywordMatch,
+    final card = NovelListCard(
+      novel: novel,
+      matchLabel: prepared.matchLabel,
+      isKeywordMatch: prepared.isKeywordMatch,
+      isAiUnanalyzed: prepared.isAiUnanalyzed,
+      extraBadges: extraBadges,
+      onTap: () => _navigateToDetail(item),
     );
-  }
 
-  Widget _buildEmptyState(bool isDark) {
-    // 初期化エラーがある場合はエラー表示
-    final service = EmbeddingService();
-    if (service.initError != null) {
-      final screenWidth = MediaQuery.of(context).size.width;
-      final isTablet = screenWidth >= kTabletBreakpoint;
-      return SingleChildScrollView(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: isTablet ? kTabletContentMaxWidth : double.infinity,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.error_outline,
-                    size: 64,
-                    color: isDark
-                        ? Colors.redAccent.shade200
-                        : Colors.redAccent,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'AIモデルの初期化に失敗しました',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : Colors.black,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'エラー詳細: ${service.initError}',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDark
-                          ? Colors.grey.shade400
-                          : Colors.grey.shade600,
-                      height: 1.5,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      setState(() => _isModelInitializing = true);
-                      EmbeddingService().initialize().then((_) {
-                        if (mounted) {
-                          final service = EmbeddingService();
-                          setState(() {
-                            _isModelReady = service.isInitialized;
-                            _isModelInitializing = false;
-                          });
-                        }
-                      });
-                    },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('再試行'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isDark
-                          ? Colors.pinkAccent.shade200
-                          : Colors.pinkAccent,
-                      foregroundColor: isDark ? Colors.black : Colors.white,
-                    ),
-                  ),
-                ],
+    // なぜヒットしたかの簡易説明（v2）
+    final String? shownHint = displayExplanation;
+    if (shownHint != null && shownHint.isNotEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            card,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+              child: Text(
+                shownHint,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-          ),
+          ],
         ),
       );
     }
 
+    return Padding(padding: const EdgeInsets.only(bottom: 12), child: card);
+  }
+
+  /// 検索結果 1 件をカード描画用に事前計算する（jsonDecode / ScoreFormat 等の
+  /// 同期コストを build から分離し、スクロール時の再構築でも再利用する）。
+  _PreparedCard _prepareCard(Map<String, dynamic> item) {
+    final semanticScore = item['semanticScore'] as double? ?? 0.0;
+    final isKeywordMatch = (item['is_keyword_match'] as int? ?? 0) == 1;
+    final rerankApplied = (item['rerankApplied'] as bool? ?? false);
+    // rerankApplied はソートキー用。表示ラベルには影響させない。
+    final explanation = item['explanation'] as String?;
+
+    final bool semanticComputed = semanticScore > 0.0;
+    final List<Widget> extraBadges = <Widget>[];
+    bool kwMatch = false;
+    bool aiUnanalyzed = false;
+
+    // 表示%は embedding の生 semanticScore をそのまま使う（rerank は順位のみ）。
+    final String matchLabel = ScoreFormat.formatMatchPercent(
+      score: semanticComputed ? semanticScore : null,
+      semanticComputed: semanticComputed,
+      lexicalHit: isKeywordMatch,
+      rerankApplied: rerankApplied,
+    );
+    if (!semanticComputed && isKeywordMatch) {
+      kwMatch = true;
+    } else if (!semanticComputed && !isKeywordMatch) {
+      aiUnanalyzed = true;
+    }
+
+    // 表示側のみ: explanation から「意味近め (NN%)」の断片を除去する。
+    // （スコア計算・検索ロジックは一切変更しない）
+    final String? explanationForDisplay = _stripSemanticLabel(explanation);
+    final displayExplanation =
+        (explanationForDisplay == null || explanationForDisplay.isEmpty)
+        ? (semanticComputed
+              ? null
+              : (isKeywordMatch
+                    ? 'キーワード一致（意味検索インデックス未生成）'
+                    : 'AIインデックス未生成（再インデックス推奨）'))
+        : explanationForDisplay;
+    final novel = _novelFromResultRow(item);
+    return _PreparedCard(
+      novel: novel,
+      matchLabel: matchLabel,
+      extraBadges: extraBadges,
+      displayExplanation: displayExplanation,
+      isKeywordMatch: kwMatch,
+      isAiUnanalyzed: aiUnanalyzed,
+    );
+  }
+
+  /// explanation 文字列から「意味近め (NN%)」表記だけを取り除く（表示用）。
+  /// 区切り（' / ' や '、'）も含めて自然に消す。
+  static String? _stripSemanticLabel(String? explanation) {
+    if (explanation == null || explanation.isEmpty) return explanation;
+    var s = explanation.replaceAll(
+      RegExp(r'意味近め\s*\(?\s*\d+\s*%?\s*\)?(\s*・高精度)?'),
+      '',
+    );
+    s = s.replaceAll(RegExp(r'^[\s/、,]+'), '');
+    s = s.replaceAll(RegExp(r'[\s/、,]+$'), '');
+    s = s.replaceAll(RegExp(r'\s*/\s*/\s*'), ' / ');
+    return s.trim();
+  }
+
+  /// novels テーブル行（＋similarity）から [Novel] を復元する。
+  /// 保存済みの meta_json があればそれを優先し、なければ部分列から最小構築する。
+  Novel _novelFromResultRow(Map<String, dynamic> item) {
+    final metaJson = item['meta_json'] as String?;
+    if (metaJson != null && metaJson.isNotEmpty) {
+      try {
+        return Novel.fromJson(jsonDecode(metaJson) as Map<String, dynamic>);
+      } catch (_) {
+        // パース失敗時は部分構築へフォールバック
+      }
+    }
+    final tagsJson = item['tags_json'] as String?;
+    List<String> tags = const <String>[];
+    if (tagsJson != null && tagsJson.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(tagsJson) as List<dynamic>;
+        tags = decoded
+            .map(
+              (e) => e is Map<String, dynamic>
+                  ? (e['name'] as String? ?? '')
+                  : e.toString(),
+            )
+            .where((t) => t.isNotEmpty)
+            .toList();
+      } catch (_) {
+        // ignore
+      }
+    }
+    if (tags.isEmpty) {
+      final rawTags = item['tags'] as String?;
+      if (rawTags != null && rawTags.isNotEmpty) {
+        tags = rawTags.split(',').where((t) => t.isNotEmpty).toList();
+      }
+    }
+    final seriesId = item['series_id'] as int? ?? 0;
+    final userId = item['user_id'] as int? ?? 0;
+    return Novel(
+      id: item['id'] as int? ?? 0,
+      title: item['title'] as String? ?? '無題',
+      caption: cleanCaption(item['description'] as String? ?? ''),
+      author: Author(
+        id: userId,
+        name: item['author_name'] as String? ?? '不明',
+        account: '',
+      ),
+      tags: tags,
+      coverUrl: item['cover_url'] as String? ?? '',
+      rawCoverUrl: item['cover_url'] as String? ?? '',
+      textCount: item['text_length'] as int? ?? 0,
+      wordCount: item['text_length'] as int? ?? 0,
+      textLength: item['text_length'] as int? ?? 0,
+      pageCount: item['page_count'] as int? ?? 0,
+      createDate: item['create_date'] as String? ?? '',
+      totalView: item['total_view'] as int? ?? 0,
+      totalBookmarks: item['total_bookmarks'] as int? ?? 0,
+      isBookmarked: false,
+      series: seriesId != 0
+          ? NovelSeriesInfo(
+              id: seriesId,
+              title: item['series_title'] as String? ?? 'シリーズ',
+            )
+          : null,
+      aiType: item['novel_ai_type'] as int? ?? 0,
+      xRestrict: item['x_restrict'] as int? ?? 0,
+    );
+  }
+
+  Widget _buildEmptyState(bool isDark) {
     // モデル未準備時は準備中表示（初期化中も含む）
     if (!_isModelReady || _isModelInitializing) {
       return SingleChildScrollView(
@@ -860,532 +1245,449 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
       );
     }
 
-    // モデル準備完了だが、まだ小説のEmbeddingが1件も無い場合の案内
-    return FutureBuilder<bool>(
-      future: _isEmptyDatabase(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        // タブレット幅では中央寄せ（maxWidth 制限）
-        final screenWidth = MediaQuery.of(context).size.width;
-        final isTablet = screenWidth >= kTabletBreakpoint;
-        if (snapshot.data == true) {
-          return SingleChildScrollView(
-            child: SizedBox(
-              height:
-                  MediaQuery.of(context).size.height -
-                  (MediaQuery.of(context).padding.top +
-                      kToolbarHeight +
-                      MediaQuery.of(context).padding.bottom),
-              child: Center(
-                child: ConstrainedBox(
+    return SingleChildScrollView(
+      child: SizedBox(
+        height:
+            MediaQuery.of(context).size.height -
+            (MediaQuery.of(context).padding.top +
+                kToolbarHeight +
+                MediaQuery.of(context).padding.bottom),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF2A2A2A)
+                        : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(60),
+                  ),
+                  child: Icon(
+                    Icons.auto_awesome,
+                    size: 60,
+                    color: isDark
+                        ? Colors.pinkAccent.shade200
+                        : Colors.pinkAccent,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'フィーリング発掘',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '今の気分やキーワードを入力すると、\nAIが意味で似た小説を探し出します',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ConstrainedBox(
                   constraints: BoxConstraints(
-                    maxWidth: isTablet
-                        ? kTabletContentMaxWidth
-                        : double.infinity,
+                    maxWidth: isDark ? kTabletContentMaxWidth : double.infinity,
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.auto_awesome,
-                          size: 64,
-                          color: isDark
-                              ? Colors.pinkAccent.shade200
-                              : Colors.pinkAccent,
-                        ),
-                        const SizedBox(height: 24),
-                        Text(
-                          'まだデータがありません',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: isDark ? Colors.white : Colors.black,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          '小説を開くと、その作品が\nフィーリング検索の対象になります',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: isDark
-                                ? Colors.grey.shade500
-                                : Colors.grey.shade600,
-                            height: 1.5,
-                          ),
-                        ),
-                      ],
-                    ),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      _buildSuggestionChip('切ない春', isDark),
+                      _buildSuggestionChip('ドキドキする恋愛', isDark),
+                      _buildSuggestionChip('癒やされる日常', isDark),
+                      _buildSuggestionChip('胸が熱くなる冒険', isDark),
+                      _buildSuggestionChip('不思議な世界観', isDark),
+                      _buildSuggestionChip('笑えるコメディ', isDark),
+                    ],
                   ),
                 ),
-              ),
-            ),
-          );
-        }
-
-        return SingleChildScrollView(
-          child: SizedBox(
-            height:
-                MediaQuery.of(context).size.height -
-                (MediaQuery.of(context).padding.top +
-                    kToolbarHeight +
-                    MediaQuery.of(context).padding.bottom),
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? const Color(0xFF2A2A2A)
-                            : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(60),
-                      ),
-                      child: Icon(
-                        Icons.auto_awesome,
-                        size: 60,
-                        color: isDark
-                            ? Colors.pinkAccent.shade200
-                            : Colors.pinkAccent,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'フィーリング発掘',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '今の気分やキーワードを入力すると、\nAIが意味で似た小説を探し出します',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: isDark
-                            ? Colors.grey.shade500
-                            : Colors.grey.shade600,
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: isTablet
-                            ? kTabletContentMaxWidth
-                            : double.infinity,
-                      ),
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        alignment: WrapAlignment.center,
-                        children: [
-                          _buildSuggestionChip('切ない春', isDark),
-                          _buildSuggestionChip('ドキドキする恋愛', isDark),
-                          _buildSuggestionChip('癒やされる日常', isDark),
-                          _buildSuggestionChip('胸が熱くなる冒険', isDark),
-                          _buildSuggestionChip('不思議な世界観', isDark),
-                          _buildSuggestionChip('笑えるコメディ', isDark),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      '※ ローカルONNXモデルによる完全オフライン検索\n※ R-18作品も含めて意味検索可能',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark
-                            ? Colors.grey.shade600
-                            : Colors.grey.shade500,
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 16),
+                Text(
+                  '※ ローカルONNXモデルによる完全オフライン検索\n※ R-18作品も含めて意味検索可能',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.grey.shade600 : Colors.grey.shade500,
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
-  /// novel_embeddings が空（まだ1件もフィーリング検索の対象が無い）かを判定
-  Future<bool> _isEmptyDatabase() async {
-    try {
-      final db = await DatabaseService().database;
-      final count = Sqflite.firstIntValue(
-        await db.rawQuery('SELECT COUNT(*) FROM novel_embeddings'),
-      );
-      return (count ?? 0) == 0;
-    } catch (_) {
-      return false;
-    }
-  }
-
   Widget _buildSuggestionChip(String label, bool isDark) {
-    final isDisabled = !_isModelReady || _isModelInitializing;
+    // v2 ではモデル未導入でもキーワード検索が可能なため常に有効
     return ActionChip(
       label: Text(label, style: const TextStyle(fontSize: 13)),
       backgroundColor: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade100,
       side: BorderSide(
         color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
       ),
-      onPressed: isDisabled
-          ? null
-          : () {
-              _queryController.text = label;
-              _search();
-            },
+      onPressed: () {
+        _queryController.text = label;
+        _search();
+      },
     );
   }
 
-  Widget _buildResultCard(
-    Map<String, dynamic> item,
-    String? similarityPercent,
-    bool isDark,
-    int index, {
-    bool isKeywordMatch = false,
-  }) {
-    final title = item['title'] as String? ?? '';
-    final authorName = item['author_name'] as String? ?? '不明';
-    final previewUrl = item['cover_url'] as String?;
-    final textLength = item['text_length'] as int? ?? 0;
-    final pageCount = item['page_count'] as int? ?? 0;
-    final createDate = item['create_date'] as String? ?? '';
-    final totalBookmarks = item['total_bookmarks'] as int? ?? 0;
-    final aiType = item['novel_ai_type'] as int? ?? 0;
-    final xRestrict = item['x_restrict'] as int? ?? 0;
-    final seriesId = item['series_id'] as int? ?? 0;
-    final seriesTitle = item['series_title'] as String? ?? '';
-    final caption = cleanCaption(item['description'] as String? ?? '');
+  /// 複数条件検索フィルタシート（v2）。
+  /// 必須/できれば/除外キーワード、完全一致/部分一致タグ、ブクマ・文字数閾値、
+  /// R-18 / AI / 並び順 を設定できる。
+  void _showFilterBottomSheet(bool isDark) {
+    // 現在の値をテンポラリコントローラに反映
+    _mustController.text = _query.mustKeywords.join(' ');
+    _shouldController.text = _query.shouldKeywords.join(' ');
+    _excludeController.text = _query.excludeKeywords.join(' ');
+    _exactTagController.text = _query.exactTags.join(' ');
+    _partialTagController.text = _query.partialTags.join(' ');
+    _minBookmarkController.text = _query.minBookmarks?.toString() ?? '';
+    _minLenController.text = _query.minTextLength?.toString() ?? '';
+    _maxLenController.text = _query.maxTextLength?.toString() ?? '';
 
-    // タグ（DBの tags / tags_json から取得、最大3つ1行表示）
-    List<String> tags = const <String>[];
-    final tagsJson = item['tags_json'] as String?;
-    if (tagsJson != null && tagsJson.isNotEmpty) {
-      try {
-        final decoded = jsonDecode(tagsJson) as List<dynamic>;
-        tags = decoded
-            .map(
-              (e) => e is Map<String, dynamic>
-                  ? (e['name'] as String? ?? '')
-                  : e.toString(),
-            )
-            .where((t) => t.isNotEmpty)
-            .toList();
-      } catch (_) {
-        // パース失敗は無視（フォールバックへ）
-      }
-    }
-    if (tags.isEmpty) {
-      final rawTags = item['tags'] as String?;
-      if (rawTags != null && rawTags.isNotEmpty) {
-        tags = rawTags.split(',').where((t) => t.isNotEmpty).take(3).toList();
-      }
-    } else {
-      tags = tags.take(3).toList();
-    }
+    R18Mode r18 = _query.r18Mode;
+    AiMode ai = _query.aiMode;
+    SortMode sort = _query.sortMode;
+    bool highPrecision = _query.highPrecision;
+    bool rerankReady = false;
 
-    // バッジ（AI / R-18 / シリーズ）
-    final List<Widget> badges = <Widget>[];
-    if (aiType == 2) {
-      badges.add(
-        _buildNovelBadge(Icons.auto_awesome, 'AI', Colors.purpleAccent),
-      );
-    }
-    if (xRestrict == 1) {
-      badges.add(
-        _buildNovelBadge(Icons.warning_amber, 'R-18', Colors.redAccent),
-      );
-    }
-    if (seriesId != 0) {
-      badges.add(
-        _buildNovelBadge(Icons.collections_bookmark, 'シリーズ', Colors.blueAccent),
-      );
-    }
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      color: isDark ? const Color(0xFF222222) : Colors.white,
-      elevation: 0.5,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-        ),
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? const Color(0xFF222222) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      child: InkWell(
-        onTap: () => _navigateToDetail(item),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // サムネイル
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  width: 80,
-                  height: 112,
-                  child: previewUrl != null && previewUrl.isNotEmpty
-                      ? PixivImage(
-                          url: previewUrl,
-                          fit: BoxFit.cover,
-                          isThumbnail: true,
-                          errorWidget: _buildPlaceholderCover(isDark),
-                        )
-                      : _buildPlaceholderCover(isDark),
-                ),
-              ),
-              const SizedBox(width: 12),
-              // 本文
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 類似度バッジ + タイトル
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isKeywordMatch
-                                ? Colors.blueAccent.withValues(alpha: 0.15)
-                                : Colors.pinkAccent.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            similarityPercent != null
-                                ? '$similarityPercent% 一致'
-                                : 'キーワード一致',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: similarityPercent != null
-                                  ? Colors.pinkAccent
-                                  : Colors.blueAccent,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white : Colors.black,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    // バッジ（AI / R-18 / シリーズ）
-                    if (badges.isNotEmpty)
-                      Wrap(spacing: 6, runSpacing: 4, children: badges),
-                    const SizedBox(height: 4),
-                    // 作者情報
-                    Text(
-                      authorName,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: isDark
-                            ? Colors.grey.shade400
-                            : Colors.grey.shade600,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    // シリーズ名（存在時）
-                    if (seriesTitle.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.collections_bookmark,
-                              size: 13,
-                              color: Colors.blueAccent,
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                seriesTitle,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.blueAccent,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    // タグ（最大3つ1行表示）
-                    if (tags.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(
-                          tags.map((t) => '#$t').join('  '),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: isDark
-                                ? Colors.pinkAccent.shade200
-                                : Colors.pinkAccent,
-                          ),
-                        ),
-                      ),
-                    // キャプション（概要）先頭を表示（1行）
-                    if (caption.isNotEmpty)
-                      Text(
-                        caption,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          // Reranker 未導入時はトグルを無効化（案内表示用）
+          RerankModelManager().isModelReady().then((ready) {
+            if (ctx.mounted) setSheet(() => rerankReady = ready);
+          });
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 16,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        '詳細条件',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () {
+                          setSheet(() {
+                            r18 = R18Mode.all;
+                            ai = AiMode.all;
+                            sort = SortMode.relevance;
+                            _mustController.clear();
+                            _shouldController.clear();
+                            _excludeController.clear();
+                            _exactTagController.clear();
+                            _partialTagController.clear();
+                            _minBookmarkController.clear();
+                            _minLenController.clear();
+                            _maxLenController.clear();
+                          });
+                        },
+                        child: const Text('クリア'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _filterTextField(
+                    _mustController,
+                    '必須キーワード（空白区切り・すべて含む）',
+                    isDark: isDark,
+                  ),
+                  _filterTextField(
+                    _shouldController,
+                    'できれば含むキーワード（空白区切り）',
+                    isDark: isDark,
+                  ),
+                  _filterTextField(
+                    _excludeController,
+                    '除外キーワード（空白区切り・含むと除外）',
+                    isDark: isDark,
+                  ),
+                  _filterTextField(
+                    _exactTagController,
+                    '完全一致タグ（空白区切り）',
+                    isDark: isDark,
+                  ),
+                  _filterTextField(
+                    _partialTagController,
+                    '部分一致タグ（空白区切り）',
+                    isDark: isDark,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _segmentLabel('R-18'),
+                      _chip(
+                        '含む',
+                        r18 == R18Mode.all,
+                        () => setSheet(() => r18 = R18Mode.all),
+                      ),
+                      _chip(
+                        'R-18含む',
+                        r18 == R18Mode.includeR18,
+                        () => setSheet(() => r18 = R18Mode.includeR18),
+                      ),
+                      _chip(
+                        '健全のみ',
+                        r18 == R18Mode.safeOnly,
+                        () => setSheet(() => r18 = R18Mode.safeOnly),
+                      ),
+                      _chip(
+                        'R-18のみ',
+                        r18 == R18Mode.r18Only,
+                        () => setSheet(() => r18 = R18Mode.r18Only),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      _segmentLabel('高精度モード'),
+                      ChoiceChip(
+                        label: Text(
+                          rerankReady ? '高精度(rerank)' : '高精度(モデル未導入)',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                        selected: highPrecision && rerankReady,
+                        onSelected: rerankReady
+                            ? (_) =>
+                                  setSheet(() => highPrecision = !highPrecision)
+                            : null,
+                      ),
+                    ],
+                  ),
+                  if (!rerankReady)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '高精度モードは「AIインデックス管理」で Reranker を導入すると使えます。'
+                        '未導入でも意味検索（embedding）はそのまま動作します。',
+                        style: TextStyle(
+                          fontSize: 11,
                           color: isDark
                               ? Colors.grey.shade500
                               : Colors.grey.shade600,
-                          height: 1.3,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    const SizedBox(height: 8),
-                    // メタ情報
-                    Wrap(
-                      spacing: 16,
-                      runSpacing: 4,
-                      children: [
-                        if (textLength > 0)
-                          _buildMetaChip(
-                            Icons.text_fields,
-                            '${(textLength / 1000).toStringAsFixed(1)}k字',
-                            isDark,
-                          ),
-                        if (pageCount > 0)
-                          _buildMetaChip(
-                            Icons.menu_book,
-                            '$pageCountページ',
-                            isDark,
-                          ),
-                        if (totalBookmarks > 0)
-                          _buildMetaChip(
-                            Icons.bookmark_border,
-                            _formatNumber(totalBookmarks),
-                            isDark,
-                          ),
-                        if (createDate.isNotEmpty)
-                          _buildMetaChip(
-                            Icons.calendar_today,
-                            _formatDate(createDate),
-                            isDark,
-                          ),
-                      ],
                     ),
-                  ],
-                ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _segmentLabel('AI'),
+                      _chip(
+                        '問わず',
+                        ai == AiMode.all,
+                        () => setSheet(() => ai = AiMode.all),
+                      ),
+                      _chip(
+                        'AI除外',
+                        ai == AiMode.excludeAi,
+                        () => setSheet(() => ai = AiMode.excludeAi),
+                      ),
+                      _chip(
+                        'AIのみ',
+                        ai == AiMode.aiOnly,
+                        () => setSheet(() => ai = AiMode.aiOnly),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _segmentLabel('並び順'),
+                      _chip(
+                        '関連度',
+                        sort == SortMode.relevance,
+                        () => setSheet(() => sort = SortMode.relevance),
+                      ),
+                      _chip(
+                        '新着',
+                        sort == SortMode.newest,
+                        () => setSheet(() => sort = SortMode.newest),
+                      ),
+                      _chip(
+                        'ブクマ',
+                        sort == SortMode.bookmarks,
+                        () => setSheet(() => sort = SortMode.bookmarks),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _filterTextField(
+                          _minBookmarkController,
+                          '最小ブクマ数',
+                          isDark: isDark,
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _filterTextField(
+                          _minLenController,
+                          '最小文字数',
+                          isDark: isDark,
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _filterTextField(
+                          _maxLenController,
+                          '最大文字数',
+                          isDark: isDark,
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () {
+                        setState(() {
+                          _query = _query.copyWith(
+                            mustKeywords: _splitWords(_mustController.text),
+                            shouldKeywords: _splitWords(_shouldController.text),
+                            excludeKeywords: _splitWords(
+                              _excludeController.text,
+                            ),
+                            exactTags: _splitWords(_exactTagController.text),
+                            partialTags: _splitWords(
+                              _partialTagController.text,
+                            ),
+                            minBookmarks: _parseIntOrNull(
+                              _minBookmarkController.text,
+                            ),
+                            minTextLength: _parseIntOrNull(
+                              _minLenController.text,
+                            ),
+                            maxTextLength: _parseIntOrNull(
+                              _maxLenController.text,
+                            ),
+                            r18Mode: r18,
+                            aiMode: ai,
+                            sortMode: sort,
+                            highPrecision: rerankReady && highPrecision,
+                            // 高精度モードは rerank 上位40件を評価し、最終表示は20件に絞る
+                            topK: (rerankReady && highPrecision)
+                                ? 20
+                                : _query.topK,
+                          );
+                        });
+                        Navigator.of(ctx).pop();
+                        // 既に検索済みなら条件変更後に再検索
+                        if (_lastQuery.isNotEmpty) _search();
+                      },
+                      child: const Text('条件を適用'),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPlaceholderCover(bool isDark) {
-    return Container(
-      color: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade200,
-      child: Icon(
-        Icons.menu_book,
-        color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
-        size: 32,
-      ),
-    );
-  }
-
-  Widget _buildNovelBadge(IconData icon, String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: color),
-          const SizedBox(width: 3),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              color: color,
-              fontWeight: FontWeight.bold,
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildMetaChip(IconData icon, String label, bool isDark) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          icon,
-          size: 13,
-          color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+  Widget _filterTextField(
+    TextEditingController controller,
+    String hint, {
+    TextInputType? keyboardType,
+    required bool isDark,
+  }) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: TextField(
+      controller: controller,
+      keyboardType: keyboardType,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(fontSize: 13),
+        filled: true,
+        fillColor: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade100,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide.none,
         ),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
-          ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
         ),
-      ],
-    );
+      ),
+      style: TextStyle(
+        fontSize: 14,
+        color: isDark ? Colors.white : Colors.black,
+      ),
+    ),
+  );
+
+  Widget _segmentLabel(String text) => Padding(
+    padding: const EdgeInsets.only(right: 4),
+    child: Text(
+      text,
+      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+    ),
+  );
+
+  Widget _chip(String label, bool selected, VoidCallback onTap) => ChoiceChip(
+    label: Text(label, style: const TextStyle(fontSize: 13)),
+    selected: selected,
+    onSelected: (_) => onTap(),
+    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  );
+
+  int? _parseIntOrNull(String s) {
+    final v = int.tryParse(s.trim());
+    return v == null || v < 0 ? null : v;
   }
 
-  String _formatNumber(int number) {
-    if (number >= 10000) {
-      return '${(number / 10000).toStringAsFixed(1)}万';
-    }
-    return number.toString();
-  }
-
-  String _formatDate(String dateStr) {
-    try {
-      final date = DateTime.parse(dateStr);
-      return '${date.year}/${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return dateStr;
-    }
-  }
+  List<String> _splitWords(String s) =>
+      s.split(' ').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
 }

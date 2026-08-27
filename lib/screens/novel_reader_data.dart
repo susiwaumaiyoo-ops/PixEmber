@@ -7,6 +7,27 @@ extension _ReaderData on _NovelReaderScreenState {
     await _loadPreferences();
     if (!mounted) return;
     await _initAndFetch();
+    // あとで読むに登録済みかつ未読なら「読書中」へ自動遷移（last_opened_at 更新）。
+    // read_later 未登録の小説は何もしない（余計な自動登録はしない）。
+    await _markReadLaterReading();
+  }
+
+  /// あとで読む登録済みの未読小説を「読書中」へ自動遷移させる。
+  Future<void> _markReadLaterReading() async {
+    try {
+      final db = DatabaseService();
+      final registered = await db.isReadLater(_currentNovel.id);
+      if (!registered) return;
+      final rows = await db.getReadLaterList();
+      final mine = rows.where((r) => r['work_id'] == _currentNovel.id).toList();
+      if (mine.isEmpty) return;
+      final current = mine.first['status'] as int? ?? 0;
+      if (current == 0) {
+        await db.updateReadLaterStatus(_currentNovel.id, 1);
+      }
+    } catch (e) {
+      debugPrint('あとで読む自動遷移(読書中)に失敗しました（無視）: $e');
+    }
   }
 
   // 永続化された設定（文字サイズやテーマなど）のロード
@@ -149,6 +170,25 @@ extension _ReaderData on _NovelReaderScreenState {
         'novel_last_read_${_currentNovel.id}',
         DateTime.now().millisecondsSinceEpoch,
       );
+      // しおり一覧のカード表示に必要な最小メタデータを保存側でも揃える
+      await prefs.setString(
+        'novel_cover_${_currentNovel.id}',
+        _currentNovel.coverUrl,
+      );
+      await prefs.setInt(
+        'novel_page_count_${_currentNovel.id}',
+        _currentNovel.pageCount,
+      );
+      await prefs.setInt(
+        'novel_text_length_${_currentNovel.id}',
+        _currentNovel.textLength,
+      );
+      await prefs.setInt(
+        'novel_saved_at_${_currentNovel.id}',
+        DateTime.now().millisecondsSinceEpoch,
+      );
+      // 完全な Novel メタデータは DB に一本化して保存する
+      await DatabaseService().saveNovel(_currentNovel);
 
       // 履歴一覧に追加
       final List<String> bookmarkedIds =
@@ -216,7 +256,62 @@ extension _ReaderData on _NovelReaderScreenState {
                 .clamp(0.0, 1.0);
       }
     }
-    _progressNotifier.value = ((page + fraction) / totalPages).clamp(0.0, 1.0);
+    final progress = ((page + fraction) / totalPages).clamp(0.0, 1.0);
+    _progressNotifier.value = progress;
+
+    // あとで読む登録済み作品の場合、進捗率と最終位置を保存（再開・進捗表示用）。
+    _saveReadLaterProgress(page, progress);
+
+    // あとで読む登録済み作品が本文末尾（進捗 100%）に到達したら「読了」へ自動遷移。
+    if (progress >= 0.999) {
+      _markReadLaterFinished();
+    }
+  }
+
+  /// あとで読む登録済み作品の読書進捗・最終位置を読書中に保存する。
+  /// 頻度は「1%以上変化したとき」のみに絞りDB書き込みを抑える。
+  void _saveReadLaterProgress(int page, double progress) {
+    final id = _currentNovel.id;
+    _lastSavedReadLaterProgress ??= -1.0;
+    final changedPct = ((progress - _lastSavedReadLaterProgress!) * 100).abs();
+    if (changedPct < 1.0) return;
+    _lastSavedReadLaterProgress = progress;
+    unawaited(
+      DatabaseService()
+          .isReadLater(id)
+          .then((registered) async {
+            if (!registered) return;
+            final db = DatabaseService();
+            await db.updateReadLaterProgress(id, progress);
+            await db.updateReadLaterPosition(
+              id,
+              page,
+              _savedScrollOffset.round(),
+            );
+          })
+          .catchError((e) {
+            debugPrint('あとで読む進捗保存に失敗しました（無視）: $e');
+          }),
+    );
+  }
+
+  /// あとで読む登録済み作品を「読了」へ自動遷移させる（最終ページ到達時）。
+  /// 連続発火を防ぐため、既に読了済みなら何もしない。
+  Future<void> _markReadLaterFinished() async {
+    try {
+      final db = DatabaseService();
+      final registered = await db.isReadLater(_currentNovel.id);
+      if (!registered) return;
+      final rows = await db.getReadLaterList();
+      final mine = rows.where((r) => r['work_id'] == _currentNovel.id).toList();
+      if (mine.isEmpty) return;
+      final current = mine.first['status'] as int? ?? 0;
+      if (current != 2) {
+        await db.updateReadLaterStatus(_currentNovel.id, 2);
+      }
+    } catch (e) {
+      debugPrint('あとで読む自動遷移(読了)に失敗しました（無視）: $e');
+    }
   }
 
   Future<void> _fetchNovelText() async {
@@ -293,30 +388,24 @@ extension _ReaderData on _NovelReaderScreenState {
       );
 
       // ベクトル生成・保存（バックグラウンドで実行、失敗してもUIをブロックしない）
+      // AIモデル未ダウンロード時はスキップ（裏処理なのでユーザー動作をブロックしない）
       try {
-        final embeddingService = EmbeddingService();
-        final textForEmbedding = buildNovelDocumentText(
-          _currentNovel,
-          bodyText: data.novelText,
-        );
-        final embedding = await embeddingService.encodeDocument(
-          textForEmbedding,
-        );
-        await DatabaseService().saveNovelEmbedding(
-          workId: data.id,
-          embedding: embedding,
-        );
-        // フィーリング検索用メタデータを novels テーブルに保存
-        await DatabaseService().saveNovelMeta(
-          workId: data.id,
-          title: _currentNovel.title,
-          description: _currentNovel.caption,
-          authorName: _currentNovel.author.name,
-          coverUrl: _currentNovel.coverUrl,
-          pageCount: _currentNovel.pageCount,
-          totalBookmarks: _currentNovel.totalBookmarks,
-          createDate: _currentNovel.createDate,
-        );
+        if (await RuriModelManager().isModelPresent()) {
+          final embeddingService = EmbeddingService();
+          final textForEmbedding = buildNovelDocumentText(
+            _currentNovel,
+            bodyText: data.novelText,
+          );
+          final embedding = await embeddingService.encodeDocument(
+            textForEmbedding,
+          );
+          await DatabaseService().saveNovelEmbedding(
+            workId: data.id,
+            embedding: embedding,
+          );
+          // フィーリング検索用メタデータを novels テーブルに保存
+          await DatabaseService().saveNovel(_currentNovel);
+        }
       } catch (e) {
         debugPrint('ベクトル生成・保存に失敗しました（無視して続行）: $e');
       }

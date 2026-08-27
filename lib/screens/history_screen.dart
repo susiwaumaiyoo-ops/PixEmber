@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'novel_detail_screen.dart';
 import 'illust_detail_screen.dart';
+import 'statistics_screen.dart';
 import '../widgets/pixiv_image.dart';
 import '../services/database_service.dart';
 import '../services/pixiv_api_service.dart';
@@ -34,6 +35,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
           _isLoading = false;
         });
       }
+      // 旧データ（サムネイル・作者名欠損）を一覧読み込み時に一度だけAPI補完する。
+      // カードごとの FutureBuilder は使わない。失敗時はプレースホルダのまま残す。
+      await _completeLegacyHistory(history);
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -43,9 +47,88 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
+  /// 欠損メタデータを持つ履歴行のみ API で補完し、DB とメモリ上のリストを更新する。
+  ///
+  /// 旧実装は行ごとに `await` していたため、10〜20件で 10〜20秒かかっていた。
+  /// 並列化（同時実行数を制限）して高速化する。
+  Future<void> _completeLegacyHistory(
+    List<Map<String, dynamic>> history,
+  ) async {
+    final targets = history.where((item) {
+      final url = item['url'] as String?;
+      final author = item['author_name'] as String?;
+      return (url == null || url.isEmpty) || (author == null || author.isEmpty);
+    }).toList();
+    if (targets.isEmpty) return;
+
+    final api = PixivApiService();
+    var updated = false;
+
+    // 同時実行数を 4 に制限した並列補完
+    const maxConcurrent = 4;
+    final List<Future<void>> tasks = [];
+    var index = 0;
+    Future<void> runNext() async {
+      while (index < targets.length) {
+        final item = targets[index++];
+        final workId = item['work_id'] as int? ?? 0;
+        if (workId == 0) return;
+        final type = item['type'] as String? ?? 'illust';
+        try {
+          String title;
+          String authorName;
+          String url;
+          if (type == 'novel') {
+            final novel = await api.getNovelById(workId);
+            title = novel.title;
+            authorName = novel.author.name;
+            url = novel.coverUrl;
+          } else {
+            final illust = await api.getIllustById(workId);
+            title = illust.title;
+            authorName = illust.author.name;
+            url = illust.urls.preview ?? illust.urls.original ?? '';
+          }
+          await _databaseService.updateHistoryMeta(
+            workId: workId,
+            title: title,
+            authorName: authorName,
+            url: url,
+          );
+          updated = true;
+        } catch (_) {
+          // 取得失敗時は既存データを削除せずそのまま残す
+        }
+      }
+      return;
+    }
+
+    for (var i = 0; i < maxConcurrent && i < targets.length; i++) {
+      tasks.add(runNext());
+    }
+    await Future.wait(tasks);
+
+    if (updated && mounted) {
+      final refreshed = await _databaseService.getHistoryList();
+      if (!mounted) return;
+      setState(() {
+        _historyList = refreshed;
+      });
+    }
+  }
+
   Future<void> _navigateToDetail(Map<String, dynamic> item) async {
-    final workType = item['work_type'] ?? 'illust';
+    // history テーブルの実カラム名は 'type'（旧コードは 'work_type' を参照していた）
+    final workType = item['type'] ?? 'illust';
     final workId = item['work_id'] ?? 0;
+    if (workId == 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('この作品のIDを取得できませんでした')));
+      }
+      return;
+    }
     try {
       if (workType == 'novel') {
         // Novel オブジェクトを取得
@@ -70,8 +153,38 @@ class _HistoryScreenState extends State<HistoryScreen> {
           );
         }
       }
+    } on RateLimitException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('アクセスが一時的に制限されています。しばらくしてから再度お試しください')),
+        );
+      }
+    } on Exception catch (e) {
+      // 真に削除された小説（404/見つかりませんでした）のみ遅延削除。
+      // エンドポイント不存在・通信失敗・認証失敗・レート制限等は削除しない。
+      final isGone =
+          workType == 'novel' &&
+          DatabaseService.isGenuineNovelMissing(e.toString());
+      if (isGone) {
+        await _databaseService.removeInvalidNovel(
+          workId,
+          errorMessage: e.toString(),
+        );
+      }
+      if (mounted) {
+        final label = workType == 'novel' ? '小説' : 'イラスト';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isGone
+                  ? '$labelは削除されたか、データが古いため履歴から削除しました'
+                  : '$labelの詳細を取得できませんでした',
+            ),
+          ),
+        );
+      }
     } catch (e) {
-      // エラー時は簡易表示
+      // その他のエラー時は簡易表示
       if (mounted) {
         final label = workType == 'novel' ? '小説' : 'イラスト';
         ScaffoldMessenger.of(
@@ -87,6 +200,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
       appBar: AppBar(
         title: const Text('閲覧履歴'),
         backgroundColor: Theme.of(context).colorScheme.surface,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bar_chart),
+            tooltip: '閲覧統計',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const StatisticsScreen(),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -101,7 +228,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 final item = _historyList[index];
                 final thumbUrl = item['url'] as String? ?? '';
                 final authorName = item['author_name'] as String? ?? '';
-                final workType = item['work_type'] as String? ?? 'illust';
+                final workType = item['type'] as String? ?? 'illust';
                 final typeLabel = workType == 'novel'
                     ? '小説'
                     : (workType == 'ugoira' ? 'うごイラ' : 'イラスト');
@@ -126,6 +253,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                       url: thumbUrl,
                                       fit: BoxFit.cover,
                                       isThumbnail: true,
+                                      cacheWidth:
+                                          (64 *
+                                                  MediaQuery.devicePixelRatioOf(
+                                                    context,
+                                                  ))
+                                              .round(),
                                       errorWidget: const Icon(
                                         Icons.image,
                                         color: Colors.grey,

@@ -1,0 +1,406 @@
+================================================================================
+PixEmber（pixiv_viewer/） コードベース分析ドキュメント
+対象: Flutter/Dart スタンドアローンアプリ / リポジトリ: PixEmber（非公式 Pixiv クライアント）
+分析日: 2026-08-11
+分析方針: 実装変更なし。責務・依存・変更ポイントの整理のみ。
+          推測は「推測」と明記。未確認ファイル名は断言しない。
+================================================================================
+
+■前提の確認（ユーザー指示に基づく）
+- 本アプリの実体は pixiv_viewer/ （Flutter/Dart）。
+- ルート直下の main.py / app.py / test_login.py / *.txt / _ab_ref/ / _dead_code/ は
+  過去の参照資産・デッドコードであり、アプリ実行には関与しない。
+- 本分析は Python バックエンドを前提とせず、Flutter アプリ単体で行う。
+- subscriptions_screen.dart 周辺のみ旧外部同期依存の残存を調査対象とする。
+
+================================================================================
+1. プロジェクト全体像
+================================================================================
+
+[概要]
+pixiv_viewer/ は、Pixiv の「App-API（app-api.pixiv.net）」を直接呼び出す
+非公式 Pixiv クライアント。Dart の http クライアントで OAuth（リフレッシュトークン）
+による認証を行い、推奨/検索/ランキング/小説/うごイラ/ブックマーク等を取得・表示する。
+
+[主要技術スタック]
+- Flutter/Dutter (Dart)
+- 永続化: sqflite（SQLite ファイル名 pixiv_viewer.db、バージョン 8）
+- 認証: OAuth2 リフレッシュトークン（SharedPreferences キー PIXIV_REFRESH_TOKEN）
+        ログインは PKCE（S256）の WebView フロー + リフレッシュトークン交換
+- 画像: ネットワーク画像に Referer ヘッダ必須（CDN 403 回避）
+- 埋め込み検索: ONNX Runtime（flutter_onnxruntime）+ Ruri v3-310m INT8 モデル
+        ＋ SentencePiece トークナイザ（dart_sentencepiece_tokenizer）
+- クラウド同期: Google Sign-In + googleapis/drive v3（appDataFolder の
+        pixember_backup.json を backup/restore）
+- ディープリンク: app_links パッケージ（pixiv.net の作品 URL をアプリ内で開く）
+- うごイラ再生: archive（ZIP 展開）+ Timer によるフレーム再生
+
+[アプリのエントリ]
+- lib/main.dart → MyApp（runApp）。起動時に AppLinks を初期化し、
+  初期リンク/ストリームリンクを _handleLink → _navigate で処理。
+- lib/screens/home_screen_state.dart → PixivViewerHome（ボトムナビ:
+  イラスト/小説/フィーリング発掘）。各種取得・ログイン・Drive 同期の実体を保持。
+
+================================================================================
+2. ディレクトリ・主要ファイルの責務
+================================================================================
+
+[lib/ 直下]
+- main.dart            : アプリ起動、ディープリンク解釈、テーマ（ダークピンク）
+- illust_model.dart    : Illust / Author / IllustUrls / PageImage / SearchItem モデル。
+                        cleanCaption()（HTML タグ除去）もここに定義。
+- novel_model.dart     : Novel / NovelSeriesInfo / NovelTextData モデル。
+                        illust_model.dart の Author/cleanCaption を再利用。
+
+[lib/screens/（画面・状態・UI・ハンドラ）]
+- home_screen_state.dart        : ホーム画面の状態・取得・PKCE ログイン・Drive 同期の中心。
+- home_ui_components.dart       : ホームの UI 構築（グリッド・Drawer・Sync HUD 等）。
+- home_filter_handler.dart      : 検索フィルタ状態管理（推測：檻索 UI の状態保持）。
+- home_sync_handler.dart        : Google Drive 同期のハンドラ + Drawer 用セクション UI。
+- feeling_discovery_screen.dart : フィーリング発掘（埋め込みベクトル検索）画面。
+- novel_reader_screen.dart      : 小説リーダー（本文表示・ページ送り・設定）。
+        └ part: novel_reader_data.dart / novel_reader_ui_handler.dart / novel_reader_ui_components.dart
+- novel_detail_screen.dart      : 小説詳細（購読登録ダイアログ等を含む）。
+- illust_detail_screen.dart     : イラスト詳細。
+        └ part: illust_detail_state.dart / illust_detail_handler.dart / illust_detail_ui_components.dart
+- author_profile_screen.dart    : ユーザー詳細（作品一覧）。
+- bookmark_list_screen.dart     : しおり（ブックマーク）一覧（推測）。
+- history_screen.dart           : 閲覧履歴一覧。
+- folder_list_screen.dart / folder_items_screen.dart : お気に入りフォルダ管理。
+- mute_settings_screen.dart     : ミュート（タグ/ユーザー/AI）管理。
+- novel_series_episodes_screen.dart : 小説シリーズのエピソード一覧。
+- full_screen_image_page.dart   : 画像全画面ビューア（推測）。
+- subscriptions_screen.dart     : 購読タグ同期画面（旧バックエンド依存・到達不能デッドコード）。
+- home_screen_state_new.txt / *.backup : 作業用テキスト・バックアップ（実コード外）。
+
+[lib/services/（サービス層）]
+- pixiv_api_service.dart         : 【現役】API サービス（シングルトン）。home_screen_state から import。
+- pixiv_api_http.dart            : 共通 HTTP クライアント（PixivHttpClient シングルトン）。
+                                    OAuth ロジックの重複実装を含む。
+- pixiv_http_headers.dart       : 画像用ヘッダ定数（Referer 必須）。
+- database_service.dart         : 【現役】SQLite ラッパ（全テーブル作成・CRUD）。
+- database_search.dart          : 【現役】埋め込みベクトル検索 + キーワード fallback。
+                                    feeling_discovery_screen から import。
+- embedding_service.dart        : 【現役】ONNX 埋め込みエンコード（Ruri）。
+- ruri_model_manager.dart        : 【現役】Ruri モデル/トークナイザの DL・検証・セッション管理。
+- google_drive_service.dart     : 【現役】Google Drive backup/restore。
+- download_service.dart         : 画像・うごイラのダウンロード/保存（ギャラリー保存）。
+- novel_document_text.dart      : 埋め込み用小説文書テキスト組み立て（共通関数）。
+- pixiv_api_search.dart         : 【デッドコード（推測）】別定義の PixivApiService（body['works'] 系）。
+                                    import 箇所なし。
+- pixiv_api_filter.dart         : 【デッドコード（推測）】別定義の PixivApiService + ミュート。
+                                    import 箇所なし。
+- pixiv_api_individual.dart     : 【デッドコード（推測）】別定義の PixivApiService（body ラッパ系）。
+                                    import 箇所なし。
+
+[lib/widgets/（再利用 UI 部品）]
+- pixiv_image.dart      : ネットワーク画像表示（Referer ヘッダ付き、キャッシュ付き）。
+- ugoira_player.dart    : うごイラ ZIP ダウンロード + フレーム再生。
+- zoomable_image.dart   : ピンチズーム画像（推測）。
+- novel_list_card.dart  : 小説リストのカード表示（feeling_discovery 等で使用）。
+- folder_selection_bottom_sheet.dart : フォルダ選択ボトムシート。
+
+[補足: デッドコードの判定根拠]
+- grep/search_files で pixiv_api_search.dart / pixiv_api_filter.dart /
+  pixiv_api_individual.dart / database_history.dart / database_novel.dart は
+  一切 import されていない（参照 0）。これらは過去の API 実装の別名クラス
+  （いずれも class PixivApiService を再定義し、resData['body'] 系をパース）であり、
+  現在はデッドコードと判断。なおローカル DB 用に database_history.dart /
+  database_novel.dart があった場合も同様に未参照（推測：現役は database_service.dart に統合済み）。
+
+================================================================================
+3. 主要データフロー
+================================================================================
+
+[認証フロー]
+1. 起動時 _checkLoginOnStart（home_screen_state.dart）でリフレッシュトークン有無を確認。
+2. 未ログイン → showPKCELoginDialog → _showWebViewLogin（webview_flutter で
+   https://app-api.pixiv.net/web/v1/login を開く）。
+3. pixiv://auth リダイレクトを _handleAuthRedirect で捕捉 →
+   _exchangeCodeForToken（oauth.secure.pixiv.net/auth/token、grant_type=authorization_code）
+   → リフレッシュトークンを setRefreshToken() で SharedPreferences に保存。
+4. 以降、API 呼び出し時に getAccessToken(refreshToken) で都度アクセストークン取得。
+
+[一覧取得・表示フロー（イラスト/小説共通）]
+home_screen_state.fetchData() / fetchNextPage()
+  → PixivApiService.getRecommend/searchIllust/getRanking/... 等
+  → _loadMuteFilter() で DB ミュートを読み込み
+  → filterIllustsIsolated / filterNovelsIsolated（Isolate.run でメイン直列フィルタ回避）
+  → 結果を state.illusts / state.novels に保持 → home_ui_components がグリッド描画
+
+[小説の埋め込み生成フロー（バックグラウンド）]
+fetchData 後 → _generateEmbeddingsInBackground(novels)
+  → 最大5件ずつ _runBackgroundEmbeddingGeneration
+  → EmbeddingService().encodeDocument(buildNovelDocumentText(novel, bodyText))
+  → DatabaseService().saveNovelEmbedding(...) / saveNovel(...)
+
+[フィーリング発掘（埋め込み検索）フロー]
+feeling_discovery_screen 入力 → EmbeddingService().encodeQuery(...)
+  → database_search.searchNovelsByEmbedding(db, queryEmbedding)
+  → コサイン類似度で上位を抽出（model_id/version 不一致はスキップ）
+  → 結果不足時は searchNovelsByKeywordFallback（タイトル/説明 LIKE）
+
+[小説閲覧フロー]
+novel_detail_screen → タップで NovelReaderScreen(novel)
+  → novel_reader_data._initSequence → _fetchNovelText（DB 優先 / なければ API）
+  → 本文をページ分割して表示、読書設定を SharedPreferences に保存
+  → しおり（自動）を DatabaseService に保存
+
+[Google Drive 同期フロー]
+home_sync_handler / home_ui_components の Drawer
+  → GoogleDriveService.signIn / backupJSON / restoreJSON
+  → backupJSON = DatabaseService().exportAllData() をアップロード
+  → restoreJSON = ダウンロード → DatabaseService().importAllData()（実体は
+     database_search.importAllData 経由で novels/novel_text/novel_embeddings をマージ）
+
+================================================================================
+4. DB・永続化の整理
+================================================================================
+
+[DB 基本情報]
+- ファイル: pixiv_viewer.db（sqflite）
+- バージョン: 8（_onUpgrade で v1→v8 までマイグレーション）
+- 操作の中心: lib/services/database_service.dart（DatabaseService シングルトン）
+
+[テーブル一覧と責務]
+- history            : 閲覧履歴（id,title,type,work_id,author_name,url,metadata,created_at）
+                      使用: 各詳細画面の _recordHistory / history_screen 表示。
+- novels             : 小説メタ（id,title,description,author_id,series_id,series_order,
+                      text,text_length,tags,tags_json,x_restrict,novel_ai_type,
+                      created_at,updated_at,author_name,cover_url,page_count,
+                      total_bookmarks,create_date,total_view,meta_json）
+                      使用: 検索結果保持・埋め込み検索の結合・フォルダ等。
+- novel_text         : 小説本文（work_id,title,author_name,pages_json,text,updated_at）
+                      使用: NovelReaderScreen の本文取得・保存。
+- novel_embeddings   : 小説埋め込みベクトル（work_id,embedding,model_id,model_version,updated_at）
+                      embedding は JSON 文字列（Float32List を jsonEncode）。
+                      使用: database_search.searchNovelsByEmbedding。
+- downloaded_illust  : ダウンロード済みイラスト（illust_id,local_path,thumbnail_path,download_date）
+                      使用: DownloadService（推測）。
+- mutes              : ミュート（id,mute_type,value,label）
+                      mute_type = tag | user | ai（ai は '0'/'1'/'2' で AI 扱いを制御）
+                      使用: PixivApiService._loadMuteFilter → フィルタ適用。
+- folders            : お気に入りフォルダ（id,name,created_at）
+                      使用: folder_list_screen / folder_selection_bottom_sheet。
+- folder_items       : フォルダ内作品（id,folder_id,work_id,title,author_name,preview_url,type,added_at）
+                      使用: folder_items_screen。
+- subscribed_tags    : 購読タグ（id,tag,type,created_at）【v3 で追加】
+                      使用: addSubscribedTag（novel_detail_screen から呼ばれる）で書き込みのみ。
+                      実際の「バックグラウンド同期」は subscriptions_screen（旧サーバー）経由で、
+                      本テーブルはローカル保存の受け皿としてのみ機能。
+
+[マイグレーション要点]
+- v2: mutes.label / subscribed_tags 準備（実際は v3 で subscribed_tags 追加）
+- v3: novel_text.title/author_name、subscribed_tags 追加
+- v4: history.author_name
+- v5: novels メタ列拡張
+- v6: novel_embeddings クリア（次元バグ修正）
+- v7: novel_embeddings に model_id/model_version 追加（→ モデル不一致スキップの根拠）
+- v8: novels.total_view / meta_json 追加
+
+[インデックス]
+- idx_history_workid / idx_folder_items_folderid
+
+================================================================================
+5. 外部依存の整理
+================================================================================
+
+[実装入口の特定（リクエスト #5）]
+1) 認証
+   - リフレッシュトークン管理: pixiv_api_service.dart（getRefreshToken/setRefreshToken/login）
+       ※重複実装: pixiv_api_http.dart（PixivHttpClient.getAccessToken/getRefreshToken）
+   - PKCE ログイン UI/フロー: home_screen_state.dart
+       （_checkLoginOnStart / showPKCELoginDialog / _showWebViewLogin /
+        _handleAuthRedirect / _exchangeCodeForToken）
+
+2) API 通信
+   - 現役: pixiv_api_service.dart（getRecommend/searchIllust/getRanking/
+       getNovelRanking/getNovelRecommend/searchNovel/searchNovelAllText/
+       getNovelText/getNovelSeries/getIllustById/getNovelById/getUserDetail/
+       getUserIllusts/getUserNovels/getUgoiraMetadata/toggleBookmark 等）
+   - 共通 HTTP クライアント: pixiv_api_http.dart（PixivHttpClient.client）
+   - ヘッダ: pixiv_http_headers.dart（imageHeaders: Referer 必須）
+
+3) 画像取得
+   - 表示: widgets/pixiv_image.dart（Image.network + PixivHttpHeaders.image）
+   - ダウンロード: services/download_service.dart（CDN は Referer のみ、認証不要）
+
+4) うごイラ
+   - widgets/ugoira_player.dart（getUgoiraMetadata → ZIP DL → フレーム再生）
+   - ダウンロード変換: download_service.dart（_saveUgoiraAsZip / _saveUgoiraAsGif）
+       ※ _convertToGif は現状プレースホルダ（最初のフレームのみ）で実 GIF 未生成。
+
+5) 小説リーダー
+   - screens/novel_reader_screen.dart（本文表示・ページ送り・読書設定・しおり）
+   - 本文取得: pixiv_api_service.getNovelText（HTML スクレイピング /v1/novel/pages）
+       ※ /v2 等の単体詳細と異なり webview ページからの抽出。
+   - 永続化: database_service.saveNovelText / getNovelText
+
+6) 埋め込み検索（フィーリング発掘）
+   - モデル/トークナイザ管理: ruri_model_manager.dart
+   - エンコード: embedding_service.dart（encodeQuery/encodeDocument）
+   - 文書組み立て: novel_document_text.dart（buildNovelDocumentText）
+   - 検索: database_search.dart（searchNovelsByEmbedding / searchNovelsByKeywordFallback）
+   - 画面: feeling_discovery_screen.dart
+
+7) Google Drive 同期
+   - services/google_drive_service.dart（signIn/signOut/signInSilently/
+       backupJSON/restoreJSON、_GoogleAuthClient）
+   - 導線・UI: home_sync_handler.dart（buildGoogleDriveSyncSection）/ home_ui_components
+   - 実データの export/import: database_service.exportAllData / importAllData
+       （importAllData は database_search.importAllData を内部的に利用）
+
+[その他外部依存]
+- ディープリンク: app_links（main.dart）
+- WebView: webview_flutter（PKCE ログイン）
+- 通知/外部ブラウザ: url_launcher（home_ui_components の dic.pixiv.net 等）
+
+================================================================================
+6. 旧バックエンド依存が残る箇所
+================================================================================
+
+[結論]
+旧バックエンド（Python サーバー: ルートの main.py / app.py 群）への依存は、
+「subscriptions_screen.dart」にのみ残存している。ただし本画面は
+**アプリ内のどこからも push/生成されていない（到達不能デッドコード）** と判断。
+
+[subscriptions_screen.dart の依存内容]
+- コンストラクタで `final String host` と `onTagSelected` コールバックを受ける。
+- 以下の HTTP エンドポイントを直接呼び出す（http パッケージ）:
+    GET  ${host}/api/subscriptions
+    POST ${host}/api/subscriptions/remove
+    POST ${host}/api/subscriptions/sync
+    POST ${host}/api/subscriptions/sync?tag_id=<id>
+    GET  ${host}/api/subscriptions/sync/status  （1秒ごとポーリング: is_running/total/progress）
+- これは「サーバー側で24時間バックグラウンドタグ同期を行う」バックエンドを前提としている。
+  → クライアント単体では動作不可能な設計がそのまま残っている。
+
+[関連する残骸・未接続箇所]
+- database_service.addSubscribedTag は定義されており、
+  novel_detail_screen._showSubscriptionDialog（:108）から実際に呼ばれ、
+  subscribed_tags テーブルへローカル保存されている（部分的に動作）。
+- しかし「登録したタグをサーバーへ同期する」導線は subscriptions_screen のみで、
+  同画面が到達不能なため、subscribed_tags は「書き込みだけされ、同期に使われない」状態。
+- illust_detail_handler.showSubscriptionDialog（:108）は
+  `// TODO: サブスクリプション登録実装` のまま未実装（登録処理なし）。
+- home_ui_components.buildSyncProgressHUD / isSyncing は
+  「Google ドライブ同期中...」用であり、subscriptions（旧サーバー）とは無関係。
+
+[旧バックエンド依存まとめ]
+- 残存ファイル: subscriptions_screen.dart（到達不能・デッドコード）
+- 影響: 実行時には到達しないため現在のアプリ挙動には影響なし。
+  ただし「購読タグのバックグラウンド同期」機能自体が未完成/未接続。
+- 推奨（実装フェーズ用・未実施）:
+  subscriptions_screen を廃止するか、host をなくして
+  ローカル（subscribed_tags のみ）または Google Drive ベースの同期に再設計する。
+
+================================================================================
+7. 新機能追加時の変更候補ファイル
+================================================================================
+
+[機能追加の種類ごとの変更ポイント]
+
+A. 新規 API 取得・画面追加
+   - services/pixiv_api_service.dart（エンドポイント追加）
+   - models/illust_model.dart または novel_model.dart（レスポンス型）
+   - screens/ に新画面 + home_ui_components.dart（導線）/ home_filter_handler.dart（必要時）
+
+B. 検索・フィルタ拡張
+   - services/pixiv_api_service.dart（searchIllust/searchNovel 等のパラメータ）
+   - screens/home_filter_handler.dart（UI フィルタ状態）
+   - screens/home_screen_state.dart（fetchData の呼び出し引数）
+
+C. ミュート・フォルダ・履歴等の永続データ
+   - services/database_service.dart（テーブル/CRUD）
+   - 必要なら _onUpgrade でマイグレーション（v8 → v9 等）
+
+D. 埋め込み検索拡張
+   - services/embedding_service.dart / ruri_model_manager.dart（モデル差し替え時）
+   - services/novel_document_text.dart（文書整形ルール）
+   - services/database_search.dart（類似度/キーワード fallback ロジック）
+   - screens/feeling_discovery_screen.dart（UI）
+
+E. 認証・ログイン変更
+   - services/pixiv_api_service.dart / pixiv_api_http.dart（OAuth ロジック重複注意）
+   - screens/home_screen_state.dart（PKCE フロー）
+
+F. Google Drive 同期変更
+   - services/google_drive_service.dart
+   - screens/home_sync_handler.dart / home_ui_components.dart（UI）
+   - services/database_service.dart（exportAllData/importAllData）
+
+G. 画像・うごイラ
+   - widgets/pixiv_image.dart（表示）
+   - widgets/ugoira_player.dart（再生）
+   - services/download_service.dart（保存/変換）
+
+[注意: 重複クラスの混乱]
+- pixiv_api_search/filter/individual.dart にも同名 PixivApiService が存在するが
+  未参照（デッドコード）。新規実装は必ず「現役」の pixiv_api_service.dart を
+  編集すること。誤って別ファイルを触ると効果が出ない。
+
+================================================================================
+8. 低リスク機能案（実装しやすく影響範囲の小さい候補）
+================================================================================
+
+以下は既存アーキテクチャに乗るだけで実現でき、既存 API/DB/Widget を大きく壊さない
+候補（あくまで提案。未実装）。
+
+1) 小説リーダーの「フォント選択」拡充
+   - 対象: novel_reader_screen.dart の _fontFamily（現在 'serif' 固定）。
+   - 方針: SharedPreferences の novel_pref_font_family を既存の保存/読込処理に
+     合わせて選択 UI を追加。DB/API 変更なしで低リスク。
+
+2) 購読タグのローカル活用（subscriptions_screen 廃止の代替）
+   - 対象: database_service.subscribed_tags（すでに novel_detail から書き込みあり）。
+   - 方針: サーバー同期を諦て、subscribed_tags を「お気に入りタグ」として
+     home の検索候補/フィルタに表示するだけの軽量機能。外部依存ゼロ。
+
+3) ミュート管理の UI 強化（一括追加/エクスポート）
+   - 対象: mute_settings_screen.dart + database_service（mutes テーブルは完備）。
+   - 方針: 複数タグの一括登録や JSON エクスポート/インポートを追加。
+     DB スキーマ変更なしで可能。
+
+4) うごイラ GIF 変換の実装
+   - 対象: download_service._convertToGif（現在プレースホルダ）。
+   - 方針: フレーム+delay から実際の GIF（または MP4）を生成。
+     保存先は既存パス体系を流用。UX 向上だが画像処理ライブラリの検証が必要。
+
+5) フィーリング発掘の「除外タグ」フィルタ
+   - 対象: feeling_discovery_screen.dart + database_search（類似度後フィルタ）。
+   - 方針: 検索結果から mutes/除外タグで絞り込むだけ。既存のミュート基盤を再利用。
+
+（上記はいずれも「既存サービス/DB の呼び出し追加」に留まり、
+ 新規外部依存や破壊的リファクタを伴わないため低リスクと判断。）
+
+================================================================================
+9. 不明点・推測箇所
+================================================================================
+
+[推測（要確認）]
+- pixiv_api_search.dart / pixiv_api_filter.dart / pixiv_api_individual.dart /
+  database_history.dart / database_novel.dart は未参照のデッドコードと推測。
+  （grep で import 0 件を確認済みだが、ビルド/ツリーシェイキング依存のため
+   最終は `flutter analyze` で未使用警告を確認推奨。）
+- home_filter_handler.dart の詳細責務は filePattern 外のため推測
+  （検索フィルタ状態の保持と推定）。
+- zoomable_image.dart / folder_selection_bottom_sheet.dart / novel_list_card.dart の
+  詳細実装は未読。責務は命名からの推測（ピンチズーム/フォルダ選択/小説カード）。
+- bookmark_list_screen.dart / history_screen.dart / folder_*_screen.dart の内部は
+  未読。責務は命名と DB テーブル存在からの推測。
+- ルート main.py / app.py が subscriptions_screen の想定バックエンドかは
+  当該 Python コード未読のため「推測」。subscriptions_screen 自身のエンドポイント形状
+  （/api/subscriptions*）から、何らかのサーバー実装を前提することは確実。
+
+[確認済み（断言可能）]
+- 現役 API サービスは services/pixiv_api_service.dart（home_screen_state が import）。
+- 現役 DB は services/database_service.dart（db バージョン 8）。
+- subscriptions_screen.dart はアプリ内から到達不能（push/生成箇所なし）のデッドコード。
+- buildSyncProgressHUD / isSyncing は Google Drive 同期用（旧サーバーとは無関係）。
+- addSubscribedTag は novel_detail_screen から実際に呼ばれ、subscribed_tags へ書き込み。
+
+[今後の実装フェーズでの注意]
+- 「編集パッチ」は本ドキュメントでは作成していない（ユーザー指示通り）。
+  実装開始時は上記「変更候補ファイル」を起点とし、重複クラス（pixiv_api_*_*.dart）
+  を誤編集しないよう注意。
+================================================================================

@@ -1,8 +1,23 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- INTERNET権限（小説読み込みに必要） -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    
+    <!-- Android 13(API 33)以上: メディア画像・動画への読み取り権限 -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <!-- Android 12(API 32)以下: 従来のストレージ権限（それ以降は不要） -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"
+        tools:replace="android:maxSdkVersion" />
+    <!-- フォアグラウンドサービス（バックグラウンドダウンロード用） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Android 14(API 34)以上: dataSync 型のフォアグラウンドサービス権限 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Android 13(API 33)以上: 通知表示権限（ダウンロード進捗通知用） -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:label="PixEmber"
         android:name="${applicationName}"
@@ -42,6 +57,19 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- workmanager の DispatcherService に dataSync フォアグラウンドタイプを付与（Android 14+ 要件）
+             Android 14(API 34) 以上では type 未宣言だと SecurityException となるため tools:replace で上書き -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false"
+            tools:node="merge" />
+
+        <!-- ダウンロード進捗用通知チャネル -->
+        <meta-data
+            android:name="pixiv_viewer_download_channel_id"
+            android:value="pixiv_viewer_download" />
 
     </application>
     <!-- Required to query activities that can process text, see:

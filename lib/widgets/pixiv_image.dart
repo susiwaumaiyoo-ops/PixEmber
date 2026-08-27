@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import '../services/pixiv_http_headers.dart';
 
 class PixivImage extends StatelessWidget {
   final String url;
@@ -10,6 +12,12 @@ class PixivImage extends StatelessWidget {
   final Widget? errorWidget;
   final Widget? placeholder;
   final int? cacheWidth;
+  final int? cacheHeight;
+
+  /// ローカルに保存済みのファイルパス（null = ネットワークから取得）。
+  /// 指定されている場合はローカルファイルを優先表示する。
+  /// ローカルファイルが破損している場合はネットワークにフォールバックする。
+  final File? localFile;
 
   const PixivImage({
     super.key,
@@ -21,37 +29,85 @@ class PixivImage extends StatelessWidget {
     this.errorWidget,
     this.placeholder,
     this.cacheWidth,
+    this.cacheHeight,
+    this.localFile,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (url.isEmpty) {
+    if (url.isEmpty && localFile == null) {
       return _buildErrorWidget();
     }
 
     // リファラなどのセキュリティヘッダーを付与してPixivのアセットサーバーからの直リンク403エラーを回避
-    final Map<String, String> headers = {
-      'Referer': 'https://www.pixiv.net/',
-      'User-Agent': 'PixivAndroidApp/6.71.1 (Android 11; Pixel 5)',
-    };
+    // DownloadService と同一の定数を共有する（pixiv_http_headers.dart）
+    final Map<String, String> headers = PixivHttpHeaders.image;
 
+    Widget buildImage(double? w, double? h) {
+      // ローカルファイル優先表示
+      if (localFile != null && _localFileExists(localFile!)) {
+        return Image.file(
+          localFile!,
+          fit: fit,
+          width: w,
+          height: h,
+          cacheWidth: cacheWidth ?? (isThumbnail ? 300 : 1200),
+          cacheHeight: cacheHeight,
+          errorBuilder: (context, error, stackTrace) {
+            // ローカルファイルが破損している場合はネットワークにフォールバック
+            return _buildNetworkImage(headers, w, h);
+          },
+        );
+      }
+      return _buildNetworkImage(headers, w, h);
+    }
+
+    // width/height が明示指定されていない場合、親の制約（固定枠）を取得して
+    // Image に伝える。これにより BoxFit.cover が親枠いっぱいに効き、
+    // 画像が引き伸ばされてアスペクト比が崩る（圧縮表示）のを防ぐ。
+    if (width != null || height != null) {
+      return buildImage(width, height);
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double? w = constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : null;
+        final double? h = constraints.hasBoundedHeight
+            ? constraints.maxHeight
+            : null;
+        return buildImage(w, h);
+      },
+    );
+  }
+
+  /// ローカルファイルが実在するか確認（同期）。
+  bool _localFileExists(File file) {
+    try {
+      return file.existsSync();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// ネットワーク画像を構築する（ローカル破損時のフォールバック含む）。
+  Widget _buildNetworkImage(Map<String, String> headers, double? w, double? h) {
     return Image.network(
       url,
       headers: headers,
       fit: fit,
-      width: width,
-      height: height,
-      // cacheWidth を指定するとデコード後のビットマップメモリを縮小でき、メモリ発熱・スクロール時のカクつきを完全に防止できます
-      // サムネイルは 300、オリジナル高画質でも 1200 に制限して巨大画像のメモリバースト（発熱・クラッシュ）を防ぐ
+      width: w,
+      height: h,
       cacheWidth: cacheWidth ?? (isThumbnail ? 300 : 1200),
+      cacheHeight: cacheHeight,
       loadingBuilder: (context, child, loadingProgress) {
         if (loadingProgress == null) {
           return child;
         }
         return placeholder ??
             Container(
-              width: width,
-              height: height,
+              width: w,
+              height: h,
               color: Colors.grey.withValues(alpha: 0.1),
               alignment: Alignment.center,
               child: SizedBox(

@@ -14,40 +14,152 @@ import 'package:shared_preferences/shared_preferences.dart';
 typedef ModelDownloadProgress =
     void Function(int receivedBytes, int totalBytes, String label);
 
-/// Ruri v3-310m INT8 モデルのダウンロード・ハッシュ検証・保存・セッション作成を管理するシングルトン。
+/// Ruri v3 embedding モデル1件の仕様（ONNX INT8 変換版のうち、実在確認済みのもののみ登録）。
 ///
-/// Milestone 1 で導入。EmbeddingService へは本接続せず、モデル資産の安全な
-/// 取得・検証・ロードのみを責務とする。
-class RuriModelManager {
-  // ---- モデル仕様（定数化）----
-  static const embeddingModelId = 'ruri-v3-310m-int8';
-  static const embeddingModelVersion = 1;
-  static const embeddingDimension = 768;
-  static const prefixSchemeVersion = 1;
-  static const queryPrefix = '検索クエリ: ';
-  static const documentPrefix = '検索文書: ';
+/// 注意:
+/// - cl-nagoya 公式リポジトリ（ruri-v3-30m/70m/130m/310m）は safetensors のみで
+///   ONNX を提供していない。そのため ONNX ビルドは sirasagi62 氏のコミュニティ変換版
+///   （base_model: cl-nagoya/ruri-v3-xxx）を使用する。
+/// - すべての URL / ファイル名 / サイズは Hugging Face API で実在確認済み
+///   （sirasagi62/ruri-v3-xxx-ONNX の onnx/model_int8.onnx）。
+/// - 各サイズの埋め込み次元（hidden_size）は異なるため、DB のベクトル互換性に直結する:
+///   30m=256, 70m=384, 130m=512, 310m=768。
+/// - トークナイザ（tokenizer.model）は全サイズで同一（sha256 一致）のため 1 ファイルを共用する。
+///   Reranker も同一語彙を共有するため、サイズ切り替え時も再ダウンロード不要。
+class RuriModelSpec {
+  final String id; // 保存キー（novel_embeddings.model_id 列に格納）
+  final String displayName; // UI 表示名
+  final String hfRepo; // Hugging Face リポジトリ
+  final String onnxPath; // リポジトリ内 ONNX パス
+  final int dimension; // 埋め込み次元（hidden_size）
+  final int modelSizeBytes; // model_int8.onnx の正確なバイト数
+  final String modelSha256; // model_int8.onnx の SHA-256（LFS oid）
+  final String sizeLabel; // UI 用サイズ説明
+  final String notes; // UI 用補足（精度/速度）
 
-  // ---- 期待ハッシュ・サイズ（PC 側で事前計算済み）----
-  static const String _expectedModelSha256 =
-      'b2b5af9b01ce0d5acdbb50d6d430fbe5266bb8d8c8f050ee1673d346e0a31380';
-  static const int _expectedModelSize = 316591573;
-  static const String _expectedTokenizerSha256 =
+  const RuriModelSpec({
+    required this.id,
+    required this.displayName,
+    required this.hfRepo,
+    required this.onnxPath,
+    required this.dimension,
+    required this.modelSizeBytes,
+    required this.modelSha256,
+    required this.sizeLabel,
+    required this.notes,
+  });
+
+  String get modelUrl =>
+      'https://huggingface.co/$hfRepo/resolve/main/$onnxPath';
+
+  /// トークナイザは全サイズで同一（cl-nagoya/ruri-v3-130m の tokenizer.model）。
+  static const String tokenizerRepo = 'cl-nagoya/ruri-v3-130m';
+  static const String tokenizerOnnxPath = 'tokenizer.model';
+  static const String tokenizerUrl =
+      'https://huggingface.co/$tokenizerRepo/resolve/main/$tokenizerOnnxPath';
+  static const int tokenizerSizeBytes = 1831879;
+  static const String tokenizerSha256 =
       '008293028e1a9d9a1038d9b63d989a2319797dfeaa03f171093a57b33a3a8277';
-  static const int _expectedTokenizerSize = 1831879;
 
-  // ---- 配信元 URL ----
-  static const String _modelUrl =
-      'https://huggingface.co/sirasagi62/ruri-v3-310m-ONNX/resolve/main/onnx/model_int8.onnx';
-  static const String _tokenizerUrl =
-      'https://huggingface.co/cl-nagoya/ruri-v3-130m/resolve/main/tokenizer.model';
+  /// 共通プレフィックス（すべての Ruri v3 サイズで同一）
+  static const int prefixSchemeVersion = 1;
+  static const int modelVersion = 1;
+  static const String queryPrefix = '検索クエリ: ';
+  static const String documentPrefix = '検索文書: ';
 
-  // ---- ローカルファイル名 ----
-  static const String _modelFileName = 'ruri_v3_310m_int8.onnx';
-  static const String _tokenizerFileName = 'tokenizer.model';
-  static const String _infoFileName = 'ruri_model_info.json';
+  /// 選択可能なモデル一覧（実在確認済みのみ登録）。
+  static const List<RuriModelSpec> all = <RuriModelSpec>[
+    RuriModelSpec(
+      id: 'ruri-v3-30m-int8',
+      displayName: 'Ruri v3 30m（軽量・高速）',
+      hfRepo: 'sirasagi62/ruri-v3-30m-ONNX',
+      onnxPath: 'onnx/model_int8.onnx',
+      dimension: 256,
+      modelSizeBytes: 37142404,
+      modelSha256:
+          '3d374a6245afef3c1710f942b25aad6b341504ba13fc82a85a844eb37b33120d',
+      sizeLabel: '約35MiB',
+      notes: '精度は控えめ・低メモリ/低スペック向け',
+    ),
+    RuriModelSpec(
+      id: 'ruri-v3-70m-int8',
+      displayName: 'Ruri v3 70m（バランス）',
+      hfRepo: 'sirasagi62/ruri-v3-70m-ONNX',
+      onnxPath: 'onnx/model_int8.onnx',
+      dimension: 384,
+      modelSizeBytes: 70684662,
+      modelSha256:
+          'c0d9885f7cdd014518b25404b75b67b2072d93c49d0cc5509263b5e8a1994dfa',
+      sizeLabel: '約67MiB',
+      notes: '精度と速度のバランス型',
+    ),
+    RuriModelSpec(
+      id: 'ruri-v3-130m-int8',
+      displayName: 'Ruri v3 130m（標準）',
+      hfRepo: 'sirasagi62/ruri-v3-130m-ONNX',
+      onnxPath: 'onnx/model_int8.onnx',
+      dimension: 512,
+      modelSizeBytes: 133302950,
+      modelSha256:
+          '36809816cdf6195b01fb6acf4526c0c1c90f60c9961a22b6ea9970d055541a43',
+      sizeLabel: '約127MiB',
+      notes: '精度重視の標準サイズ',
+    ),
+    RuriModelSpec(
+      id: 'ruri-v3-310m-int8',
+      displayName: 'Ruri v3 310m（高精度）',
+      hfRepo: 'sirasagi62/ruri-v3-310m-ONNX',
+      onnxPath: 'onnx/model_int8.onnx',
+      dimension: 768,
+      modelSizeBytes: 316591573,
+      modelSha256:
+          'b2b5af9b01ce0d5acdbb50d6d430fbe5266bb8d8c8f050ee1673d346e0a31380',
+      sizeLabel: '約302MiB',
+      notes: '最高精度・メモリ/ストレージ多め',
+    ),
+  ];
 
-  /// UI 表示用のサイズ説明
-  static const String modelSizeDescription = '約302MiB';
+  /// 登録モデルが無い場合のフォールバック（デフォルト = 高精度 310m）。
+  static const String defaultModelId = 'ruri-v3-310m-int8';
+
+  static RuriModelSpec specById(String id) =>
+      all.firstWhere((s) => s.id == id, orElse: () => all.last);
+
+  static bool isValidId(String id) => all.any((s) => s.id == id);
+}
+
+/// Ruri v3 embedding モデルのダウンロード・ハッシュ検証・保存・セッション作成・
+/// アクティブモデル切り替えを管理するシングルトン。
+///
+/// 複数サイズ（30m/70m/130m/310m）から選んでダウンロード・切り替えできる。
+/// トークナイザは全サイズ共用の 1 ファイル。埋め込み次元はモデルごとに異なるため、
+/// 検索時は「アクティブモデルで生成されたベクトル」のみを対象とする（互換フィルタ）。
+class RuriModelManager {
+  // ---- 静的エイリアス（既存呼び出し側互換: アクティブモデルの値を返す）----
+  // アクティブIDはメモリキャッシュ（_cachedActiveId）で保持し、非同期読み書き時に更新。
+  static String _cachedActiveId = RuriModelSpec.defaultModelId;
+
+  /// アクティブユーザーモデルID（静的getter: 既存呼び出し側互換）。
+  static String get embeddingModelId => _cachedActiveId;
+
+  /// アクティブモデルの埋め込み次元（静的getter: 既存呼び出し側互換）。
+  static int get embeddingDimension =>
+      RuriModelSpec.specById(_cachedActiveId).dimension;
+
+  static const int embeddingModelVersion = RuriModelSpec.modelVersion;
+  static const int prefixSchemeVersion = RuriModelSpec.prefixSchemeVersion;
+  static const String queryPrefix = RuriModelSpec.queryPrefix;
+  static const String documentPrefix = RuriModelSpec.documentPrefix;
+
+  /// アクティブモデルの仕様（同期取得・UI 表示用）。
+  static RuriModelSpec get activeSpecSync =>
+      RuriModelSpec.specById(_cachedActiveId);
+
+  /// UI 用サイズ説明（アクティブモデルの sizeLabel）。
+  static String get modelSizeDescription => activeSpecSync.sizeLabel;
+
+  /// UI 用モデル表示名（アクティブモデルの displayName）。
+  static String get modelDisplayName => activeSpecSync.displayName;
 
   static final RuriModelManager _instance = RuriModelManager._internal();
   factory RuriModelManager() => _instance;
@@ -60,73 +172,124 @@ class RuriModelManager {
     return _dirCache!;
   }
 
-  Future<File> get modelFile async =>
-      File(p.join((await _supportDir).path, _modelFileName));
-  Future<File> get tokenizerFile async =>
-      File(p.join((await _supportDir).path, _tokenizerFileName));
-  Future<File> get _infoFile async =>
-      File(p.join((await _supportDir).path, _infoFileName));
+  // ---- アクティブモデル管理（SharedPreferences）----
+  static const String _activeModelPrefsKey = 'ruri_active_model_id';
 
-  /// モデル＋トークナイザーをダウンロードし、検証後に保存する。
-  /// ユーザー確認なしにモバイル通信で自動開始してはならない（呼び出し側で確認UIを経由すること）。
-  Future<void> download({
-    ModelDownloadProgress? onProgress,
-    ValueNotifier<bool>? cancel,
-  }) async {
-    await _downloadFile(
-      _modelUrl,
-      _modelFileName,
-      _expectedModelSize,
-      _expectedModelSha256,
-      label: 'AIモデル',
-      onProgress: onProgress,
-      cancel: cancel,
-    );
-    await _downloadFile(
-      _tokenizerUrl,
-      _tokenizerFileName,
-      _expectedTokenizerSize,
-      _expectedTokenizerSha256,
-      label: 'トークナイザー',
-      onProgress: onProgress,
-      cancel: cancel,
-    );
-    await _writeInfo();
+  /// 現在アクティブなモデルID（未設定時は default）。
+  Future<String> getActiveModelId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final id = prefs.getString(_activeModelPrefsKey);
+    if (id != null && RuriModelSpec.isValidId(id)) {
+      _cachedActiveId = id;
+      return id;
+    }
+    _cachedActiveId = RuriModelSpec.defaultModelId;
+    return RuriModelSpec.defaultModelId;
   }
 
-  /// 保存済みモデル情報が現在の仕様と一致し、かつハッシュも一致するか。
-  Future<bool> isModelReady() async {
-    final m = await modelFile;
+  /// アクティブモデルを設定する（後続の検索はこのモデルで生成されたベクトルのみ対象）。
+  Future<void> setActiveModelId(String id) async {
+    if (!RuriModelSpec.isValidId(id)) {
+      throw ArgumentError('未登録のモデルID: $id');
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_activeModelPrefsKey, id);
+    _cachedActiveId = id;
+  }
+
+  /// アクティブモデルの仕様を取得。
+  Future<RuriModelSpec> getActiveSpec() async =>
+      RuriModelSpec.specById(await getActiveModelId());
+
+  String _modelFileNameFor(String id) => 'ruri_${id.replaceAll('-', '_')}.onnx';
+  String _infoFileNameFor(String id) =>
+      'ruri_${id.replaceAll('-', '_')}_info.json';
+
+  /// 指定モデルの .onnx ファイルパス。
+  Future<File> modelFileFor(String id) async =>
+      File(p.join((await _supportDir).path, _modelFileNameFor(id)));
+
+  /// 指定モデルの info ファイルパス。
+  Future<File> _infoFileFor(String id) async =>
+      File(p.join((await _supportDir).path, _infoFileNameFor(id)));
+
+  /// 共用トークナイザのファイルパス。
+  Future<File> get tokenizerFile async =>
+      File(p.join((await _supportDir).path, 'tokenizer.model'));
+
+  /// 共用トークナイザのパス文字列。
+  Future<String> get tokenizerPath async => (await tokenizerFile).path;
+
+  // ---- 既存互換エイリアス（アクティブモデルを指す）----
+  Future<File> get modelFile async => modelFileFor(await getActiveModelId());
+
+  /// 指定モデルがダウンロード済み（ファイル存在のみ、軽量）か。
+  Future<bool> isModelPresentFor(String id) async {
+    final m = await modelFileFor(id);
     final t = await tokenizerFile;
-    final info = await _infoFile;
+    final info = await _infoFileFor(id);
+    return await m.exists() && await t.exists() && await info.exists();
+  }
+
+  /// アクティブモデルがダウンロード済み（軽量）。
+  Future<bool> isModelPresent() async =>
+      isModelPresentFor(await getActiveModelId());
+
+  /// 指定モデルの保存済み情報を読み取り。
+  Future<Map<String, dynamic>?> readInfoFor(String id) async {
+    final info = await _infoFileFor(id);
+    if (!await info.exists()) return null;
+    try {
+      return jsonDecode(await info.readAsString()) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// アクティブモデルの保存済み情報を読み取り（既存互換）。
+  Future<Map<String, dynamic>?> readInfo() async =>
+      readInfoFor(await getActiveModelId());
+
+  /// 指定モデルが準備完了（ハッシュ・仕様一致）か。
+  Future<bool> isModelReadyFor(String id) async {
+    final spec = RuriModelSpec.specById(id);
+    final m = await modelFileFor(id);
+    final t = await tokenizerFile;
+    final info = await _infoFileFor(id);
     if (!await m.exists() || !await t.exists() || !await info.exists()) {
       return false;
     }
     try {
       final data =
           jsonDecode(await info.readAsString()) as Map<String, dynamic>;
-      if (data['modelId'] != embeddingModelId) return false;
-      if (data['modelVersion'] != embeddingModelVersion) return false;
-      if (data['prefixSchemeVersion'] != prefixSchemeVersion) return false;
+      if (data['modelId'] != spec.id) return false;
+      if (data['modelVersion'] != RuriModelSpec.modelVersion) return false;
+      if (data['prefixSchemeVersion'] != RuriModelSpec.prefixSchemeVersion) {
+        return false;
+      }
     } catch (_) {
       return false;
     }
     final okModel = await _verifyFileCached(
       m,
-      _expectedModelSize,
-      _expectedModelSha256,
-      'model',
+      spec.modelSizeBytes,
+      spec.modelSha256,
+      'model_$id',
     );
     final okTok = await _verifyFileCached(
       t,
-      _expectedTokenizerSize,
-      _expectedTokenizerSha256,
+      RuriModelSpec.tokenizerSizeBytes,
+      RuriModelSpec.tokenizerSha256,
       'tokenizer',
     );
     return okModel && okTok;
   }
 
-  /// セッションを作成して返す（呼び出し側が close すること）。
+  /// アクティブモデルが準備完了か。
+  Future<bool> isModelReady() async =>
+      isModelReadyFor(await getActiveModelId());
+
+  /// アクティブモデルのセッションを作成して返す（呼び出し側が close すること）。
   Future<OrtSession> loadSession() async {
     final m = await modelFile;
     if (!await m.exists()) {
@@ -136,47 +299,88 @@ class RuriModelManager {
     return ort.createSession(m.path);
   }
 
-  /// トークナイザーのファイルパス（SentencePiece 初期化用）。
-  Future<String> get tokenizerPath async => (await tokenizerFile).path;
-
-  /// 保存済みモデル情報を読み取り（UI 表示・マイグレーション判定用）。
-  Future<Map<String, dynamic>?> readInfo() async {
-    final info = await _infoFile;
-    if (!await info.exists()) return null;
-    try {
-      return jsonDecode(await info.readAsString()) as Map<String, dynamic>;
-    } catch (_) {
-      return null;
+  /// 指定モデルをダウンロード（トークナイザは共用のため未存在時のみ DL）。
+  Future<void> downloadModel(
+    String id, {
+    ModelDownloadProgress? onProgress,
+    ValueNotifier<bool>? cancel,
+  }) async {
+    final spec = RuriModelSpec.specById(id);
+    final tok = await tokenizerFile;
+    if (!await tok.exists()) {
+      await _downloadFile(
+        RuriModelSpec.tokenizerUrl,
+        'tokenizer.model',
+        RuriModelSpec.tokenizerSizeBytes,
+        RuriModelSpec.tokenizerSha256,
+        label: 'トークナイザー',
+        onProgress: onProgress,
+        cancel: cancel,
+      );
     }
+    await _downloadFile(
+      spec.modelUrl,
+      _modelFileNameFor(id),
+      spec.modelSizeBytes,
+      spec.modelSha256,
+      label: spec.displayName,
+      onProgress: onProgress,
+      cancel: cancel,
+    );
+    await _writeInfo(id);
   }
 
-  /// モデル・トークナイザー・情報ファイルをすべて削除（再ダウンロード用）。
-  Future<void> deleteAll() async {
-    for (final f in [await modelFile, await tokenizerFile, await _infoFile]) {
+  /// アクティブモデルのダウンロード（既存呼び出し互換）。
+  Future<void> download({
+    ModelDownloadProgress? onProgress,
+    ValueNotifier<bool>? cancel,
+  }) async {
+    await downloadModel(
+      await getActiveModelId(),
+      onProgress: onProgress,
+      cancel: cancel,
+    );
+  }
+
+  /// 指定モデルのローカルファイル（モデル・info）を削除。
+  /// トークナイザは共用のため削除しない（他モデル/reranker が使う）。
+  Future<void> deleteModel(String id) async {
+    for (final f in [await modelFileFor(id), await _infoFileFor(id)]) {
       if (await f.exists()) await f.delete();
     }
-    final part = File('${(await modelFile).path}.part');
+    final part = File('${(await modelFileFor(id)).path}.part');
     if (await part.exists()) await part.delete();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('${_verifyPrefsPrefix}model');
-    await prefs.remove('${_verifyPrefsPrefix}tokenizer');
+    await prefs.remove('${_verifyPrefsPrefix}model_$id');
   }
 
-  // ---------- 内部実装 ----------
+  /// アクティブモデル以外のすべてのダウンロード済みモデルを削除（ストレージ節約）。
+  Future<void> deleteInactiveModels() async {
+    final active = await getActiveModelId();
+    for (final spec in RuriModelSpec.all) {
+      if (spec.id != active) {
+        await deleteModel(spec.id);
+      }
+    }
+  }
 
-  Future<void> _writeInfo() async {
-    final info = await _infoFile;
+  /// 指定モデルの info を書き込む。
+  Future<void> _writeInfo(String id) async {
+    final spec = RuriModelSpec.specById(id);
+    final info = await _infoFileFor(id);
     await info.writeAsString(
       jsonEncode(<String, dynamic>{
-        'modelId': embeddingModelId,
-        'modelVersion': embeddingModelVersion,
-        'embeddingDimension': embeddingDimension,
-        'prefixSchemeVersion': prefixSchemeVersion,
-        'modelSha256': _expectedModelSha256,
-        'tokenizerSha256': _expectedTokenizerSha256,
+        'modelId': spec.id,
+        'modelVersion': RuriModelSpec.modelVersion,
+        'embeddingDimension': spec.dimension,
+        'prefixSchemeVersion': RuriModelSpec.prefixSchemeVersion,
+        'modelSha256': spec.modelSha256,
+        'tokenizerSha256': RuriModelSpec.tokenizerSha256,
       }),
     );
   }
+
+  // ---------- 内部実装 ----------
 
   Future<void> _downloadFile(
     String url,
@@ -203,7 +407,8 @@ class RuriModelManager {
     final free = await _freeSpaceBytes(dir.path);
     if (free > 0 && free < expectedSize + 50 * 1024 * 1024) {
       throw StateError(
-        '空き容量が不足しています（必要約${(expectedSize / 1048576).round()}MiB, 空き約${(free / 1048576).round()}MiB）',
+        '空き容量が不足しています（必要約${(expectedSize / 1048576).round()}MiB, '
+        '空き約${(free / 1048576).round()}MiB）',
       );
     }
 
@@ -256,9 +461,9 @@ class RuriModelManager {
           // SHA-256 検証
           final sha = (await sha256.bind(part.openRead()).first).toString();
           if (sha != expectedSha) {
-            throw StateError('SHA-256 不一致（破損または改ざん）for $fileName');
+            throw StateError('ダウンロード破損/改ざん: SHA-256 不一致 for $fileName');
           }
-          // 原子 rename（部分ファイルをロードさせない）
+          // 原子 rename
           await part.rename(target.path);
           return;
         } finally {
@@ -267,7 +472,6 @@ class RuriModelManager {
       } on _DownloadCancelled {
         rethrow;
       } catch (e) {
-        // 部分ファイルを確実に破棄
         if (await part.exists()) await part.delete();
         if (attempt == maxRetries) rethrow;
         await Future.delayed(Duration(seconds: attempt * 2));
@@ -321,7 +525,6 @@ class RuriModelManager {
         final lines = result.stdout.toString().trim().split('\n');
         if (lines.length >= 2) {
           final cols = lines.last.trim().split(RegExp(r'\s+'));
-          // Filesystem 1K-blocks Used Available Use% Mounted
           if (cols.length >= 4) {
             final availKb = int.tryParse(cols[3]);
             if (availKb != null) return availKb * 1024;

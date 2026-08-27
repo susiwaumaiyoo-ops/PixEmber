@@ -1,17 +1,39 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:workmanager/workmanager.dart';
 import 'screens/home_screen_widget.dart';
 import 'screens/illust_detail_screen.dart';
 import 'screens/novel_detail_screen.dart';
 import 'screens/novel_series_episodes_screen.dart';
 import 'novel_model.dart';
+import 'services/download_service.dart';
 import 'services/pixiv_api_service.dart';
+
+// ワークマネージャー（バックグラウンドダウンロード）のコールバックディスパッチャー。
+// Android のみ登録される（他OSはフォアグラウンド縮退）。
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    // アプリ終了後でも DB からキューを再開
+    await DownloadService().runBackgroundOnce(inputData);
+    return true;
+  });
+}
 
 // ディープリンク遷移用のグローバルナビゲーターキー
 final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Android のみ workmanager を初期化（バックグラウンド継続ダウンロード）
+  if (Platform.isAndroid) {
+    await Workmanager().initialize(callbackDispatcher);
+    // バックグラウンドタスクを1回登録（既存なら維持）
+    await DownloadService().registerBackgroundTaskIfAndroid();
+  }
   runApp(const MyApp());
 }
 

@@ -7,6 +7,7 @@ import '../services/database_service.dart';
 import '../services/embedding_service.dart';
 import '../services/novel_document_text.dart';
 import '../services/pixiv_api_service.dart';
+import '../services/ruri_model_manager.dart';
 
 part 'novel_reader_data.dart';
 part 'novel_reader_ui_handler.dart';
@@ -44,6 +45,8 @@ class _NovelReaderScreenState extends State<NovelReaderScreen>
   // 自動しおり用のステート
   int _savedPageIndex = 0;
   double _savedScrollOffset = 0.0;
+  // あとで読む進捗保存の頻度制御用（前回保存時の進捗率）
+  double? _lastSavedReadLaterProgress;
   PageController? _pageController;
   List<ScrollController> _scrollControllers = [];
   bool _isDisposing = false; // 破棄中フラグ（リスナーのゴーストイベント防止）

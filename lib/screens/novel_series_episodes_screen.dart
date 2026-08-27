@@ -64,10 +64,8 @@ class _NovelSeriesEpisodesScreenState extends State<NovelSeriesEpisodesScreen> {
     }
   }
 
-  // タグから年齢制限（R-18）を判定する（home_screen と同じ基準）
-  bool _isR18(Novel novel) => novel.tags.any(
-    (t) => t.toLowerCase().contains('r-18') || t.toLowerCase().contains('r18'),
-  );
+  // 年齢制限（R-18）は x_restrict フィールドで判定（0=全年齢, 1=R-18, 2=R-18G）
+  bool _isR18(Novel novel) => novel.xRestrict >= 1;
 
   @override
   Widget build(BuildContext context) {

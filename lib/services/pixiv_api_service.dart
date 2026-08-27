@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:crypto/crypto.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'database_service.dart';
+import 'pixiv_api_http.dart';
 import '../illust_model.dart';
 import '../novel_model.dart';
 
@@ -17,6 +17,27 @@ class RateLimitException implements Exception {
 
   @override
   String toString() => 'RateLimitException: $message (Status: $statusCode)';
+}
+
+/// 401 認証エラー（トークン切れ等）。リフレッシュ再試行または再ログイン誘導に使う。
+class AuthException implements Exception {
+  final String message;
+  final int statusCode;
+
+  AuthException(this.message, {this.statusCode = 401});
+
+  @override
+  String toString() => 'AuthException: $message (Status: $statusCode)';
+}
+
+/// 小説が存在しない / 削除済み / 非公開 等（404相当）。安全にスキップするために使う。
+class NovelNotFoundException implements Exception {
+  final int novelId;
+
+  NovelNotFoundException(this.novelId);
+
+  @override
+  String toString() => 'NovelNotFoundException: id=$novelId';
 }
 
 class PixivApiService {
@@ -33,6 +54,7 @@ class PixivApiService {
     'App-OS-Version': '11',
     'App-Version': '6.71.1',
     'Accept-Language': 'ja-JP',
+    'Accept-Encoding': 'gzip',
   };
 
   final DatabaseService _dbService = DatabaseService();
@@ -67,6 +89,7 @@ class PixivApiService {
         "X-Client-Time": clientTime,
         "X-Client-Hash": clientHash,
         "Accept-Language": "ja_JP",
+        "Accept-Encoding": "gzip",
         "Content-Type": "application/x-www-form-urlencoded",
       };
 
@@ -77,7 +100,11 @@ class PixivApiService {
         "refresh_token": refreshToken,
       };
 
-      final response = await http.post(url, headers: headers, body: data);
+      final response = await PixivHttpClient().client.post(
+        url,
+        headers: headers,
+        body: data,
+      );
 
       if (response.statusCode == 200) {
         final resData = jsonDecode(response.body);
@@ -130,7 +157,7 @@ class PixivApiService {
       debugPrint('[API] Params: $params');
     }
 
-    final response = await http.get(
+    final response = await PixivHttpClient().client.get(
       uri,
       headers: {..._clientHeaders, 'Authorization': 'Bearer $token'},
     );
@@ -144,6 +171,13 @@ class PixivApiService {
       throw RateLimitException(
         'Pixiv APIのレート制限（429）に達しました。しばらく時間を置いてから再試行してください。',
         statusCode: 429,
+      );
+    } else if (response.statusCode == 401) {
+      debugPrint('[API] ERROR Status: 401 (Unauthorized), endpoint: $endpoint');
+      debugPrint('[API] ERROR Body: ${response.body}');
+      throw AuthException(
+        'Pixiv APIの認証に失敗しました（401）。再ログインが必要です。',
+        statusCode: 401,
       );
     } else {
       debugPrint(
@@ -230,15 +264,17 @@ class PixivApiService {
       try {
         final Map<String, dynamic> itemMap = item as Map<String, dynamic>;
 
-        // 0. 年齢制限（x_restrict）フィルタリング
+        // 0. 年齢制限（x_restrict）フィルタリング（レスポンスの x_restrict フィールドで判定）
+        // all=全年齢のみ(0), include_r18=R-18含む(0,1,2), r18=R-18のみ(1), r18g=R-18G含む(0,1,2)
         final int xRestrictVal = itemMap['x_restrict'] as int? ?? 0;
         if (xRestrict != null) {
           final String xLower = xRestrict.toLowerCase();
-          if (xLower == 'safe' && xRestrictVal > 0) {
-            continue; // safe（全年齢）が指定されている場合、R-18(1)/R-18G(2)を除外
-          } else if (xLower == 'r18' && xRestrictVal == 0) {
-            continue; // r18が指定されている場合、全年齢(0)を除外
+          if (xLower == 'all' && xRestrictVal > 0) {
+            continue; // 全年齢のみ：R-18(1)/R-18G(2)を除外
+          } else if (xLower == 'r18' && xRestrictVal != 1) {
+            continue; // R-18のみ：全年齢(0)・R-18G(2)を除外
           }
+          // include_r18 / r18g はすべて表示
         }
 
         // 0.5 work_type（イラストの種類）フィルタ
@@ -379,15 +415,17 @@ class PixivApiService {
       try {
         final Map<String, dynamic> itemMap = item as Map<String, dynamic>;
 
-        // 0. 年齢制限（x_restrict）フィルタリング
+        // 0. 年齢制限（x_restrict）フィルタリング（レスポンスの x_restrict フィールドで判定）
+        // all=全年齢のみ(0), include_r18=R-18含む(0,1,2), r18=R-18のみ(1), r18g=R-18G含む(0,1,2)
         final int xRestrictVal = itemMap['x_restrict'] as int? ?? 0;
         if (xRestrict != null) {
           final String xLower = xRestrict.toLowerCase();
-          if (xLower == 'safe' && xRestrictVal > 0) {
-            continue; // safe（全年齢）が指定されている場合、R-18(1)/R-18G(2)を除外
-          } else if (xLower == 'r18' && xRestrictVal == 0) {
-            continue; // r18が指定されている場合、全年齢(0)を除外
+          if (xLower == 'all' && xRestrictVal > 0) {
+            continue; // 全年齢のみ：R-18(1)/R-18G(2)を除外
+          } else if (xLower == 'r18' && xRestrictVal != 1) {
+            continue; // R-18のみ：全年齢(0)・R-18G(2)を除外
           }
+          // include_r18 / r18g はすべて表示
         }
 
         // 1. ユーザーIDミュート
@@ -517,6 +555,28 @@ class PixivApiService {
     return _wrap(items: items, rawBody: body);
   }
 
+  /// pixiv App-API が受け付ける search_target の有効値。
+  static const Set<String> illustSearchTargets = {
+    'partial_match_for_tags',
+    'exact_match_for_tags',
+    'title_and_caption',
+  };
+  static const Set<String> novelSearchTargets = {
+    'partial_match_for_tags',
+    'exact_match_for_tags',
+    'title_and_caption',
+    'text',
+    'keyword',
+  };
+
+  /// 無効な search_target（旧UIの 'title'/'description'/'tags'/'all_text' 等）が
+  /// 渡された場合に API エラーを起こさないよう既定値へ丸める。
+  static String normalizeSearchTarget(String target, {required bool isNovel}) {
+    final valid = isNovel ? novelSearchTargets : illustSearchTargets;
+    if (valid.contains(target)) return target;
+    return 'partial_match_for_tags';
+  }
+
   /// イラスト検索
   Future<FetchResult<Illust>> searchIllust(
     String word,
@@ -532,7 +592,10 @@ class PixivApiService {
     if (bookmarkFilter > 0) {
       effectiveWord = '$effectiveWord ${bookmarkFilter}users入り';
     }
-    if (xRestrict.toLowerCase() == 'r18') {
+    final xLower = xRestrict.toLowerCase();
+    // 'r18'（R-18のみ）の場合のみワードに "R-18" を付与（絞り込み強化）。
+    // 'include_r18'（R-18含む）は全年齢+R-18 混合なのでワード追加は不要。
+    if (xLower == 'r18') {
       effectiveWord = '$effectiveWord R-18';
     }
     debugPrint(
@@ -544,11 +607,15 @@ class PixivApiService {
       '/v1/search/illust',
       params: {
         'word': effectiveWord,
-        'search_target':
-            searchTarget, // 'partial_match_for_tags', 'exact_match_for_tags', 'title_and_caption'
+        // 'partial_match_for_tags' / 'exact_match_for_tags' / 'title_and_caption'
+        'search_target': normalizeSearchTarget(searchTarget, isNovel: false),
         'sort': sort, // 'date_desc', 'date_asc', 'popular_desc'
         'offset': offset.toString(),
         'filter': 'for_android',
+        // NOTE: /v1/search/illust に x_restrict 検索パラメータは存在しない。
+        // R-18 が結果に出るかはアカウントの年齢確認・表示設定に依存する。
+        // 作品単位の R-18 判定はレスポンスの x_restrict フィールドで
+        // クライアント側フィルタ（filterIllustsIsolated）が行う。
       },
     );
     final items = await filterIllustsIsolated(
@@ -587,16 +654,23 @@ class PixivApiService {
     int? startTextLength,
     int? endTextLength,
   }) async {
-    final params = {'mode': mode, 'offset': offset.toString()};
-    if (startTextLength != null) {
-      params['start_text_length'] = startTextLength.toString();
+    try {
+      final params = {'mode': mode, 'offset': offset.toString()};
+      if (startTextLength != null) {
+        params['start_text_length'] = startTextLength.toString();
+      }
+      if (endTextLength != null) {
+        params['end_text_length'] = endTextLength.toString();
+      }
+      final body = await _get('/v1/novel/ranking', params: params);
+      final items = await filterNovelsIsolated(body);
+      return _wrap(items: items, rawBody: body);
+    } catch (e, stack) {
+      // 存在しない mode 等で API エラーが発生してもクラッシュさせず空結果を返す
+      debugPrint('[API] getNovelRanking failed: mode=$mode, error=$e');
+      debugPrint(stack.toString());
+      return FetchResult<Novel>(items: const []);
     }
-    if (endTextLength != null) {
-      params['end_text_length'] = endTextLength.toString();
-    }
-    final body = await _get('/v1/novel/ranking', params: params);
-    final items = await filterNovelsIsolated(body);
-    return _wrap(items: items, rawBody: body);
   }
 
   /// 小説おすすめ取得
@@ -633,7 +707,8 @@ class PixivApiService {
     if (bookmarkFilter > 0) {
       effectiveWord = '$effectiveWord ${bookmarkFilter}users入り';
     }
-    if (xRestrict.toLowerCase() == 'r18') {
+    final xLower = xRestrict.toLowerCase();
+    if (xLower == 'r18') {
       effectiveWord = '$effectiveWord R-18';
     }
     debugPrint(
@@ -644,10 +719,15 @@ class PixivApiService {
 
     final params = {
       'word': effectiveWord,
-      'search_target': searchTarget,
+      // 小説は text / keyword も指定可能
+      'search_target': normalizeSearchTarget(searchTarget, isNovel: true),
       'sort': sort,
       'offset': offset.toString(),
       'filter': 'for_android',
+      // NOTE: /v1/search/novel に x_restrict 検索パラメータは存在しない。
+      // R-18 が結果に出るかはアカウントの年齢確認・表示設定に依存する。
+      // 作品単位の R-18 判定はレスポンスの x_restrict フィールドで
+      // クライアント側フィルタ（filterNovelsIsolated）が行う。
     };
 
     // 文字数制限
@@ -761,7 +841,7 @@ class PixivApiService {
       },
     );
 
-    final response = await http.get(
+    final response = await PixivHttpClient().client.get(
       uri,
       headers: {..._clientHeaders, 'Authorization': 'Bearer $token'},
     );
@@ -877,17 +957,27 @@ class PixivApiService {
   }
 
   /// 小説単体取得（ディープリンク用）
+  ///
+  /// エンドポイントは /v2/novel/detail を使用（/v1 は廃止済みで
+  /// 「指定されたエンドポイントは存在しません」の 404 を返す）。
   Future<Novel> getNovelById(int id) async {
-    final body = await _get(
-      '/v1/novel/detail',
-      params: {'novel_id': id.toString()},
-    );
-    final data = jsonDecode(body) as Map<String, dynamic>;
-    final novelJson = data['novel'] as Map<String, dynamic>?;
-    if (novelJson == null) {
-      throw Exception('小説が見つかりませんでした (id=$id)');
+    const endpoint = '/v2/novel/detail';
+    try {
+      final body = await _get(endpoint, params: {'novel_id': id.toString()});
+      final data = jsonDecode(body) as Map<String, dynamic>;
+      final novelJson = data['novel'] as Map<String, dynamic>?;
+      if (novelJson == null) {
+        throw NovelNotFoundException(id);
+      }
+      return Novel.fromJson(novelJson);
+    } on RateLimitException {
+      rethrow;
+    } on Exception catch (e) {
+      debugPrint(
+        '[NovelDetail] 小説詳細取得失敗: endpoint=$endpoint, novel_id=$id, error=$e',
+      );
+      rethrow;
     }
-    return Novel.fromJson(novelJson);
   }
 
   /// ユーザー詳細取得
@@ -965,7 +1055,7 @@ class PixivApiService {
   }) async {
     final token = await getAccessToken(await getRefreshToken());
 
-    final response = await http.post(
+    final response = await PixivHttpClient().client.post(
       Uri.parse('$_baseUrl$endpoint'),
       headers: {
         ..._clientHeaders,
@@ -1172,11 +1262,12 @@ List<Map<String, dynamic>> _filterIllustsInIsolate(
       final int xRestrictVal = itemMap['x_restrict'] as int? ?? 0;
       if (xRestrict != null) {
         final String xLower = xRestrict.toLowerCase();
-        if (xLower == 'safe' && xRestrictVal > 0) {
-          continue;
-        } else if (xLower == 'r18' && xRestrictVal == 0) {
-          continue;
+        if (xLower == 'all' && xRestrictVal > 0) {
+          continue; // 全年齢のみ：R-18(1)/R-18G(2)を除外
+        } else if (xLower == 'r18' && xRestrictVal != 1) {
+          continue; // R-18のみ：全年齢(0)・R-18G(2)を除外
         }
+        // include_r18 / r18g はすべて表示
       }
 
       if (workType != null &&
@@ -1269,14 +1360,14 @@ List<Map<String, dynamic>> _filterNovelsInIsolate(
   for (var item in list) {
     try {
       final Map<String, dynamic> itemMap = item as Map<String, dynamic>;
-
+      // 0. 年齢制限（x_restrict）フィルタリング
       final int xRestrictVal = itemMap['x_restrict'] as int? ?? 0;
       if (xRestrict != null) {
         final String xLower = xRestrict.toLowerCase();
-        if (xLower == 'safe' && xRestrictVal > 0) {
-          continue;
-        } else if (xLower == 'r18' && xRestrictVal == 0) {
-          continue;
+        if (xLower == 'all' && xRestrictVal > 0) {
+          continue; // 全年齢のみ
+        } else if (xLower == 'r18' && xRestrictVal != 1) {
+          continue; // R-18のみ
         }
       }
 

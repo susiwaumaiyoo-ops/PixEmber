@@ -1,16 +1,30 @@
 import 'home_screen_state.dart';
+import '../widgets/pixiv_image.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../novel_model.dart';
 import 'history_screen.dart';
 import 'bookmark_list_screen.dart';
 import 'folder_list_screen.dart';
 import 'mute_settings_screen.dart';
+import 'subscriptions_screen.dart';
+import 'backup_manager_screen.dart';
+import '../services/database_service.dart';
+import 'read_later_screen.dart';
+import 'offline_bookshelf_screen.dart';
+import 'download_queue_screen.dart';
+import 'ai_recommend_feed_screen.dart';
 import 'illust_detail_screen.dart';
 import 'novel_detail_screen.dart';
-import '../widgets/pixiv_image.dart';
+import '../widgets/novel_list_card.dart';
+
+/// 検索候補の1件（履歴 or 購読タグ）
+class _SearchSuggestion {
+  final String keyword;
+  final bool isTag;
+
+  const _SearchSuggestion({required this.keyword, required this.isTag});
+}
 
 /// UIコンポーネントを管理するクラス
 class HomeUIComponents {
@@ -68,7 +82,10 @@ class HomeUIComponents {
       ),
       drawer: _buildDrawer(context),
       body: Stack(
-        children: [buildMainContent(crossAxisCount), buildSyncProgressHUD()],
+        children: [
+          buildMainContent(context, crossAxisCount),
+          buildSyncProgressHUD(),
+        ],
       ),
     );
   }
@@ -128,6 +145,20 @@ class HomeUIComponents {
             },
           ),
           ListTile(
+            leading: const Icon(Icons.recommend, color: Colors.pinkAccent),
+            title: const Text('AIレコメンド'),
+            subtitle: const Text('あなたの好みに合わせた推薦'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AiRecommendFeedScreen(),
+                ),
+              );
+            },
+          ),
+          ListTile(
             leading: const Icon(Icons.bookmark, color: Colors.pinkAccent),
             title: const Text('しおり一覧'),
             onTap: () {
@@ -171,6 +202,128 @@ class HomeUIComponents {
               );
             },
           ),
+          FutureBuilder<int>(
+            // Drawer 表示時に未読新着合計を一度だけ取得する（ポーリングなし）
+            future: DatabaseService().getSubscriptionUnreadCount(),
+            initialData: 0,
+            builder: (context, snapshot) {
+              final unread = snapshot.data ?? 0;
+              return ListTile(
+                leading: const Icon(Icons.stars, color: Colors.pinkAccent),
+                title: const Text('購読タグ'),
+                // 0 件ならバッジ非表示、それ以外は未読数を表示
+                trailing: unread > 0
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.pinkAccent,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          unread > 999 ? '999+' : unread.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      )
+                    : null,
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => SubscriptionsScreen(
+                        onTagSelected: (tag, type) =>
+                            state.onSubscribedTagSelected(tag, type),
+                      ),
+                    ),
+                  ).then((_) {
+                    // 購読画面から戻った際に未読バッジを更新するため再描画
+                    state.applyState(() {});
+                  });
+                },
+              );
+            },
+          ),
+          FutureBuilder<int>(
+            // Drawer 表示時にあとで読む未読数を一度だけ取得する（ポーリングなし）
+            future: DatabaseService().getReadLaterUnreadCount(),
+            initialData: 0,
+            builder: (context, snapshot) {
+              final unread = snapshot.data ?? 0;
+              return ListTile(
+                leading: const Icon(
+                  Icons.bookmark_add_outlined,
+                  color: Colors.pinkAccent,
+                ),
+                title: const Text('あとで読む'),
+                trailing: unread > 0
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.pinkAccent,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          unread > 999 ? '999+' : unread.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      )
+                    : null,
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ReadLaterScreen()),
+                  ).then((_) {
+                    // 戻った際に未読バッジを更新するため再描画
+                    state.applyState(() {});
+                  });
+                },
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.cloud_download, color: Colors.pinkAccent),
+            title: const Text('オフライン本棚'),
+            subtitle: const Text('キャッシュした小説をオフラインで読む'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const OfflineBookshelfScreen(),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(
+              Icons.download_for_offline,
+              color: Colors.pinkAccent,
+            ),
+            title: const Text('ダウンロードキュー'),
+            subtitle: const Text('イラスト・うごイラ・小説のダウンロード状況'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const DownloadQueueScreen()),
+              );
+            },
+          ),
           ListTile(
             leading: Icon(
               state.isLoggedIn ? Icons.logout : Icons.login,
@@ -187,7 +340,7 @@ class HomeUIComponents {
             },
           ),
           const Divider(height: 1, color: Colors.grey),
-          ..._buildGoogleDriveSyncTiles(),
+          ..._buildGoogleDriveSyncTiles(context),
         ],
       ),
     );
@@ -196,7 +349,7 @@ class HomeUIComponents {
   // =========================================================================
   // メインコンテンツ
   // =========================================================================
-  Widget buildMainContent(int crossAxisCount) {
+  Widget buildMainContent(BuildContext context, int crossAxisCount) {
     return Column(
       children: [
         // 検索バー
@@ -251,6 +404,20 @@ class HomeUIComponents {
           ),
         ),
         const SizedBox(height: 8),
+        // 小説タブで検索結果がある時のみ表示：タグ別一括ベクトル化ボタン
+        if (state.currentIndex == PixivViewerHomeState.novelIndex &&
+            state.searchItem != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.auto_awesome, size: 16),
+                label: const Text('このタグの小説をAI学習する'),
+                onPressed: () => _showVectorizeConfirmDialog(context),
+              ),
+            ),
+          ),
         _buildTabBar(),
         buildSubModeSelector(),
         buildRankingFilterBar(),
@@ -482,17 +649,12 @@ class HomeUIComponents {
         }
         if (state.selectedWorkType == 'novel') return false;
       }
-      // 年齢制限フィルター
-      bool hasR18Tag = false;
-      try {
-        final tags = illust.tags;
-        hasR18Tag = tags.any((t) {
-          final name = t.toLowerCase();
-          return name.contains('r-18') || name.contains('r18');
-        });
-      } catch (_) {}
-      if (state.selectedAgeLimit == 'safe' && hasR18Tag) return false;
-      if (state.selectedAgeLimit == 'r18' && !hasR18Tag) return false;
+      // 年齢制限フィルター（x_restrict フィールドベース）
+      // all=全年齢のみ(0), include_r18=R-18含む(0,1,2), r18=R-18のみ(1), r18g=R-18G含む(0,1,2)
+      if (state.selectedAgeLimit == 'all' && illust.xRestrict > 0) return false;
+      if (state.selectedAgeLimit == 'r18' && illust.xRestrict != 1) {
+        return false;
+      }
       return true;
     }).toList();
 
@@ -510,6 +672,8 @@ class HomeUIComponents {
       child: GridView.builder(
         controller: state.scrollController,
         physics: const ClampingScrollPhysics(),
+        // ignore: deprecated_member_use
+        cacheExtent: 600.0,
         padding: const EdgeInsets.all(6.0),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: crossAxisCount,
@@ -535,102 +699,105 @@ class HomeUIComponents {
           illust.urls?.preview ?? illust.urls?.small ?? illust.urls?.medium;
     } catch (_) {}
 
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      elevation: 3,
-      child: InkWell(
-        onTap: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => IllustDetailScreen(
-                illust: illust,
-                onTagTap: state.onTagSelected,
-                onBookmarkChanged: (newVal) {
-                  state.applyState(() {
-                    illust.isBookmarked = newVal;
-                  });
-                },
-              ),
-            ),
-          );
-          if (state.isMounted != true) return;
-          state.applyState(() {});
-        },
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // プレビュー画像
-            if (previewUrl != null && previewUrl.isNotEmpty)
-              Image.network(
-                previewUrl,
-                fit: BoxFit.cover,
-                headers: const {'Referer': 'https://www.pixiv.net/'},
-                errorBuilder: (_, _, _) => Container(color: Colors.black26),
-              )
-            else
-              Container(color: Colors.black26),
-            // ブックマーク済みハート（左上）
-            if (illust.isBookmarked == true)
-              Positioned(
-                top: 8,
-                left: 8,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(
-                    color: Colors.pinkAccent,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.favorite,
-                    color: Colors.white,
-                    size: 16,
-                  ),
+    return RepaintBoundary(
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        elevation: 3,
+        child: InkWell(
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => IllustDetailScreen(
+                  illust: illust,
+                  onTagTap: state.onTagSelected,
+                  onBookmarkChanged: (newVal) {
+                    state.applyState(() {
+                      illust.isBookmarked = newVal;
+                    });
+                  },
                 ),
               ),
-            // ブックマーク数バッジ（右下）
-            if ((illust.totalBookmarks) > 0)
-              Positioned(
-                bottom: 8,
-                right: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 3,
+            );
+            if (state.isMounted != true) return;
+            state.applyState(() {});
+          },
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // プレビュー画像
+              if (previewUrl != null && previewUrl.isNotEmpty)
+                PixivImage(
+                  url: previewUrl,
+                  fit: BoxFit.cover,
+                  isThumbnail: true,
+                  cacheWidth: 300,
+                  errorWidget: Container(color: Colors.black26),
+                )
+              else
+                Container(color: Colors.black26),
+              // ブックマーク済みハート（左上）
+              if (illust.isBookmarked == true)
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.pinkAccent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.favorite,
+                      color: Colors.white,
+                      size: 16,
+                    ),
                   ),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.bookmark,
-                        size: 12,
-                        color: Colors.pinkAccent,
-                      ),
-                      const SizedBox(width: 2),
-                      Text(
-                        '${illust.totalBookmarks}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                ),
+              // ブックマーク数バッジ（右下）
+              if ((illust.totalBookmarks) > 0)
+                Positioned(
+                  bottom: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.bookmark,
+                          size: 12,
+                          color: Colors.pinkAccent,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 2),
+                        Text(
+                          '${illust.totalBookmarks}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
   // =========================================================================
-  // 小説リスト
+  // 小説リスト（NovelListCard に共通化済み）
   Widget buildNovelList() {
     if (state.isLoading && state.novels.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -651,11 +818,11 @@ class HomeUIComponents {
     double horiz, vert;
     if (isTablet) {
       crossAxisCount = 2;
-      horiz = 16.0;
+      horiz = 32.0;
       vert = 10.0;
     } else {
       crossAxisCount = 1;
-      horiz = 8.0;
+      horiz = 16.0;
       vert = 6.0;
     }
 
@@ -667,6 +834,8 @@ class HomeUIComponents {
       child: CustomScrollView(
         controller: state.scrollController,
         physics: const ClampingScrollPhysics(),
+        // ignore: deprecated_member_use
+        cacheExtent: 600.0,
         slivers: [
           SliverPadding(
             padding: EdgeInsets.symmetric(horizontal: horiz, vertical: vert),
@@ -676,24 +845,35 @@ class HomeUIComponents {
                       crossAxisCount: crossAxisCount,
                       crossAxisSpacing: 12.0,
                       mainAxisSpacing: 12.0,
-                      mainAxisExtent: 188.0,
+                      // カバー高さいっぱい + テキスト収まる余裕（Overflow防止）
+                      mainAxisExtent: 156.0,
                     ),
                     delegate: SliverChildBuilderDelegate((ctx, index) {
                       if (index >= itemCount) return const SizedBox.shrink();
-                      return FutureBuilder<Widget>(
-                        future: _buildNovelItemCard(ctx, state.novels[index]),
-                        builder: (ctx2, snap) =>
-                            snap.data ?? const SizedBox.shrink(),
+                      final novel = state.novels[index];
+                      return NovelListCard(
+                        novel: novel,
+                        onTap: () => Navigator.push(
+                          ctx,
+                          MaterialPageRoute(
+                            builder: (_) => NovelDetailScreen(novel: novel),
+                          ),
+                        ),
                       );
                     }, childCount: itemCount),
                   )
                 : SliverList(
                     delegate: SliverChildBuilderDelegate((ctx, index) {
                       if (index >= itemCount) return const SizedBox.shrink();
-                      return FutureBuilder<Widget>(
-                        future: _buildNovelItemCard(ctx, state.novels[index]),
-                        builder: (ctx2, snap) =>
-                            snap.data ?? const SizedBox.shrink(),
+                      final novel = state.novels[index];
+                      return NovelListCard(
+                        novel: novel,
+                        onTap: () => Navigator.push(
+                          ctx,
+                          MaterialPageRoute(
+                            builder: (_) => NovelDetailScreen(novel: novel),
+                          ),
+                        ),
                       );
                     }, childCount: itemCount),
                   ),
@@ -708,289 +888,6 @@ class HomeUIComponents {
         ],
       ),
     );
-  }
-
-  Future<Widget> _buildNovelItemCard(
-    BuildContext context,
-    dynamic rawNovel,
-  ) async {
-    final Novel novel = rawNovel as Novel;
-    final String coverUrl = novel.coverUrl.isNotEmpty
-        ? novel.coverUrl
-        : (novel.rawCoverUrl ?? '');
-
-    // バッジ行（優先度: AI > シリーズ、最大2個に制限してWrapの2行化防止）
-    final List<Widget> badges = <Widget>[];
-    if (novel.aiType == 2) {
-      badges.add(
-        _buildNovelBadge(Icons.auto_awesome, 'AI', Colors.purpleAccent),
-      );
-    }
-    if (novel.series != null) {
-      badges.add(
-        _buildNovelBadge(Icons.collections_bookmark, 'シリーズ', Colors.blueAccent),
-      );
-    }
-    // ローカルしおり（読書進捗）がある場合は「しおり」バッジを表示
-    // （Pixivサーバーのブックマークとは別管理のアプリ内状態）
-    final prefs = await SharedPreferences.getInstance();
-    final bookmarkIds = prefs.getStringList('novel_bookmark_ids') ?? [];
-    if (bookmarkIds.contains(novel.id.toString())) {
-      badges.add(_buildNovelBadge(Icons.bookmark, 'しおり', Colors.pinkAccent));
-    }
-    if (badges.length > 3) badges.length = 3;
-
-    // タグ：最大2〜3個を1行Textで表示（無制限Wrap禁止）
-    final bool hasTags = novel.tags.isNotEmpty;
-
-    // 説明文の正規化
-    final String caption = novel.caption.replaceAll(RegExp(r'\s+'), ' ').trim();
-    final bool hasCaption = caption.isNotEmpty;
-
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      elevation: 3,
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: novel)),
-          );
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(10.0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 表紙（固定サイズ・カード高さを超えない）
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  width: 96,
-                  height: 152,
-                  child: coverUrl.isNotEmpty
-                      ? PixivImage(
-                          url: coverUrl,
-                          fit: BoxFit.cover,
-                          isThumbnail: true,
-                          errorWidget: _buildNovelCoverPlaceholder(),
-                          placeholder: _buildNovelCoverPlaceholder(),
-                        )
-                      : _buildNovelCoverPlaceholder(),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    // 狭いカードでは説明文を省略し、優先情報を維持
-                    final bool isCompact = constraints.maxWidth < 420;
-                    // 説明文は常に最大1行（非compact時も2行にしない）
-                    final int captionLines = 1;
-                    final int tagLimit = isCompact ? 2 : 3;
-
-                    final List<Widget> infoChildren = <Widget>[];
-
-                    // バッジ（最大2個・1行のみ）
-                    if (badges.isNotEmpty) {
-                      infoChildren.add(
-                        Wrap(spacing: 6, runSpacing: 0, children: badges),
-                      );
-                      infoChildren.add(const SizedBox(height: 3));
-                    }
-
-                    // タイトル（最大2行）
-                    infoChildren.add(
-                      Text(
-                        novel.title,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    );
-                    infoChildren.add(const SizedBox(height: 2));
-
-                    // 作者名（最大1行）
-                    infoChildren.add(
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.person_outline,
-                            size: 13,
-                            color: Colors.white70,
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              novel.author.name,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.white70,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-
-                    // シリーズ名（最大1行・存在時）
-                    if (novel.series != null) {
-                      infoChildren.addAll([
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.collections_bookmark,
-                              size: 13,
-                              color: Colors.blueAccent,
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                novel.series!.title,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.blueAccent,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ]);
-                    }
-
-                    // 説明文（高さ不足時は非表示）
-                    if (hasCaption && !isCompact) {
-                      infoChildren.addAll([
-                        const SizedBox(height: 2),
-                        Text(
-                          caption,
-                          style: TextStyle(
-                            color: Colors.grey[400],
-                            fontSize: 12,
-                          ),
-                          maxLines: captionLines,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ]);
-                    }
-
-                    // タグ（1行Text・最大 tagLimit 個）
-                    if (hasTags) {
-                      final visibleTags = novel.tags.take(tagLimit).toList();
-                      infoChildren.addAll([
-                        const SizedBox(height: 3),
-                        Text(
-                          visibleTags.map((t) => '#$t').join('  '),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.pinkAccent,
-                          ),
-                        ),
-                      ]);
-                    }
-
-                    // メタ情報（必ず表示・下部配置）
-                    infoChildren.add(const Spacer());
-                    infoChildren.add(
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.notes,
-                              size: 12,
-                              color: Colors.white54,
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              _formatNumber(novel.textLength),
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                            const SizedBox(width: 10),
-                            const Icon(
-                              Icons.menu_book,
-                              size: 12,
-                              color: Colors.white54,
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              '${novel.pageCount}P',
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                            const SizedBox(width: 10),
-                            const Icon(
-                              Icons.bookmark,
-                              size: 12,
-                              color: Colors.pinkAccent,
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              _formatNumber(novel.totalBookmarks),
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.max,
-                      children: infoChildren,
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNovelCoverPlaceholder() {
-    return Container(
-      color: Colors.grey.shade900,
-      alignment: Alignment.center,
-      child: const Icon(Icons.menu_book, color: Colors.white38, size: 36),
-    );
-  }
-
-  Widget _buildNovelBadge(IconData icon, String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: color),
-          const SizedBox(width: 3),
-          Text(label, style: TextStyle(fontSize: 10, color: color)),
-        ],
-      ),
-    );
-  }
-
-  String _formatNumber(int number) {
-    if (number >= 10000) {
-      return '${(number / 10000).toStringAsFixed(1)}万';
-    }
-    return number.toString();
   }
 
   // =========================================================================
@@ -1143,13 +1040,14 @@ class HomeUIComponents {
                     height: 50,
                     color: Colors.black,
                     child: (iconUrl != null && iconUrl.isNotEmpty)
-                        ? Image.network(
-                            iconUrl,
+                        ? PixivImage(
+                            url: iconUrl,
                             fit: BoxFit.cover,
-                            headers: const {
-                              'Referer': 'https://www.pixiv.net/',
-                            },
-                            errorBuilder: (_, _, _) => const Icon(
+                            isThumbnail: true,
+                            cacheWidth: 150,
+                            width: 50,
+                            height: 50,
+                            errorWidget: const Icon(
                               Icons.bookmark_border,
                               color: Colors.pinkAccent,
                             ),
@@ -1258,6 +1156,7 @@ class HomeUIComponents {
   // 検索履歴オーバーレイ
   // =========================================================================
   Widget buildSearchHistoryOverlay() {
+    final query = state.searchController.text.trim();
     return Positioned(
       top: 110,
       left: 8,
@@ -1268,164 +1167,129 @@ class HomeUIComponents {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 300),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12.0,
-                  vertical: 8.0,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      '最近の検索履歴',
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+          child: FutureBuilder<List<_SearchSuggestion>>(
+            future: _buildSearchSuggestions(query),
+            builder: (ctx, snap) {
+              final suggestions = snap.data ?? <_SearchSuggestion>[];
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12.0,
+                      vertical: 8.0,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          query.isEmpty ? '最近の検索履歴' : '検索候補',
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (query.isEmpty)
+                          TextButton(
+                            onPressed: state.clearAllSearchHistory,
+                            child: const Text(
+                              'すべてクリア',
+                              style: TextStyle(
+                                color: Colors.pinkAccent,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: Colors.grey),
+                  if (suggestions.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Text(
+                        '候補がありません',
+                        style: TextStyle(color: Colors.grey, fontSize: 13),
+                      ),
+                    )
+                  else
+                    Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        padding: EdgeInsets.zero,
+                        itemCount: suggestions.length,
+                        itemBuilder: (ctx, idx) {
+                          final s = suggestions[idx];
+                          return ListTile(
+                            dense: true,
+                            leading: Icon(
+                              s.isTag ? Icons.tag : Icons.history,
+                              size: 16,
+                              color: s.isTag
+                                  ? Colors.orangeAccent
+                                  : Colors.grey,
+                            ),
+                            title: Text(
+                              s.keyword,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                              ),
+                            ),
+                            trailing: s.isTag
+                                ? null
+                                : IconButton(
+                                    icon: const Icon(
+                                      Icons.close,
+                                      size: 14,
+                                      color: Colors.grey,
+                                    ),
+                                    onPressed: () => state
+                                        .deleteSearchHistoryItem(s.keyword),
+                                  ),
+                            onTap: () => state.onHistoryItemTap(s.keyword),
+                          );
+                        },
                       ),
                     ),
-                    TextButton(
-                      onPressed: state.clearAllSearchHistory,
-                      child: const Text(
-                        'すべてクリア',
-                        style: TextStyle(
-                          color: Colors.pinkAccent,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1, color: Colors.grey),
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  padding: EdgeInsets.zero,
-                  itemCount: state.searchHistory.length,
-                  itemBuilder: (ctx, idx) {
-                    final word = state.searchHistory[idx];
-                    return ListTile(
-                      dense: true,
-                      leading: const Icon(
-                        Icons.history,
-                        size: 16,
-                        color: Colors.grey,
-                      ),
-                      title: Text(
-                        word,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                        ),
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(
-                          Icons.close,
-                          size: 14,
-                          color: Colors.grey,
-                        ),
-                        onPressed: () => state.deleteSearchHistoryItem(word),
-                      ),
-                      onTap: () => state.onHistoryItemTap(word),
-                    );
-                  },
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
         ),
       ),
     );
   }
 
-  // =========================================================================
-  // 最近のブックマーク
-  // =========================================================================
-  Widget buildRecentBookmarksSection() {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: state.getRecentBookmarks(),
-      builder: (ctx, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const SizedBox.shrink();
+  /// 検索候補を組み立てる（DB検索履歴の部分一致 + 購読タグの部分一致）。
+  /// 重複はキーワード単位で排除し、履歴優先で表示する。
+  Future<List<_SearchSuggestion>> _buildSearchSuggestions(String query) async {
+    final db = DatabaseService();
+    try {
+      final histRows = await db.searchSearchHistory(query: query);
+      final tags = await db.getSubscribedTags();
+      final seen = <String>{};
+      final result = <_SearchSuggestion>[];
+      for (final r in histRows) {
+        final kw = (r['keyword'] as String?) ?? '';
+        if (kw.isNotEmpty && seen.add(kw)) {
+          result.add(_SearchSuggestion(keyword: kw, isTag: false));
         }
-        final recentBookmarks = snapshot.data!;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
-              child: Text(
-                '最近のブックマーク',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-            ),
-            Container(
-              height: 120,
-              margin: const EdgeInsets.symmetric(horizontal: 8.0),
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: recentBookmarks.length,
-                itemBuilder: (ctx, index) {
-                  final bookmark = recentBookmarks[index];
-                  return Container(
-                    width: 100,
-                    margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            height: 80,
-                            color: Colors.black,
-                            child:
-                                (bookmark['imageUrl'] != null &&
-                                    bookmark['imageUrl']!.isNotEmpty)
-                                ? Image.network(
-                                    bookmark['imageUrl']!,
-                                    fit: BoxFit.cover,
-                                    headers: const {
-                                      'Referer': 'https://www.pixiv.net/',
-                                    },
-                                    errorBuilder: (_, _, _) => const Icon(
-                                      Icons.bookmark_border,
-                                      color: Colors.pinkAccent,
-                                    ),
-                                  )
-                                : const Icon(
-                                    Icons.bookmark_border,
-                                    color: Colors.pinkAccent,
-                                  ),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          bookmark['title'] ?? 'Unknown',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        );
-      },
-    );
+      }
+      final q = query.toLowerCase();
+      for (final t in tags) {
+        final tag = (t['tag'] as String?) ?? '';
+        if (tag.isEmpty || !seen.add(tag)) continue;
+        if (query.isEmpty || tag.toLowerCase().contains(q)) {
+          result.add(_SearchSuggestion(keyword: tag, isTag: true));
+        }
+      }
+      return result;
+    } catch (e) {
+      debugPrint('検索候補の構築に失敗（無視）: $e');
+      return <_SearchSuggestion>[];
+    }
   }
 
   // =========================================================================
@@ -1468,7 +1332,7 @@ class HomeUIComponents {
   // =========================================================================
   // Google Drive 同期メニュー（Drawer用）
   // =========================================================================
-  List<Widget> _buildGoogleDriveSyncTiles() {
+  List<Widget> _buildGoogleDriveSyncTiles(BuildContext context) {
     return [
       ListTile(
         leading: const Icon(Icons.cloud_sync, color: Colors.pinkAccent),
@@ -1502,6 +1366,16 @@ class HomeUIComponents {
         onTap: () {
           if (state.isSyncing == true) return;
           state.handleGoogleRestore();
+        },
+      ),
+      ListTile(
+        leading: const Icon(Icons.manage_accounts, color: Colors.pinkAccent),
+        title: const Text('バックアップ管理'),
+        subtitle: const Text('複数のバックアップの一覧・復元・削除'),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const BackupManagerScreen()),
+          );
         },
       ),
       ListTile(
@@ -1567,5 +1441,33 @@ class HomeUIComponents {
         ),
       ),
     );
+  }
+
+  // タグ別一括ベクトル化の確認ダイアログ
+  Future<void> _showVectorizeConfirmDialog(BuildContext context) async {
+    final count = state.novels.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('フィーリング検索の対象に追加'),
+        content: Text(
+          '表示中の小説$count件をフィーリング検索の対象に追加します。'
+          '処理中はアプリを使い続けられます。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('追加する'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await state.vectorizeTagNovels();
+    }
   }
 }

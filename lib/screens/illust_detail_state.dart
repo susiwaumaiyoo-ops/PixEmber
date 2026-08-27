@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'package:flutter/material.dart';
 import 'package:palette_generator/palette_generator.dart' as palette_generator;
 import '../illust_model.dart';
@@ -183,6 +184,8 @@ class _IllustDetailScreenState extends State<IllustDetailScreen> {
     state.handler.fetchRelatedIllusts(state);
     state.handler.recordHistory(state);
     state.handler.generatePalette(state);
+    // バックグラウンドでイラスト意味検索用ベクトルを生成・保存（UIブロックなし）
+    unawaited(state.handler.ensureIllustEmbedding());
   }
 
   @override

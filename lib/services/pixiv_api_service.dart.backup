@@ -872,7 +872,7 @@ if (response.statusCode == 200) {
   /// 小説単体取得（ディープリンク用）
   Future<Novel> getNovelById(int id) async {
     final body = await _get(
-      '/v1/novel/detail',
+      '/v2/novel/detail',
       params: {'novel_id': id.toString()},
     );
     final data = jsonDecode(body) as Map<String, dynamic>;

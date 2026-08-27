@@ -17,10 +17,11 @@ class EmbeddingService {
   EmbeddingService._internal();
 
   // ---- 固定仕様（推定ロジック禁止） ----
-  static const String modelId = RuriModelManager.embeddingModelId;
-  static const int modelVersion = RuriModelManager.embeddingModelVersion;
-  static const int embeddingDimension = RuriModelManager.embeddingDimension;
-  static const int prefixSchemeVersion = RuriModelManager.prefixSchemeVersion;
+  // アクティブモデルの仕様を動的に反映（切り替え時に書き換わる）。
+  static String get modelId => RuriModelManager.embeddingModelId;
+  static int get modelVersion => RuriModelManager.embeddingModelVersion;
+  static int get embeddingDimension => RuriModelManager.embeddingDimension;
+  static int get prefixSchemeVersion => RuriModelManager.prefixSchemeVersion;
   static const int paddedLength = 128;
 
   static const int bosTokenId = 1;
@@ -61,6 +62,10 @@ class EmbeddingService {
     } catch (e, st) {
       _initError = e.toString();
       _isInitialized = false;
+      // 失敗した completer をクリアして、後続の再初期化を許可する。
+      // クリアしないと以降の initialize() が「既存の未完了 completer」を
+      // 共有して即座に失敗し、embedding 生成が永久に止まる。
+      _initCompleter = null;
       debugPrint('[EmbeddingService] 初期化失敗: $e');
       debugPrint(st.toString());
       if (!completer.isCompleted) completer.completeError(e, st);
@@ -69,6 +74,9 @@ class EmbeddingService {
   }
 
   Future<void> _doInitialize() async {
+    // アクティブモデルを先に確定（SharedPreferences から読み込む）。
+    await RuriModelManager().getActiveModelId();
+
     final manager = RuriModelManager();
 
     // 1) モデルが SHA-256 検証済みで存在するか確認
@@ -111,12 +119,20 @@ class EmbeddingService {
 
   /// 検索クエリ用の埋め込みを生成する。
   Future<Float32List> encodeQuery(String text) async {
+    // 初期化が未完了でもモデルがあれば待機してから実行（詳細画面等いつ呼ばれても安全）
+    if (!_isInitialized) {
+      await initialize();
+    }
     _ensureReady();
     return _encodeInternal('$_queryPrefix$text');
   }
 
   /// 検索文書用の埋め込みを生成する。
   Future<Float32List> encodeDocument(String text) async {
+    // 初期化が未完了でもモデルがあれば待機してから実行（詳細画面等いつ呼ばれても安全）
+    if (!_isInitialized) {
+      await initialize();
+    }
     _ensureReady();
     return _encodeInternal('$_documentPrefix$text');
   }
