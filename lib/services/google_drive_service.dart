@@ -1,10 +1,87 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:http/http.dart' as http;
 import 'database_service.dart';
+
+// ============================================================================
+// サインイン失敗の診断（純粋関数・単体テスト可能）
+// ============================================================================
+
+/// GMS の `ApiException: N` から数字コードを抽出する。
+int? _parseGmsCode(String text) {
+  final m = RegExp(r'ApiException:\s*(\d+)').firstMatch(text);
+  if (m != null) return int.tryParse(m.group(1)!);
+  return null;
+}
+
+/// サインイン失敗の cause からユーザーに表示する短い診断メッセージを生成する。
+///
+/// 純粋関数（Flutter/DB 依存なし）で単体テスト可能。
+/// - [error] が null: 対話式 signIn() でプラグインが null を返すのは
+///   ユーザーによるキャンセルの場合（プラグイン仕様の挙動）。
+/// - 認証トークン・メール等の個人情報は含まれない（code/message 中心）。
+String describeSignInError(Object? error) {
+  if (error == null) {
+    return 'ログインがキャンセルされました。';
+  }
+
+  final code = error is PlatformException ? error.code : null;
+  final message = error is PlatformException
+      ? (error.message ?? '')
+      : error.toString();
+  final details = error is PlatformException ? (error.details ?? '') : '';
+  final text = '$message $details';
+
+  switch (code) {
+    case 'sign_in_canceled':
+      return 'ログインがキャンセルされました。';
+    case 'network_error':
+      return 'ネットワークエラーです。接続を確認して再試行してください。';
+    case 'auth_recoverable':
+    case 'failed_to_recover_auth':
+      return 'Google アプリでのアクセス許可のうえ、再試行してください。';
+  }
+
+  // GMS 側の数値エラーコード（ApiException: N）でさらに分類。
+  // 10=SIGN_IN_REQUIRED, 12=DEVELOPER_ERROR, 6=NETWORK_ERROR,
+  // 7/10009=RESOLUTION_REQUIRED, 8=SIGN_IN_FAILED
+  final gmsCode = _parseGmsCode(text);
+  if (gmsCode == 12 || text.contains('DEVELOPER_ERROR')) {
+    return 'OAuth 設定（パッケージ名・署名鍵 SHA-1）に不整合がある可能性が '
+        'あります。Google Cloud Console の Android クライアント設定を確認してください。';
+  }
+  if (gmsCode == 6 || text.contains('NETWORK_ERROR')) {
+    return 'ネットワークエラーです。接続を確認して再試行してください。';
+  }
+  if (gmsCode == 7 ||
+      gmsCode == 10009 ||
+      text.contains('RESOLUTION_REQUIRED')) {
+    return 'Google Play services の更新が必要です。更新のうえ再試行してください。';
+  }
+  if (gmsCode == 10 || text.contains('SIGN_IN_REQUIRED')) {
+    return '端末にGoogleアカウントがサインインされていないようです。再試行してください。';
+  }
+  if (code == 'sign_in_failed' || gmsCode == 8) {
+    return 'Google Play services の内部エラー（コード8）の可能性が '
+        'あります。時間を置いて再試行してください。';
+  }
+
+  final detail = message.length > 80 ? '${message.substring(0, 80)}…' : message;
+  return 'サインインに失敗しました（${code ?? 'unknown'}）: $detail';
+}
+
+/// ログ出力用の例外サマリ（長いメッセージは切り詰める）。
+///
+/// [PlatformException].toString() は code/message/details のみであり、
+/// 認証トークン・個人情報は含まれない。
+String summarizeSignInErrorForLog(Object e) {
+  final s = e.toString();
+  return s.length > 400 ? '${s.substring(0, 400)} …(切り詰め)' : s;
+}
 
 /// GoogleSignIn認証ヘッダー付きのHTTPクライアント
 class _GoogleAuthClient extends http.BaseClient {
@@ -36,22 +113,38 @@ class GoogleDriveService {
   GoogleSignInAccount? _currentUser;
   drive.DriveApi? _driveApi;
 
+  /// 直前のサインイン失敗の cause（PlatformException 等）。
+  /// 成功時・新しい試行の開始時に null 化する。
+  ///
+  /// プラグインの signIn() はキャンセルのみ null 返却し、その他の失敗は
+  /// 例外として伝播するため、ここで捕まえて UI が [describeSignInError] で
+  /// 診断メッセージを生成できるようにする。
+  Object? lastSignInError;
+
   bool get isLoggedIn => _currentUser != null;
   String? get userEmail => _currentUser?.email;
   String? get signedInEmail => _currentUser?.email;
 
   /// Googleサインイン
   Future<bool> signIn() async {
+    lastSignInError = null;
     try {
       _currentUser = await _googleSignIn.signIn();
-      if (_currentUser == null) return false;
+      if (_currentUser == null) {
+        // プラグイン仕様: null はユーザーによるキャンセル。
+        return false;
+      }
 
       final authHeaders = await _currentUser!.authHeaders;
       final client = _GoogleAuthClient(authHeaders);
       _driveApi = drive.DriveApi(client);
       return true;
-    } catch (e) {
-      debugPrint('Googleサインインエラー: $e');
+    } catch (e, st) {
+      lastSignInError = e;
+      // 実エラー（code/message/details）とスタックトレースをログに出す。
+      // 認証トークン・個人情報は含まれない（summarizeSignInErrorForLog 参照）。
+      debugPrint('Googleサインインエラー: ${summarizeSignInErrorForLog(e)}');
+      debugPrint('Googleサインインエラー スタックトレース: $st');
       return false;
     }
   }
@@ -66,6 +159,7 @@ class GoogleDriveService {
   /// サイレントログイン（前回の認証情報を復元）
   Future<bool> signInSilently() async {
     try {
+      // suppressErrors デフォルト(true): 失敗は null 返却で例外を投げない。
       _currentUser = await _googleSignIn.signInSilently();
       if (_currentUser == null) return false;
 
@@ -73,8 +167,11 @@ class GoogleDriveService {
       final client = _GoogleAuthClient(authHeaders);
       _driveApi = drive.DriveApi(client);
       return true;
-    } catch (e) {
-      debugPrint('Googleサイレントログインエラー: $e');
+    } catch (e, st) {
+      // authHeaders 取得失敗などの非プラグイン由来の例外のみここに来る。
+      lastSignInError = e;
+      debugPrint('Googleサイレントログインエラー: ${summarizeSignInErrorForLog(e)}');
+      debugPrint('Googleサイレントログインエラー スタックトレース: $st');
       return false;
     }
   }
@@ -150,7 +247,7 @@ class GoogleDriveService {
       if (existingFile == null || existingFile.id == null) {
         throw Exception('バックアップファイルが見つかりません');
       }
-      return _restoreFromId(existingFile.id!);
+      return await _restoreFromId(existingFile.id!);
     } catch (e) {
       debugPrint('復元エラー: $e');
       rethrow;

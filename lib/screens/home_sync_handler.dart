@@ -2,6 +2,7 @@ import 'home_screen_state.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/google_drive_service.dart';
 
 /// Googleドライブ同期関連メソッドを管理するクラス
 class HomeSyncHandler {
@@ -90,21 +91,22 @@ class HomeSyncHandler {
           const SnackBar(content: Text('Google ドライブにログインしました')),
         );
       } else {
-        // signIn() が null/false を返した場合（OAuth クライアント未設定など）は
-        // 例外ではなく黙って失敗するため、原因を明示する
+        // null 返却（キャンセル）/ 例外による失敗のいずれでも、
+        // 実エラー（code/message/details）から短い診断を生成して表示する。
+        final msg =
+            'Googleドライブログイン失敗：'
+            '${describeSignInError(state.driveService.lastSignInError)}';
         messenger.showSnackBar(
-          const SnackBar(
-            content: Text(
-              'ログインできませんでした。Google Cloud Console で '
-              'OAuth クライアント（パッケージ名 com.example.pixiv_viewer ＋ '
-              '署名鍵の SHA-1）の登録と Drive API の有効化が必要です。',
-            ),
-            duration: Duration(seconds: 6),
-          ),
+          SnackBar(content: Text(msg), duration: const Duration(seconds: 8)),
         );
       }
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('ログイン失敗：$e')));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('ログイン失敗：${describeSignInError(e)}'),
+          duration: const Duration(seconds: 8),
+        ),
+      );
     }
   }
 

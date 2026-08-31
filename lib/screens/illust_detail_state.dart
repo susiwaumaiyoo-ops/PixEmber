@@ -4,6 +4,7 @@ import 'package:palette_generator/palette_generator.dart' as palette_generator;
 import '../illust_model.dart';
 import 'illust_detail_handler.dart';
 import 'illust_detail_ui_components.dart';
+import '../services/usage_tracking_service.dart';
 
 /// イラスト詳細画面のステートクラス（public）
 class IllustDetailState extends ChangeNotifier {
@@ -166,6 +167,9 @@ class IllustDetailScreen extends StatefulWidget {
 class _IllustDetailScreenState extends State<IllustDetailScreen> {
   late IllustDetailState state;
 
+  // 閲覧時間トラッキング（Phase 4）。この画面を開いている間＝閲覧時間。
+  UsageSessionHandle? _usageSession;
+
   @override
   void initState() {
     super.initState();
@@ -186,6 +190,20 @@ class _IllustDetailScreenState extends State<IllustDetailScreen> {
     state.handler.generatePalette(state);
     // バックグラウンドでイラスト意味検索用ベクトルを生成・保存（UIブロックなし）
     unawaited(state.handler.ensureIllustEmbedding());
+    // 閲覧時間トラッキング開始（Phase 4）
+    _usageSession = UsageTrackingService().startSession(
+      workId: widget.illust.id,
+      workType: 'illust',
+    );
+  }
+
+  @override
+  void dispose() {
+    final usage = _usageSession;
+    if (usage != null) {
+      unawaited(UsageTrackingService().endSession(usage));
+    }
+    super.dispose();
   }
 
   @override

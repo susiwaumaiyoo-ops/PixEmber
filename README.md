@@ -36,6 +36,22 @@ fullscreen image viewer.
   - History, mutes (tags / users / AI-detection), and favorite folders stored in a local SQLite database.
   - 履歴、ミュート（タグ・ユーザー・AI判定）、お気に入りフォルダをローカルSQLite DBで安全に管理。
 
+- **Novel Text-to-Speech (小説読み上げ)**
+  - OS-standard TTS via `flutter_tts`, with ruby/furigana normalization, sentence chunking, and a resumable reading position saved per novel.
+  - OS標準のTTSエンジンによる小説読み上げ。ルビ正規化・文チャンク分割・読了位置の保存と再開に対応。
+
+- **Reading Time Dashboard (読書・閲覧時間ダッシュボード)**
+  - On-device only tracking of how long you read novels / browse illustrations, with daily charts, per-type totals, and a one-tap privacy delete. Never leaves your device and is excluded from Google Drive backups.
+  - 小説の読書時間とイラストの閲覧時間を端末内のみで記録し、日別グラフ・種別集計を表示。プライバシー削除ボタン付きで、データは端末外へ送信されず Drive バックアップ対象外です。
+
+- **Visual Similar Search (視覚類似検索)**
+  - Find visually similar works among your downloaded images using on-device feature vectors (pluggable encoder design — a classical color-grid encoder is used until a real model is integrated).
+  - ダウンロード済み画像から視覚的に似た作品を探すオンデバイス検索。エンコーダは差し替え可能設計（実モデル導入までは古典的色グリッド特徴量）。
+
+- **Duplicate Detection (重複画像の検出)**
+  - SHA-256 exact-duplicate and dHash near-duplicate detection with interruptible scanning. Deletion always requires per-image confirmation — nothing is ever removed automatically.
+  - SHA-256 による完全一致と dHash による近似重複の検出。スキャンは中断可能で、削除は画像ごとの確認必須（自動削除は一切行いません）。
+
 - **Cloud Sync (クラウド同期)**
   - Automatic backup of your data to Google Drive.
   - データをGoogle Driveへ自動バックアップ。

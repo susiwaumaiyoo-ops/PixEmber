@@ -43,6 +43,8 @@ extension _ReaderData on _NovelReaderScreenState {
         _themeMode = prefs.getInt('novel_pref_theme_mode') ?? 1;
         _fontFamily = prefs.getString('novel_pref_font_family') ?? 'serif';
         _scrollSpeed = prefs.getDouble('novel_pref_scroll_speed') ?? 3.0;
+        _ttsRate = prefs.getDouble('novel_pref_tts_rate') ?? 1.0;
+        _ttsReadRuby = prefs.getBool('novel_pref_tts_read_ruby') ?? false;
       });
     } catch (e) {
       debugPrint('環境設定の読み込みに失敗しました: $e');
@@ -61,6 +63,8 @@ extension _ReaderData on _NovelReaderScreenState {
       await prefs.setInt('novel_pref_theme_mode', _themeMode);
       await prefs.setString('novel_pref_font_family', _fontFamily);
       await prefs.setDouble('novel_pref_scroll_speed', _scrollSpeed);
+      await prefs.setDouble('novel_pref_tts_rate', _ttsRate);
+      await prefs.setBool('novel_pref_tts_read_ruby', _ttsReadRuby);
     } catch (e) {
       debugPrint('環境設定の保存に失敗しました: $e');
     }
@@ -91,6 +95,8 @@ extension _ReaderData on _NovelReaderScreenState {
   // 別エピソードへのシームレス遷移
   void _jumpToNovel(Novel targetNovel) {
     _stopAutoScroll();
+    _stopTtsSync(); // 別エピソード遷移時はTTS読み上げも停止
+    _ttsResumeIndex = null;
     _pageController?.dispose();
     for (var controller in _scrollControllers) {
       controller.dispose();
@@ -374,6 +380,8 @@ extension _ReaderData on _NovelReaderScreenState {
         }
       }
       _updateProgress(_savedPageIndex, _savedScrollOffset);
+      // TTS再開位置（DB v18）を非同期でロード（結果は _ttsResumeIndex に保持）
+      _loadTtsResumeIndex();
     });
   }
 

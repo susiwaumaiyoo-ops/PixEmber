@@ -159,8 +159,9 @@ extension _ReaderUiHandler on _NovelReaderScreenState {
         timer.cancel();
         _sleepTimer = null;
         _safeSetState(() => _sleepMinutes = null);
-        // 時間になったら自動スクロールを停止して通知
+        // 時間になったら自動スクロールとTTS読み上げを停止して通知
         if (_isAutoScrolling) _stopAutoScroll();
+        if (_isTtsPlaying) unawaited(_stopTts());
         _showSleepTimerExpiredSnack();
       } else {
         _safeSetState(() {});

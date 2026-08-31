@@ -190,6 +190,87 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
               ),
             ],
           ),
+
+          // TTS読み上げコントロール（Phase 3: 再生中のみ表示）
+          if (_isTtsPlaying) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                // 一時停止 / 再開
+                IconButton(
+                  icon: Icon(
+                    _isTtsPaused ? Icons.play_arrow : Icons.pause,
+                    color: Colors.pinkAccent,
+                  ),
+                  iconSize: 20,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: _toggleTts,
+                  tooltip: _isTtsPaused ? '読み上げを再開' : '読み上げを一時停止',
+                ),
+                // 停止
+                IconButton(
+                  icon: const Icon(Icons.stop, color: Colors.pinkAccent),
+                  iconSize: 20,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: _stopTts,
+                  tooltip: '読み上げを停止',
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _isTtsPaused
+                            ? '一時停止中（チャンプ ${_ttsCurrentIndex + 1}/$_ttsChunkTotal）'
+                            : '読み上げ中（チャンプ ${_ttsCurrentIndex + 1}/$_ttsChunkTotal）',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? Colors.white60 : Colors.black54,
+                        ),
+                      ),
+                      // 読み上げ速度調整（0.5x - 2.0x）
+                      SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          trackHeight: 2,
+                          thumbShape: const RoundSliderThumbShape(
+                            enabledThumbRadius: 6,
+                          ),
+                          overlayShape: const RoundSliderOverlayShape(
+                            overlayRadius: 10,
+                          ),
+                        ),
+                        child: Slider(
+                          value: _ttsRate.clamp(0.5, 2.0),
+                          min: 0.5,
+                          max: 2.0,
+                          divisions: 6,
+                          label: 'x${_ttsRate.toStringAsFixed(1)}',
+                          activeColor: Colors.pinkAccent,
+                          inactiveColor: Colors.grey.withValues(alpha: 0.3),
+                          onChanged: _onTtsRateChanged,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // 読み上げ設定（速度・ルビ読み方）
+                IconButton(
+                  icon: Icon(
+                    Icons.settings,
+                    size: 20,
+                    color: isDark ? Colors.white70 : Colors.black54,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: _showTtsSettingsDialog,
+                  tooltip: '読み上げ設定',
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

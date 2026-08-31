@@ -32,7 +32,7 @@ class DatabaseService {
     final path = join(dbPath, 'pixiv_viewer.db');
     return await openDatabase(
       path,
-      version: 17,
+      version: 21,
       onConfigure: (db) async {
         // 外部キー制約（ON DELETE CASCADE 等）を有効化。
         // SQLite はデフォルトで無効のため接続毎に設定が必要。
@@ -72,6 +72,14 @@ class DatabaseService {
     // ダウンロードキュー（v17 追加）
     await _createDownloadQueueGroups(db);
     await _createDownloadQueues(db);
+    // TTS読み上げ位置（v18 追加）
+    await _createTtsReadingPositions(db);
+    // 利用時間トラッキング（v19 追加）
+    await _createUsageSessions(db);
+    // 視覚類似検索エンベディング（v20 追加）
+    await _createImageEmbeddings(db);
+    // 画像指紋（重複検出・v21 追加）
+    await _createImageFingerprints(db);
   }
 
   /// ダウンロードキューグループテーブルを作成する（_onCreate / v17 migration / onOpen 共用）。
@@ -139,6 +147,68 @@ class DatabaseService {
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_dq_work ON download_queues(work_id, work_type)',
+    );
+  }
+
+  /// TTS読み上げ再開位置テーブルを作成する（_onCreate / v18 migration / onOpen 共用）。
+  /// 端末ローカルの位置情報（再生成可能）のため Google Drive バックアップ対象外。
+  Future<void> _createTtsReadingPositions(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS tts_reading_positions (
+        work_id INTEGER PRIMARY KEY,
+        chunk_index INTEGER NOT NULL DEFAULT 0,
+        page_index INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  /// 利用時間トラッキングテーブルを作成する（_onCreate / v19 migration / onOpen 共用）。
+  /// 端末ローカルのプライバシーデータのため Google Drive バックアップ対象外。
+  Future<void> _createUsageSessions(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS usage_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_type TEXT NOT NULL,
+        work_id INTEGER NOT NULL,
+        started_at TEXT NOT NULL,
+        ended_at TEXT NOT NULL,
+        duration_seconds INTEGER NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_usage_sessions_started_at '
+      'ON usage_sessions(started_at)',
+    );
+  }
+
+  /// 視覚類似検索用エンベディングテーブルを作成する（_onCreate / v20 migration / onOpen 共用）。
+  /// 元画像から再生成可能なため Google Drive バックアップ対象外。
+  Future<void> _createImageEmbeddings(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS image_embeddings (
+        illust_id INTEGER PRIMARY KEY,
+        embedding BLOB NOT NULL,
+        dim INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  /// 画像指紋テーブルを作成する（_onCreate / v21 migration / onOpen 共用）。
+  /// 元画像から再生成可能なため Google Drive バックアップ対象外。
+  Future<void> _createImageFingerprints(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS image_fingerprints (
+        illust_id INTEGER PRIMARY KEY,
+        sha256 TEXT NOT NULL,
+        dhash INTEGER NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_image_fingerprints_sha256 '
+      'ON image_fingerprints(sha256)',
     );
   }
 
@@ -589,6 +659,18 @@ class DatabaseService {
     // ダウンロードキュー（v17 追加）
     await _createDownloadQueueGroups(db);
     await _createDownloadQueues(db);
+
+    // TTS読み上げ位置（v18 追加）
+    await _createTtsReadingPositions(db);
+
+    // 利用時間トラッキング（v19 追加）
+    await _createUsageSessions(db);
+
+    // 視覚類似検索エンベディング（v20 追加）
+    await _createImageEmbeddings(db);
+
+    // 画像指紋（重複検出・v21 追加）
+    await _createImageFingerprints(db);
 
     await db.execute('CREATE INDEX idx_history_workid ON history(work_id)');
     await db.execute(
@@ -1068,6 +1150,30 @@ class DatabaseService {
         '[Migration v16->v17] download_queue_groups / download_queues を追加',
       );
     }
+    if (oldVersion < 18) {
+      // TTS読み上げ再開位置テーブルを追加（既存データ非破壊）。
+      // 端末ローカル設定のため Google Drive バックアップ対象外。
+      await _createTtsReadingPositions(db);
+      debugPrint('[Migration v17->v18] tts_reading_positions を追加');
+    }
+    if (oldVersion < 19) {
+      // 利用時間トラッキングテーブルを追加（既存データ非破壊）。
+      // 端末ローカルのプライバシーデータのため Google Drive バックアップ対象外。
+      await _createUsageSessions(db);
+      debugPrint('[Migration v18->v19] usage_sessions を追加');
+    }
+    if (oldVersion < 20) {
+      // 視覚類似検索用エンベディングテーブルを追加（既存データ非破壊）。
+      // 元画像から再生成可能なため Google Drive バックアップ対象外。
+      await _createImageEmbeddings(db);
+      debugPrint('[Migration v19->v20] image_embeddings を追加');
+    }
+    if (oldVersion < 21) {
+      // 画像指紋テーブルを追加（既存データ非破壊）。
+      // 元画像から再生成可能なため Google Drive バックアップ対象外。
+      await _createImageFingerprints(db);
+      debugPrint('[Migration v20->v21] image_fingerprints を追加');
+    }
   }
 
   // ==========================================================================
@@ -1297,6 +1403,10 @@ class DatabaseService {
     await db.delete('mutes');
     await db.delete('folder_items');
     await db.delete('folders');
+    await db.delete('tts_reading_positions');
+    await db.delete('usage_sessions');
+    await db.delete('image_embeddings');
+    await db.delete('image_fingerprints');
   }
 
   /// DBインスタンスを再起動（復元後のリフレッシュ用）
@@ -1813,6 +1923,152 @@ class DatabaseService {
     );
     if (result.isEmpty) return null;
     return result.first;
+  }
+
+  // ==========================================================================
+  // TTS読み上げ位置（tts_reading_positions）CRUD - Phase 3 (v18)
+  // ==========================================================================
+
+  /// TTS読み上げの再開位置を保存（UPSERT）。
+  Future<int> saveTtsPosition({
+    required int workId,
+    required int chunkIndex,
+    required int pageIndex,
+  }) async {
+    final db = await database;
+    return await db.insert('tts_reading_positions', {
+      'work_id': workId,
+      'chunk_index': chunkIndex,
+      'page_index': pageIndex,
+      'updated_at': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// TTS読み上げの再開位置を取得（なければ null）。
+  Future<Map<String, dynamic>?> getTtsPosition(int workId) async {
+    final db = await database;
+    final result = await db.query(
+      'tts_reading_positions',
+      where: 'work_id = ?',
+      whereArgs: [workId],
+      limit: 1,
+    );
+    if (result.isEmpty) return null;
+    return result.first;
+  }
+
+  /// TTS読み上げ位置を削除（読了時等）。
+  Future<int> deleteTtsPosition(int workId) async {
+    final db = await database;
+    return await db.delete(
+      'tts_reading_positions',
+      where: 'work_id = ?',
+      whereArgs: [workId],
+    );
+  }
+
+  // ==========================================================================
+  // 利用時間トラッキング（usage_sessions）CRUD
+  // ==========================================================================
+
+  /// 利用セッション断片を1行保存する（Phase 4: UsageTrackingService から使用）。
+  Future<int> insertUsageSession({
+    required String workType,
+    required int workId,
+    required DateTime startedAt,
+    required DateTime endedAt,
+    required int durationSeconds,
+  }) async {
+    final db = await database;
+    return await db.insert('usage_sessions', {
+      'work_type': workType,
+      'work_id': workId,
+      'started_at': startedAt.toIso8601String(),
+      'ended_at': endedAt.toIso8601String(),
+      'duration_seconds': durationSeconds,
+    });
+  }
+
+  /// 利用セッションを全件取得（新しい順）。集計は computeUsageStatsMap で行う。
+  Future<List<Map<String, dynamic>>> getUsageSessions() async {
+    final db = await database;
+    return await db.query('usage_sessions', orderBy: 'started_at DESC');
+  }
+
+  /// 利用セッションを全削除（プライバシー用の完全削除から使用）。
+  Future<int> deleteAllUsageSessions() async {
+    final db = await database;
+    return await db.delete('usage_sessions');
+  }
+
+  // ==========================================================================
+  // 視覚類似検索（image_embeddings）CRUD — Phase 5
+  // ==========================================================================
+
+  /// 視覚エンベディングを保存（UPSERT）。embedding は Float32List の BLOB。
+  Future<int> saveImageEmbedding({
+    required int illustId,
+    required Uint8List embedding,
+    required int dim,
+  }) async {
+    final db = await database;
+    return await db.insert('image_embeddings', {
+      'illust_id': illustId,
+      'embedding': embedding,
+      'dim': dim,
+      'updated_at': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// 全視覚エンベディングを取得（類似検索のスキャン用）。
+  Future<List<Map<String, dynamic>>> getAllImageEmbeddings() async {
+    final db = await database;
+    return await db.query('image_embeddings');
+  }
+
+  /// 指定イラストの視覚エンベディングを削除（画像削除時の整合性維持）。
+  Future<int> deleteImageEmbedding(int illustId) async {
+    final db = await database;
+    return await db.delete(
+      'image_embeddings',
+      where: 'illust_id = ?',
+      whereArgs: [illustId],
+    );
+  }
+
+  // ==========================================================================
+  // 画像指納（image_fingerprints）CRUD — Phase 6
+  // ==========================================================================
+
+  /// 画像指納を保存（UPSERT）。
+  Future<int> saveImageFingerprint({
+    required int illustId,
+    required String sha256,
+    required int dhash,
+  }) async {
+    final db = await database;
+    return await db.insert('image_fingerprints', {
+      'illust_id': illustId,
+      'sha256': sha256,
+      'dhash': dhash,
+      'updated_at': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// 全画像指納を取得（重複検出のスキャン用）。
+  Future<List<Map<String, dynamic>>> getAllImageFingerprints() async {
+    final db = await database;
+    return await db.query('image_fingerprints');
+  }
+
+  /// 指定イラストの指納を削除（画像削除時の整合性維持）。
+  Future<int> deleteImageFingerprint(int illustId) async {
+    final db = await database;
+    return await db.delete(
+      'image_fingerprints',
+      where: 'illust_id = ?',
+      whereArgs: [illustId],
+    );
   }
 
   // ==========================================================================

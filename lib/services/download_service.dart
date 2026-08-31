@@ -43,6 +43,37 @@ typedef DownloadErrorCallback =
       String errorMessage,
     );
 
+/// 例外をエラーコード文字列に分類する（純粋関数・単体テスト可能）。
+///
+/// 既知でない型は例外型名（小文字）を返すため、
+/// 一般的な 'unknown' は返さなくなる（例: 'unsupportederror'）。
+String classifyDownloadError(Object e) {
+  if (e is PixivAuthException) return 'auth_401';
+  if (e is PixivForbiddenException) return 'forbidden_403';
+  if (e is PixivNotFoundException) return 'not_found_404';
+  if (e is PixivRateLimitException) return 'rate_limit_429';
+  if (e is SocketException ||
+      e is TimeoutException ||
+      e is http.ClientException) {
+    return 'network_error';
+  }
+  if (e is UnsupportedError) return 'unsupported_error';
+  if (e is FileSystemException || e is PathNotFoundException) {
+    return 'file_error';
+  }
+  return e.runtimeType.toString().toLowerCase();
+}
+
+/// DB に保存するエラーメッセージを構築する。
+///
+/// 例外型名・メッセージ・スタックトレース先頭（3行）を含め、
+/// 最大500文字に切り詰める。
+String buildDownloadErrorMessage(Object e, StackTrace st) {
+  final stackHead = st.toString().split('\n').take(3).join('\n');
+  final message = '${e.runtimeType}: ${e.toString()}\n$stackHead';
+  return message.length > 500 ? message.substring(0, 500) : message;
+}
+
 /// ダウンロードサービス（シングルトン）。
 ///
 /// 永続化されたダウンロードキューを管理し、以下を提供する:
@@ -152,6 +183,10 @@ class DownloadService {
       final found = await _db.findDownloadQueueGroup(illust.id, 'illust');
       return found?['id'] as int?;
     }
+    debugPrint(
+      '[DownloadService] enqueue: illust=${illust.id} '
+      'pages=${images.length} group=$groupId',
+    );
 
     final items = <Map<String, dynamic>>[];
     for (final page in images) {
@@ -195,6 +230,7 @@ class DownloadService {
       final found = await _db.findDownloadQueueGroup(illustId, 'ugoira');
       return found?['id'] as int?;
     }
+    debugPrint('[DownloadService] enqueue: ugoira=$illustId group=$groupId');
 
     await _db.insertDownloadQueueItems(groupId, [
       {
@@ -236,6 +272,7 @@ class DownloadService {
       final found = await _db.findDownloadQueueGroup(novel.id, 'novel');
       return found?['id'] as int?;
     }
+    debugPrint('[DownloadService] enqueue: novel=${novel.id} group=$groupId');
 
     await _db.insertDownloadQueueItems(groupId, [
       {
@@ -370,12 +407,15 @@ class DownloadService {
   /// priority 順で次の pending アイテムを取得し、running にマークする。
   Future<Map<String, dynamic>?> _acquireNextPendingItem() async {
     final db = await _db.database;
-    // 親グループが pending の子アイテムのみ取得
+    // 親グループが pending または running の子アイテムを取得する。
+    // 注意: 初回取得でグループが running に遷移するため、条件を
+    // dg.status='pending' のみにすると複数ページ作品の残りページが
+    // 永久に取得されず completed に到達しない（バグ修正）。
     final rows = await db.rawQuery('''
       SELECT dq.*
       FROM download_queues dq
       INNER JOIN download_queue_groups dg ON dq.group_id = dg.id
-      WHERE dq.status = 'pending' AND dg.status = 'pending'
+      WHERE dq.status = 'pending' AND dg.status IN ('pending', 'running')
       ORDER BY dg.priority DESC, dg.created_at ASC, dq.page_index ASC
       LIMIT 1
     ''');
@@ -397,6 +437,11 @@ class DownloadService {
       where: 'id = ? AND status = ?',
       whereArgs: [groupId, 'pending'],
     );
+    debugPrint(
+      '[DownloadService] runningへ: item=$itemId group=$groupId '
+      'type=${item['work_type']} page=${item['page_index']} '
+      'url=${(item['url'] as String?)?.length ?? 0}bytes',
+    );
     return item;
   }
 
@@ -412,25 +457,36 @@ class DownloadService {
     final retryCount = item['retry_count'] as int? ?? 0;
     final maxRetry = item['max_retry'] as int? ?? defaultMaxRetry;
 
+    debugPrint(
+      '[DownloadService] ダウンロード開始: item=$itemId group=$groupId '
+      'work=$workId type=$workType',
+    );
     try {
+      // クエリ結果の Map は読み取り専用なので変更しない。
+      // local_path はハンドラの戻り値として取得し DB に記録する。
+      String localPath;
       if (workType == 'illust') {
-        await _downloadIllustItem(item);
+        localPath = await _downloadIllustItem(item);
       } else if (workType == 'ugoira') {
-        await _downloadUgoiraItem(item);
+        localPath = await _downloadUgoiraItem(item);
       } else if (workType == 'novel') {
-        await _downloadNovelItem(item);
+        localPath = await _downloadNovelItem(item);
+      } else {
+        throw Exception('サポートされないダウンロード種別: $workType');
       }
 
       // アイテム完了
       await _db.updateDownloadQueueItem(
         itemId: itemId,
         status: 'completed',
-        localPath: item['local_path'] as String? ?? '',
+        localPath: localPath,
       );
+      debugPrint('[DownloadService] completed: item=$itemId path=$localPath');
       await _updateGroupProgress(groupId);
-    } catch (e) {
-      final errorCode = _classifyError(e);
-      final errorMsg = e.toString();
+    } catch (e, st) {
+      final errorCode = classifyDownloadError(e);
+      final errorMsg = buildDownloadErrorMessage(e, st);
+      debugPrint('[DownloadService] エラー: item=$itemId code=$errorCode $e\n$st');
 
       if (_cancelRequested.contains(itemId)) {
         // キャンセル
@@ -448,6 +504,10 @@ class DownloadService {
           retryCount: retryCount + 1,
           errorCode: errorCode,
           errorMessage: errorMsg,
+        );
+        debugPrint(
+          '[DownloadService] リトライ: item=$itemId '
+          '(${retryCount + 1}/$maxRetry)',
         );
         _kickProcessing();
       } else {
@@ -470,7 +530,8 @@ class DownloadService {
   }
 
   /// イラスト画像1枚をダウンロードする。
-  Future<void> _downloadIllustItem(Map<String, dynamic> item) async {
+  /// 最終保存パスを返す（クエリ結果の Map は読み取り専用なので変更しない）。
+  Future<String> _downloadIllustItem(Map<String, dynamic> item) async {
     final itemId = item['id'] as int;
     final url = item['url'] as String;
     final workId = item['work_id'] as int;
@@ -494,17 +555,17 @@ class DownloadService {
       finalPath: finalPath,
       headers: PixivHttpHeaders.image,
       itemId: itemId,
-      item: item,
     );
 
-    // DB に local_path を記録
+    // DB に local_path を記録（クエリ結果 Map の変更は行わない）
     await _db.updateDownloadQueueItem(itemId: itemId, localPath: finalPath);
-    item['local_path'] = finalPath;
+    return finalPath;
   }
 
   /// うごイラ ZIP をダウンロードする。
   /// GIF 変換はスコープ外。ZIP をそのまま保存する。
-  Future<void> _downloadUgoiraItem(Map<String, dynamic> item) async {
+  /// 最終保存パスを返す（クエリ結果の Map は読み取り専用なので変更しない）。
+  Future<String> _downloadUgoiraItem(Map<String, dynamic> item) async {
     final itemId = item['id'] as int;
     final workId = item['work_id'] as int;
 
@@ -528,15 +589,15 @@ class DownloadService {
       finalPath: finalPath,
       headers: PixivHttpHeaders.image,
       itemId: itemId,
-      item: item,
     );
 
     await _db.updateDownloadQueueItem(itemId: itemId, localPath: finalPath);
-    item['local_path'] = finalPath;
+    return finalPath;
   }
 
   /// 小説本文を取得して novel_text テーブルに保存する。
-  Future<void> _downloadNovelItem(Map<String, dynamic> item) async {
+  /// 保存先識別子（`novel_text:<workId>`）を返す。
+  Future<String> _downloadNovelItem(Map<String, dynamic> item) async {
     final itemId = item['id'] as int;
     final workId = item['work_id'] as int;
 
@@ -562,7 +623,7 @@ class DownloadService {
       itemId: itemId,
       localPath: 'novel_text:$workId',
     );
-    item['local_path'] = 'novel_text:$workId';
+    return 'novel_text:$workId';
   }
 
   // ────────────────────────────────────────────────
@@ -578,9 +639,18 @@ class DownloadService {
     required String finalPath,
     required Map<String, String> headers,
     required int itemId,
-    required Map<String, dynamic> item,
   }) async {
     final tempFile = File(tempPath);
+
+    // 書き込み前に保存ディレクトリの存在を確保する（防御的）。
+    // 実機ではディレクトリが存在しない場合、一時ファイルの作成に失敗し、
+    // rename が PathNotFoundException（ENOENT, errno=2）を投じる。
+    final targetDir = tempFile.parent;
+    if (!await targetDir.exists()) {
+      await targetDir.create(recursive: true);
+      debugPrint('[DownloadService] ディレクトリ作成: ${targetDir.path}');
+    }
+
     int existingBytes = 0;
     if (await tempFile.exists()) {
       existingBytes = await tempFile.length();
@@ -596,12 +666,29 @@ class DownloadService {
     request.headers.addAll(reqHeaders);
 
     final client = PixivHttpClient().client;
-    final streamedResponse = await client.send(request);
+
+    // レスポンスヘッダ待ちのタイムアウト（接続確立〜応答ヘッダ受信）。
+    // タイムアウトなしだとサーバーが応答しなくなった場合無期限にハングし、
+    // running のまま完了も失敗もエラーも出ない状態になる（バグ修正）。
+    final streamedResponse = await client
+        .send(request)
+        .timeout(
+          const Duration(seconds: 30),
+          onTimeout: () => throw TimeoutException('レスポンス待ちタイムアウト（30秒）: $url'),
+        );
 
     final statusCode = streamedResponse.statusCode;
+    debugPrint(
+      '[DownloadService] HTTP送信完了: item=$itemId status=$statusCode '
+      'size=${streamedResponse.contentLength ?? -1} '
+      'range=${existingBytes > 0}',
+    );
 
     // 416 Range Not Satisfiable: 一時ファイルが完全なのでそのままリネーム
     if (statusCode == 416) {
+      if (!await tempFile.exists()) {
+        throw Exception('416 受信だが一時ファイルが存在しません: $tempPath');
+      }
       await tempFile.rename(finalPath);
       return;
     }
@@ -620,48 +707,127 @@ class DownloadService {
         : await tempFile.open(mode: FileMode.append);
 
     final completer = Completer<void>();
-    late StreamSubscription subscription;
+    late StreamSubscription<List<int>> subscription;
+    var sinkClosed = false;
 
-    subscription = streamedResponse.stream.listen(
-      (List<int> data) async {
-        if (_cancelRequested.contains(itemId)) {
-          await subscription.cancel();
-          await sink.close();
-          if (!completer.isCompleted) {
-            completer.completeError(Exception('ダウンロードがキャンセルされました'));
+    // 二重 close 防止（inactivity タイマーと onDone の両方が close しようとする）。
+    Future<void> closeSinkOnce() async {
+      if (sinkClosed) return;
+      sinkClosed = true;
+      await sink.close();
+    }
+
+    // 失敗時の一時ファイル掃除（ベストエフォート）。
+    // 0 バイト（壊れた空ファイル）は削除。部分書き込みは Range リジューム用に保持。
+    Future<void> cleanupTemp() async {
+      try {
+        if (!await tempFile.exists()) return;
+        if (await tempFile.length() == 0) {
+          await tempFile.delete();
+          debugPrint('[DownloadService] 一時ファイルを削除: $tempPath');
+        }
+      } catch (_) {}
+    }
+
+    // データ受信のインアクティビティ監視。応答ヘッダ後のボディ受信が
+    // 60秒間停滞したらタイムアウトとして扱い、running 永久ハングを防ぐ。
+    const inactivityTimeout = Duration(seconds: 60);
+    Timer? inactivityTimer;
+    var receivedBytes = 0;
+    var inactivityFired = false;
+
+    void resetInactivityTimer() {
+      inactivityTimer?.cancel();
+      inactivityTimer = Timer(inactivityTimeout, () async {
+        inactivityFired = true;
+        final err = TimeoutException('ダウンロード中タイムアウト（60秒間データなし）: $url');
+        await subscription.cancel();
+        await closeSinkOnce();
+        if (!completer.isCompleted) {
+          completer.completeError(err);
+        }
+      });
+    }
+
+    resetInactivityTimer();
+
+    bool writeFailed = false;
+    Object? writeError;
+    try {
+      subscription = streamedResponse.stream.listen(
+        (List<int> data) async {
+          if (_cancelRequested.contains(itemId)) {
+            inactivityTimer?.cancel();
+            await subscription.cancel();
+            await closeSinkOnce();
+            if (!completer.isCompleted) {
+              completer.completeError(Exception('ダウンロードがキャンセルされました'));
+            }
+            return;
           }
-          return;
-        }
-        // writeFrom は同期 API。Uint8List に変換して書き込む。
-        sink.writeFromSync(data);
-      },
-      onError: (Object e) {
-        if (!completer.isCompleted) {
-          completer.completeError(e);
-        }
-      },
-      onDone: () async {
-        await sink.close();
-        if (!completer.isCompleted) {
-          completer.complete();
-        }
-      },
-      cancelOnError: true,
+          resetInactivityTimer();
+          receivedBytes += data.length;
+          // writeFromSync は同期 API（await 不要・fire-and-forget なし）。
+          sink.writeFromSync(data);
+        },
+        onError: (Object e) {
+          inactivityTimer?.cancel();
+          if (!completer.isCompleted) {
+            completer.completeError(e);
+          }
+        },
+        onDone: () async {
+          inactivityTimer?.cancel();
+          await closeSinkOnce();
+          if (!completer.isCompleted) {
+            completer.complete();
+          }
+        },
+        cancelOnError: true,
+      );
+
+      await completer.future;
+    } catch (e) {
+      writeFailed = true;
+      writeError = e;
+    } finally {
+      inactivityTimer?.cancel();
+      await subscription.cancel();
+      await closeSinkOnce();
+    }
+
+    if (inactivityFired) {
+      await cleanupTemp();
+      throw TimeoutException('ダウンロード中タイムアウト（60秒間データなし）: $url');
+    }
+    if (writeFailed) {
+      // 書き込み失敗（キャンセル含む）は一時ファイルを掃除して再送出。
+      await cleanupTemp();
+      throw writeError!;
+    }
+
+    // リネーム前に一時ファイルの存在を確認（書き込み未完了を検出）。
+    if (!await tempFile.exists()) {
+      throw Exception('一時ファイルの書き込みに失敗しました: $tempPath');
+    }
+
+    debugPrint(
+      '[DownloadService] 書き込み完了: item=$itemId '
+      'bytes=$receivedBytes -> $tempPath',
     );
 
-    // キャンセル監視: subscription が cancel されるまで待つ
+    // アトミックリネーム（既に最終パスにファイルがある場合は上書き）。
+    // リネーム失敗時も一時ファイルを掃除して例外は伝播。
     try {
-      await completer.future;
-    } finally {
-      await subscription.cancel();
+      if (await File(finalPath).exists()) {
+        await File(finalPath).delete();
+      }
+      await tempFile.rename(finalPath);
+    } catch (e) {
+      await cleanupTemp();
+      rethrow;
     }
-
-    // アトミックリネーム
-    // 既に最終パスにファイルがある場合は上書き
-    if (await File(finalPath).exists()) {
-      await File(finalPath).delete();
-    }
-    await tempFile.rename(finalPath);
+    debugPrint('[DownloadService] リネーム完了: item=$itemId -> $finalPath');
   }
 
   // ────────────────────────────────────────────────
@@ -688,6 +854,7 @@ class DownloadService {
 
     // 全完了チェック
     if (completed == total) {
+      debugPrint('[DownloadService] グループ完了: group=$groupId $completed/$total');
       await _db.updateDownloadQueueGroup(groupId: groupId, status: 'completed');
       // グループ情報を取得してコールバック
       final groups = await _db.getDownloadQueueGroups();
@@ -724,19 +891,6 @@ class DownloadService {
     }
   }
 
-  /// 例外からエラーコード文字列を抽出する。
-  String _classifyError(Object e) {
-    if (e is PixivAuthException) return 'auth_401';
-    if (e is PixivForbiddenException) return 'forbidden_403';
-    if (e is PixivNotFoundException) return 'not_found_404';
-    if (e is PixivRateLimitException) return 'rate_limit_429';
-    if (e is SocketException || e is TimeoutException) {
-      return 'network_error';
-    }
-    if (e is http.ClientException) return 'network_error';
-    return 'unknown';
-  }
-
   /// エラーコードがリトライ可能かどうか。
   bool _isRetryable(String errorCode) {
     switch (errorCode) {
@@ -746,6 +900,8 @@ class DownloadService {
         return true;
       case 'forbidden_403':
       case 'not_found_404':
+      case 'unsupported_error':
+      case 'file_error':
         return false;
       default:
         return true;

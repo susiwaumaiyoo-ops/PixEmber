@@ -11,6 +11,7 @@ import 'screens/novel_series_episodes_screen.dart';
 import 'novel_model.dart';
 import 'services/download_service.dart';
 import 'services/pixiv_api_service.dart';
+import 'services/usage_tracking_service.dart';
 
 // ワークマネージャー（バックグラウンドダウンロード）のコールバックディスパッチャー。
 // Android のみ登録される（他OSはフォアグラウンド縮退）。
@@ -44,14 +45,35 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final PixivApiService _api = PixivApiService();
   final AppLinks _appLinks = AppLinks();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initDeepLinks();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// アプリのライフサイクル変化で利用時間トラッキング（Phase 4）を制御する。
+  /// - バックグラウンド移行: ここまでの経過時間をチェックポイント保存。
+  /// - フォアグラウンド復帰: バックグラウンド中の時間を計測から除外。
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      unawaited(UsageTrackingService().checkpointAll());
+    } else if (state == AppLifecycleState.resumed) {
+      UsageTrackingService().discardBackgroundTime();
+    }
   }
 
   void _initDeepLinks() {

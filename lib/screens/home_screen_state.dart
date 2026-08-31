@@ -13,6 +13,13 @@ import 'folder_list_screen.dart';
 import 'mute_settings_screen.dart';
 import 'subscriptions_screen.dart';
 import 'read_later_screen.dart';
+import 'statistics_screen.dart';
+import 'ai_index_maintenance_screen.dart';
+import 'backup_manager_screen.dart';
+import 'offline_bookshelf_screen.dart';
+import 'download_queue_screen.dart';
+import 'visual_search_screen.dart';
+import 'duplicate_finder_screen.dart';
 import 'home_ui_components.dart';
 import 'home_filter_handler.dart';
 import 'home_sync_handler.dart';
@@ -157,7 +164,6 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   static const int illustIndex = 0;
   static const int novelIndex = 1;
   static const int feelingDiscoveryIndex = 2;
-  static const int recommendIndex = 3;
 
   // イラストタブ内のサブ表示モード (0: おすすめ，1: 検索結果，2: ランキング)
   int illustSubMode = 0;
@@ -415,8 +421,8 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
       } else if (index == novelIndex) {
         novelSubMode = subMode ?? 0;
       }
-      // フィーリング発掘・AIレコメンドは Pixiv API 一覧取得タブではないためローディングを解除
-      if (index == feelingDiscoveryIndex || index == recommendIndex) {
+      // フィーリング発掘は Pixiv API 一覧取得タブではないためローディングを解除
+      if (index == feelingDiscoveryIndex) {
         isLoading = false;
         errorMessage = null;
       }
@@ -1284,24 +1290,23 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
           ).showSnackBar(const SnackBar(content: Text('Google ドライブにログインしました')));
         }
       } else if (mounted) {
-        // signIn() が null/false を返した場合（OAuth クライアント未設定など）は
-        // 例外ではなく黙って失敗するため、原因を明示する
+        // null 返却（キャンセル）/ 例外による失敗のいずれでも、
+        // 実エラー（code/message/details）から短い診断を生成して表示する。
+        final msg =
+            'Googleドライブログイン失敗：'
+            '${describeSignInError(driveService.lastSignInError)}';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'ログインできませんでした。Google Cloud Console で '
-              'OAuth クライアント（パッケージ名 com.example.pixiv_viewer ＋ '
-              '署名鍵の SHA-1）の登録と Drive API の有効化が必要です。',
-            ),
-            duration: Duration(seconds: 6),
-          ),
+          SnackBar(content: Text(msg), duration: const Duration(seconds: 8)),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('ログイン失敗：$e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('ログイン失敗：${describeSignInError(e)}'),
+            duration: const Duration(seconds: 8),
+          ),
+        );
       }
     }
   }
@@ -1544,6 +1549,147 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                 );
               },
             ),
+            const Divider(height: 1, color: Colors.grey),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Text(
+                'AI 機能',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.recommend, color: Colors.pinkAccent),
+              title: const Text('AIレコメンド'),
+              subtitle: const Text('あなたの好みに合わせた推薦'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AiRecommendFeedScreen(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.image_search, color: Colors.pinkAccent),
+              title: const Text('似た画像を探す'),
+              subtitle: const Text('ダウンロード済み画像から似た作品を探す'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const VisualSearchScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.construction, color: Colors.pinkAccent),
+              title: const Text('AIインデックス管理'),
+              subtitle: const Text('モデル・埋め込みの診断・修復'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AiIndexMaintenanceScreen(),
+                  ),
+                );
+              },
+            ),
+            const Divider(height: 1, color: Colors.grey),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Text(
+                'データ・保存',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.bar_chart, color: Colors.pinkAccent),
+              title: const Text('閲覧統計'),
+              subtitle: const Text('閲覧・読書時間の分析'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const StatisticsScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.download_for_offline,
+                color: Colors.pinkAccent,
+              ),
+              title: const Text('ダウンロード管理'),
+              subtitle: const Text('イラスト・うごイラ・小説のダウンロード状況'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const DownloadQueueScreen(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.cloud_download,
+                color: Colors.pinkAccent,
+              ),
+              title: const Text('オフライン本棚'),
+              subtitle: const Text('キャッシュした小説をオフラインで読む'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const OfflineBookshelfScreen(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.find_replace, color: Colors.pinkAccent),
+              title: const Text('重複画像の検出'),
+              subtitle: const Text('完全一致・近似重複を見つけて整理'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const DuplicateFinderScreen(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.manage_accounts,
+                color: Colors.pinkAccent,
+              ),
+              title: const Text('バックアップ管理'),
+              subtitle: const Text('複数のバックアップの一覧・復元・削除'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const BackupManagerScreen(),
+                  ),
+                );
+              },
+            ),
+            const Divider(height: 1, color: Colors.grey),
             // ログイン/ログアウトボタン
             ListTile(
               leading: Icon(
@@ -1680,8 +1826,6 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               Expanded(
                 child: currentIndex == feelingDiscoveryIndex
                     ? const FeelingDiscoveryScreen()
-                    : currentIndex == recommendIndex
-                    ? const AiRecommendFeedScreen()
                     : isLoading
                     ? const Center(
                         child: Column(

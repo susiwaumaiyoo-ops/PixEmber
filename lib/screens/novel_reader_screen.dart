@@ -7,9 +7,12 @@ import '../services/database_service.dart';
 import '../services/embedding_service.dart';
 import '../services/novel_document_text.dart';
 import '../services/pixiv_api_service.dart';
+import '../services/novel_tts_service.dart';
 import '../services/ruri_model_manager.dart';
+import '../services/usage_tracking_service.dart';
 
 part 'novel_reader_data.dart';
+part 'novel_reader_tts.dart';
 part 'novel_reader_ui_handler.dart';
 part 'novel_reader_ui_components.dart';
 
@@ -87,12 +90,31 @@ class _NovelReaderScreenState extends State<NovelReaderScreen>
   int? _sleepMinutes;
   int _sleepRemainingSeconds = 0;
 
+  // TTS読み上げ用ステート（Phase 3）
+  NovelTtsService? _ttsService;
+  bool _isTtsPlaying = false; // 再生中（一時停止含む）
+  bool _isTtsPaused = false; // 一時停止中
+  int _ttsCurrentIndex = -1; // 現在読み上げ中のチャンク番号
+  int _ttsChunkTotal = 0; // 総チャンク数
+  double _ttsRate = 1.0; // 読み上げ速度 (0.5 - 2.0)
+  bool _ttsReadRuby = false; // true=ルビ（かな）を読む / false=親文字を読む
+  int? _ttsResumeIndex; // 保存済み再開位置（本文ロード後に設定）
+  bool _ttsInitializing = false; // 二重開始防止
+
+  // 読書時間トラッキング（Phase 4）。この画面を開いている間＝読書時間。
+  UsageSessionHandle? _usageSession;
+
   @override
   void initState() {
     debugPrint('📍 [DEBUG Reader] initState 開始');
     super.initState();
     _currentNovel = widget.novel;
     _initSequence();
+    // 読書時間トラッキング開始（Phase 4）
+    _usageSession = UsageTrackingService().startSession(
+      workId: widget.novel.id,
+      workType: 'novel',
+    );
     debugPrint('📍 [DEBUG Reader] initState 終了');
   }
 
@@ -113,6 +135,16 @@ class _NovelReaderScreenState extends State<NovelReaderScreen>
     _isDisposing = true; // 👈 破棄開始を知らせる（最優先で実行）
     _sleepTimer?.cancel();
     _stopAutoScroll();
+    // TTS読み上げを停止しエンジンも破棄（非同期のため fire-and-forget）
+    final tts = _ttsService;
+    if (tts != null) {
+      unawaited(tts.disposeService());
+    }
+    // 読書時間セッションを確定（fire-and-forget）
+    final usage = _usageSession;
+    if (usage != null) {
+      unawaited(UsageTrackingService().endSession(usage));
+    }
     // 画面破棄時にしおりを永続化
     _saveCurrentBookmark();
     _pageController?.dispose();
@@ -329,6 +361,25 @@ class _NovelReaderScreenState extends State<NovelReaderScreen>
                           ),
                           onPressed: _toggleSearchBar,
                           tooltip: 'ページ内検索',
+                        ),
+                        // TTS読み上げ（Phase 3）
+                        IconButton(
+                          icon: Icon(
+                            _isTtsPlaying
+                                ? (_isTtsPaused
+                                      ? Icons.play_circle_fill
+                                      : Icons.pause_circle_filled)
+                                : Icons.volume_up,
+                            color: _isTtsPlaying
+                                ? Colors.pinkAccent
+                                : (isDarkTheme
+                                      ? Colors.white70
+                                      : Colors.black54),
+                          ),
+                          onPressed: _toggleTts,
+                          tooltip: _isTtsPlaying
+                              ? (_isTtsPaused ? '読み上げを再開' : '読み上げを一時停止')
+                              : '小説を読み上げる',
                         ),
                         // スリープタイマー
                         IconButton(

@@ -1,6 +1,6 @@
-import 'dart:isolate';
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
+import '../services/usage_tracking_service.dart';
 
 /// 日別閲覧数の1要素。
 class DailyViewCount {
@@ -95,19 +95,24 @@ class StatisticsData {
   }
 }
 
-/// Isolate 内で実行する集計関数（トップレベル関数）。
+/// 閲覧履歴の集計関数（トップレベルの純粋関数）。
 ///
 /// - `DatabaseService` / `sqflite` は一切呼ばない。
 /// - `Illust` / `Novel` インスタンスも扱わない。
 /// - 引数・戻り値は `List<Map<String, dynamic>>` / `Map` / プリミティブのみ。
-Map<String, dynamic> _computeStatistics(List<Map<String, dynamic>> rows) {
+/// - Widget / BuildContext / Binding 等の送信不可オブジェクトを参照しないため、
+///   メイン Isolate で直接呼び出せる（Isolate.run 不要）。
+Map<String, dynamic> computeStatistics(
+  List<Map<String, dynamic>> rows, {
+  DateTime? now,
+}) {
   int total = rows.length;
   int illust = 0;
   int novel = 0;
   int unknown = 0;
 
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
+  final n = now ?? DateTime.now();
+  final today = DateTime(n.year, n.month, n.day);
 
   int todayCount = 0;
   int last7 = 0;
@@ -200,6 +205,7 @@ class StatisticsScreen extends StatefulWidget {
 
 class _StatisticsScreenState extends State<StatisticsScreen> {
   StatisticsData? _data;
+  UsageStats? _usage;
   bool _isLoading = true;
   String? _error;
 
@@ -209,7 +215,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     _load();
   }
 
-  /// メイン Isolate で履歴を取得し、重い集計のみ Isolate.run に委譲する。
+  /// 履歴・利用時間を取得し、集計（純粋関数）をメイン Isolate で実行する。
+  ///
+  /// 集計は O(n) の軽い処理のため Isolate を介さず直接呼び出す。
+  /// 以前 Isolate.run を用いていたが、クロージャが Widget / Binding 系の
+  /// 送信不可オブジェクトを参照して「Illegal argument in isolate
+  /// message」を投じる不具合があった。
   Future<void> _load() async {
     setState(() {
       _isLoading = true;
@@ -217,14 +228,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     });
     try {
       final history = await DatabaseService().getHistoryList();
-      // 可変コピーを作り、プリミティブ/Map のみのリストとして Isolate に渡す。
-      final rows = List<Map<String, dynamic>>.from(history);
-      final raw = await Isolate.run<Map<String, dynamic>>(
-        () => _computeStatistics(rows),
-      );
+      final raw = computeStatistics(history);
+      // 利用時間（Phase 4）: usage_sessions から集計。
+      final usageRows = await DatabaseService().getUsageSessions();
+      final usageRaw = computeUsageStatsMap(usageRows);
       if (!mounted) return;
       setState(() {
         _data = StatisticsData.fromComputeMap(raw);
+        _usage = UsageStats.fromComputeMap(usageRaw);
         _isLoading = false;
       });
     } catch (e) {
@@ -242,12 +253,21 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       appBar: AppBar(
         title: const Text('閲覧統計'),
         backgroundColor: Theme.of(context).colorScheme.surface,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: '利用時間データを削除',
+            onPressed: _confirmDeleteUsageData,
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
           ? _buildError()
-          : _data == null || _data!.totalCount == 0
+          : _data == null ||
+                (_data!.totalCount == 0 &&
+                    (_usage == null || _usage!.totalSeconds == 0))
           ? const Center(
               child: Text('閲覧履歴がありません', style: TextStyle(color: Colors.grey)),
             )
@@ -256,23 +276,25 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Widget _buildError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, color: Colors.grey, size: 48),
-            const SizedBox(height: 16),
-            Text(
-              '統計の読み込みに失敗しました\n$_error',
-              style: const TextStyle(color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(onPressed: _load, child: const Text('再読み込み')),
-          ],
-        ),
+    // 長いエラーメッセージ（スタックトレース等）でも溢れないよう、
+    // 縦方向にスクロール可能にし、mainAxisSize: min で収まるサイズにする。
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 40),
+          const Icon(Icons.error_outline, color: Colors.grey, size: 48),
+          const SizedBox(height: 16),
+          SelectableText(
+            '統計の読み込みに失敗しました\n$_error',
+            style: const TextStyle(color: Colors.grey),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(onPressed: _load, child: const Text('再読み込み')),
+          const SizedBox(height: 40),
+        ],
       ),
     );
   }
@@ -284,6 +306,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       children: [
         _buildSummaryCard(data),
         const SizedBox(height: 12),
+        if (_usage != null) ...[
+          _buildUsageCard(_usage!),
+          const SizedBox(height: 12),
+        ],
         _buildDailyChartCard(data),
         const SizedBox(height: 12),
         _buildRatioCard(data),
@@ -346,6 +372,121 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
+  /// F. 読書・閲覧時間（Phase 4: usage_sessions 集計）。
+  Widget _buildUsageCard(UsageStats usage) {
+    final dailyMinutes = usage.daily
+        .map((e) => (e.seconds / 60).round())
+        .toList();
+    return _sectionCard(
+      title: '読書・閲覧時間',
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildUsageSummaryGrid(usage),
+          const SizedBox(height: 12),
+          Text(
+            '過去30日: 小説 ${_formatDuration(usage.novel30DaysSeconds)} / '
+            'イラスト ${_formatDuration(usage.illust30DaysSeconds)}'
+            '（${usage.sessionCount30Days} セッション）',
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            '過去30日の日別利用時間（分）',
+            style: TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 160,
+            child: CustomPaint(
+              painter: _BarChartPainter(dailyMinutes),
+              child: Container(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            '※ 利用時間は端末内にのみ保存され、サーバー送信・'
+            'Google Drive バックアップの対象外です。',
+            style: TextStyle(color: Colors.grey, fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 利用時間サマリー（2列グリッド）。
+  Widget _buildUsageSummaryGrid(UsageStats usage) {
+    final entries = <(String, String)>[
+      ('総利用時間', _formatDuration(usage.totalSeconds)),
+      ('今日', _formatDuration(usage.todaySeconds)),
+      ('過去7日', _formatDuration(usage.last7DaysSeconds)),
+      ('過去30日', _formatDuration(usage.last30DaysSeconds)),
+    ];
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: entries
+          .map(
+            (e) => SizedBox(
+              width: (MediaQuery.of(context).size.width - 48) / 2,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    e.$2,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    e.$1,
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  /// 秒数を「N時間M分」「M分」「S秒」形式に整形する。
+  String _formatDuration(int seconds) {
+    if (seconds <= 0) return '0分';
+    final h = seconds ~/ 3600;
+    final m = (seconds % 3600) ~/ 60;
+    if (h > 0) return m > 0 ? '$h時間$m分' : '$h時間';
+    if (m > 0) return '$m分';
+    return '$seconds秒';
+  }
+
+  /// プライバシー: 利用時間データ全削除の確認ダイアログ。
+  Future<void> _confirmDeleteUsageData() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('利用時間データを削除'),
+        content: const Text('記録された読書・閲覧時間をすべて削除します。\nこの操作は取り消せません。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('削除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await UsageTrackingService().deleteAll();
+    if (mounted) _load();
+  }
+
   /// B. 過去30日の日別閲覧数（CustomPainter による簡易棒グラフ）
   Widget _buildDailyChartCard(StatisticsData data) {
     final values = data.dailyCounts.map((e) => e.count).toList();
@@ -354,6 +495,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
@@ -520,6 +662,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(

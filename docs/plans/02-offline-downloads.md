@@ -2,8 +2,8 @@
 
 > 調査ベース: 現行 HEAD（DB バージョン 16）を直接読取。Phase 1 完了報告は仮定せず、現行コードを優先。
 > コード変更なし。本ファイルのみ更新。
-> ステータス: **実装ブロッカー 0 件（承認後に code モードで実装可能）**。
-> バージョン補足: workmanager は最新安定版 **0.9.0+3（0.9.x 系）** を採用（初版案の `^0.5.2` は 2 世代古いため修正）。
+> ステータス: **実装済み（Phase 2 完了・58 テスト全通過）**。workmanager は 0.10.x 系（0.10.9）で実装実態に合わせて本書を更新済み。
+> バージョン補足: workmanager は **0.10.9（0.10.x 系）** を採用（実装実態に合わせ更新。初版案 `^0.5.2` → 修正案 `^0.9.0` → 最終実装 `^0.10.9`）。
 
 ---
 
@@ -16,7 +16,7 @@
 - ZIP展開: `archive ^3.3.7`
 - ギャラリー保存: `image_gallery_saver_plus ^5.1.1`
 - 暗号化(ハッシュ): `crypto ^3.0.3`
-- **workmanager: 未導入 → Phase 2 で `workmanager: ^0.9.0` を追加導入（解決版 = 0.9.0+3。federated 化済みの 0.9.x 系）。Android のみバックグラウンド起動に使用し、他OSでは `Workmanager().initialize()` を呼ばない（初期化ガード）。**
+- **workmanager: 未導入 → Phase 2 で `workmanager: ^0.10.9` を追加導入（解決版 = 0.10.9。federated 化済みの 0.10.x 系）。Android のみバックグラウンド起動に使用し、他OSでは `Workmanager().initialize()` を呼ばない（初期化ガード）。**
 - **gif パッケージ: 未導入 → Phase 2 では導入せず、うごイラは ZIP 保存のみ（GIF/APNG/動画変換は除外。将来対応用メタデータを DB に保持）**
 
 ### 0.2 DB バージョン
@@ -87,14 +87,14 @@
 
 | OS | 永続バイナリ保存 | バックグラウンド実行 | 保存先ディレクトリ | 制限事項 |
 |----|----------------|---------------------|-------------------|---------|
-| Android | ○ (`getExternalStorageDirectory`/app-doc) | ○ **workmanager 0.9.x 導入**（アプリ終了後もキュー継続） | `getExternalStorageDirectory()/Download`（既存流用）または app-doc `Downloads/` | Android 14+ は `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` + `foregroundServiceType=dataSync` が必要（後述 11.3） |
+| Android | ○ (`getExternalStorageDirectory`/app-doc) | ○ **workmanager 0.10.x 導入**（アプリ終了後もキュー継続） | `getExternalStorageDirectory()/Download`（既存流用）または app-doc `Downloads/` | Android 14+ は `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` + `foregroundServiceType=dataSync` が必要（後述 11.3） |
 | iOS | ○ (`getApplicationDocumentsDirectory`) | △ フォアグラウンドのみ（`workmanager_apple` は存在するが Phase 2 は採用せず） | `Documents/Downloads/` | バックグラウンド fetch 制限厳格。フォアグラウンド実行に留める |
 | Windows | ○ (`getDownloadsDirectory`) | △ フォアグラウンドのみ | `getDownloadsDirectory()` | バックグラウンド機構なし |
 | macOS | ○ (`getDownloadsDirectory`) | △ フォアグラウンドのみ | `getDownloadsDirectory()` | 同上 |
 | Linux | ○ (`getDownloadsDirectory`) | △ フォアグラウンドのみ（`workmanager_linux` は experimental で除外） | `getDownloadsDirectory()` | 同上 |
 | Web | × 不可 | × 不可（`workmanager_web` は experimental で除外） | なし（IndexedDB も未使用） | `path_provider` のディレクトリ API は `UnsupportedError`。**縮退設計必須**（UI のみ、実ダウンロード不可・キュー管理もメモリのみで永続化しない） |
 
-**結論**: バックグラウンド継続ダウンロードは **Android のみ workmanager 0.9.x で対応**（アプリがバックグラウンド/終了しても `WorkManager` がキューを再起動）。iOS/Windows/Linux/macOS/Web はアプリがフォアグラウンドにある間に `DownloadService` 内の非同期ループで処理（縮退）。workmanager 0.9.x は federated 化されており、初期化は `Platform.isAndroid` ガードで Android のみ実行し、他OSでは `Workmanager()` を初期化・登録しない（パッケージは導入するが no-op）。これにより Android 14+ の Foreground Service 要件は workmanager の `setForegroundAsync` + マニフェスト権限で満たす。
+**結論**: バックグラウンド継続ダウンロードは **Android のみ workmanager 0.10.x で対応**（アプリがバックグラウンド/終了しても `WorkManager` がキューを再起動）。iOS/Windows/Linux/macOS/Web はアプリがフォアグラウンドにある間に `DownloadService` 内の非同期ループで処理（縮退）。workmanager 0.10.x は federated 化されており、初期化は `Platform.isAndroid` ガードで Android のみ実行し、他OSでは `Workmanager()` を初期化・登録しない（パッケージは導入するが no-op）。これにより Android 14+ の Foreground Service 要件は workmanager の `setForegroundAsync` + マニフェスト権限で満たす。
 
 ---
 
@@ -187,7 +187,7 @@ stateDiagram-v2
 - **キャンセル伝播**: `http.Request` + `StreamedResponse` を使用し、`cancelled` 時に `response.stream.cancel()` を呼ぶ。`bool _cancelled` フラグ + `StreamSubscription` キャンセル。
 - **認証ヘッダー取得タイミング**: 画像CDNは `PixivHttpHeaders.image`（認証不要）。小説本文APIは `Bearer` 付与。401 再試行時は `getAccessToken(refreshToken, force: true)` で強制リフレッシュ。
 - **アプリ復帰時のジョブ復旧**: `init()` で (a) `running→pending` 巻き戻し、(b) `paused` はそのまま保留、(c) `pending` を自動再開（設定でオフ可）。
-- **Android バックグラウンド起動**: workmanager 0.9.x の `Workmanager().executeTask` コールバック（pigeon ベース）から `DownloadService().runBackgroundOnce(inputData)` を呼び、DB の `pending` を処理。長時間タスクは `setForegroundAsync` で通知付き実行（11.3）。
+- **Android バックグラウンド起動**: workmanager 0.10.x の `Workmanager().executeTask` コールバック（pigeon ベース）から `DownloadService().runBackgroundOnce(inputData)` を呼び、DB の `pending` を処理。長時間タスクは `setForegroundAsync` で通知付き実行（11.3）。
 
 ### 4.2 UI 連携
 - 進捗は `ValueNotifier<Map<int, DownloadProgress>>` またはストリームで公開（既存 `onProgress` コールバックは維持しつつ拡張）。
@@ -284,7 +284,7 @@ stateDiagram-v2
 - `flutter analyze` / `flutter test` が Web ビルドでもコンパイルエラーなし
 
 ### 9.8 workmanager（Android）結合テスト
-- `Workmanager().executeTask` コールバック（0.9.x pigeon）から `runBackgroundOnce(inputData)` を呼び、DB の `pending` が処理されること
+- `Workmanager().executeTask` コールバック（0.10.x pigeon）から `runBackgroundOnce(inputData)` を呼び、DB の `pending` が処理されること
 - 長時間タスクで `setForegroundAsync` が通知を表示すること（Android 14+ で `FOREGROUND_SERVICE_DATA_SYNC` 権限下でクラッシュしないこと）
 
 ---
@@ -295,7 +295,7 @@ stateDiagram-v2
 - [ ] アプリ異常終了後も `running` ジョブが `pending` に復旧される
 - [ ] 同時ダウンロード数が `maxConcurrent`（既定3）を超えない
 - [ ] 複数ページ作品が全ページ成功するまで `completed` にならない
-- [ ] Android では workmanager 0.9.x によりバックグラウンド/アプリ終了後もキューが継続処理される
+- [ ] Android では workmanager 0.10.x によりバックグラウンド/アプリ終了後もキューが継続処理される
 - [ ] Web で縮退設計がコンパイルエラーなく動作する
 - [ ] `flutter analyze` で今回由来のエラーが 0 件
 - [ ] `flutter test` が全成功
@@ -307,26 +307,26 @@ stateDiagram-v2
 ### 11.1 実装ブロッカー状態
 **ブロッカー: 0 件**。全 11 項目を解決（解決ログは 12 章）。承認後に code モードで実装可能。
 
-### 11.2 workmanager の最終決定と根拠（0.9.x 系）
-**決定**: **Android のみ workmanager 0.9.x を導入してバックグラウンド継続ダウンロードに対応。iOS/Windows/Linux/macOS/Web はフォアグラウンドワーカーのみ（縮退）。Web/Linux の experimental パッケージは採用せず除外。**
+### 11.2 workmanager の最終決定と根拠（0.10.x 系・実装実態）
+**決定**: **Android のみ workmanager 0.10.x を導入してバックグラウンド継続ダウンロードに対応。iOS/Windows/Linux/macOS/Web はフォアグラウンドワーカーのみ（縮退）。Web/Linux の experimental パッケージは採用せず除外。**
 
-**採用バージョン**: `workmanager: ^0.9.0`（解決版 = **0.9.0+3**、最新安定版）。初版案の `^0.5.2` は 2 世代古いため修正。
-- **Dart SDK 互換性**: 0.9.x 系は `sdk: '>=3.3.0 <4.0.0'`（Flutter >= 3.22 相当）を要求し、本プロジェクトの `sdk: ^3.12.0` を満たす。最終的な解決バージョンは実装時 `flutter pub add workmanager` でロックファイルに固定。
+**採用バージョン**: `workmanager: ^0.10.9`（解決版 = **0.10.9**）。初版案の `^0.5.2` → 修正案 `^0.9.0` を経て、最終実装では `^0.10.9` に更新した。
+- **Dart SDK 互換性**: 0.10.x 系は本プロジェクトの `sdk: ^3.12.0` を満たす。解決バージョンは `pubspec.lock` 固定（0.10.9 / workmanager_android 0.10.8 / workmanager_apple 0.9.10）。
 
 **根拠（具体的事実）**:
-1. `pubspec.yaml` に `workmanager` は **未導入** → Phase 2 で `workmanager: ^0.9.0` を追加。federated 化済みのため、meta パッケージ導入で `workmanager_platform_interface` / `workmanager_android` / `workmanager_apple` が透過的に解決される（別途手動追加は不要）。
+1. `pubspec.yaml` に `workmanager` は **未導入** → Phase 2 で `workmanager: ^0.10.9` を追加。federated 化済みのため、meta パッケージ導入で `workmanager_platform_interface` / `workmanager_android` / `workmanager_apple` が透過的に解決される（別途手動追加は不要）。
 2. [`android/app/src/main/AndroidManifest.xml`](pixiv_viewer/android/app/src/main/AndroidManifest.xml): `FOREGROUND_SERVICE` 権限・`FOREGROUND_SERVICE_DATA_SYNC` 権限・service の `foregroundServiceType` いずれも **未宣言** → 導入時にマニフェスト追記が必要（11.3 で具体化）。
 3. [`android/app/build.gradle.kts`](pixiv_viewer/android/app/build.gradle.kts): `targetSdk = flutter.targetSdkVersion`（Flutter 既定は API 34 以上の傾向）→ **Android 14(API 34) の FGS type 要件が発動**する環境を前提とする。
-4. 0.9.x の技術的ブロッカーは **なし**: パッケージは実在・保守中。Android 初期化クラッシュ(#645)・周期タスク頻度バグ(#622) は 0.9.x で修正済み。iOS の BGTask は別フェーズとし、Android 優先で導入。
+4. 0.10.x の技術的ブロッカーは **なし**: パッケージは実在・保守中。Android 初期化クラッシュ(#645)・周期タスク頻度バグ(#622) は既に修正済み。iOS の BGTask は別フェーズとし、Android 優先で導入。
 
-**0.9.x の破壊的変更への対応（詳細は 11.6）**: federated 化、pigeon 内部化、`inputData` が JSON 文字列からネイティブ `Map` 転送へ変更、`OutOfQuotaPolicy` 命名変更（`run_as_non_expedited_work_request` → `runAsNonExpeditedWorkRequest`）。
+**0.10.x の破壊的変更への対応（詳細は 11.6）**: federated 化、pigeon 内部化、`inputData` が JSON 文字列からネイティブ `Map` 転送へ変更、`OutOfQuotaPolicy` 命名（`runAsNonExpeditedWorkRequest`）。
 
 **代替案（採用せず）**: フォアグラウンドのみ（workmanager 非導入）→ ユーザー指示により却下。Web/Linux experimental 採用 → 不安定なため却下（11.4）。
 
 ### 11.3 Android 14+ Foreground Service（TYPE_DATA_SYNC）対応方針
-workmanager 0.9.x でも長時間ダウンロードをバックグラウンド実行する際、Android 14(API 34) 以降は以下が必須（0.9.x でも要件は変わらず継続）:
+workmanager 0.10.x でも長時間ダウンロードをバックグラウンド実行する際、Android 14(API 34) 以降は以下が必須（バージョンによらず要件は継続）:
 1. **権限追加**（`AndroidManifest.xml`）: `FOREGROUND_SERVICE` と `FOREGROUND_SERVICE_DATA_SYNC`。
-2. **service の type 宣言**: workmanager プラグイン（0.9.x は `workmanager_android`）が宣言する DispatcherService に対し、アプリ側 `AndroidManifest.xml` で `tools:replace` を用いて `android:foregroundServiceType="dataSync"` を付与（プラグイン既定では type 未宣言のため、Android 14 で `SecurityException` を防ぐ）。対象 service 名は実装時に `workmanager_android` の AndroidManifest で確認。
+2. **service の type 宣言**: workmanager プラグイン（0.10.x は `workmanager_android`）が宣言する DispatcherService に対し、アプリ側 `AndroidManifest.xml` で `tools:replace` を用いて `android:foregroundServiceType="dataSync"` を付与（プラグイン既定では type 未宣言のため、Android 14 で `SecurityException` を防ぐ）。対象 service 名は実装時に `workmanager_android` の AndroidManifest で確認。
 3. **フォアグラウンド実行**: `WorkManager` の `setForegroundAsync(ForegroundInfo(...))` で通知付き実行。通知チャネル `pixiv_viewer_download` を作成。
 4. **互換性**: Android < 14 は `FOREGROUND_SERVICE` 権限のみで動作。`FOREGROUND_SERVICE_DATA_SYNC` は 14+ のみ参照される安全な権限。
 5. **iOS**: `workmanager_apple` は存在するが Phase 2 では初期化せず（BGTaskScheduler 連携は複雑なため別フェーズ）、iOS はフォアグラウンドのみ。
@@ -345,8 +345,8 @@ workmanager 0.9.x でも長時間ダウンロードをバックグラウンド�
 ### 11.5 変更前後の差分サマリ（design doc v1→v2→v3）
 | 項目 | v1（11ブロッカー） | v2（0ブロッカー） | v3（本版・0ブロッカー） |
 |------|---------------------------|---------------------------|---------------------------|
-| workmanager バージョン | 未指定 | `^0.5.2`（2世代古い） | **`^0.9.0`（0.9.0+3、最新安定）** |
-| バックグラウンド実行 | workmanager 非採用（フォアグラウンドのみ） | Android は workmanager 採用 / 他OS フォアグラウンドのみ | **Android は workmanager 0.9.x 採用 / 他OS フォアグラウンドのみ** |
+| workmanager バージョン | 未指定 | `^0.5.2`（2世代古い） | **`^0.10.9`（解決 0.10.9・最終実装）** |
+| バックグラウンド実行 | workmanager 非採用（フォアグラウンドのみ） | Android は workmanager 採用 / 他OS フォアグラウンドのみ | **Android は workmanager 0.10.x 採用 / 他OS フォアグラウンドのみ** |
 | Web/Linux experimental | — | 言及なし | **experimental 採用せず除外（11.4）** |
 | うごイラ | GIF 未実装で「実装ブロッカー」扱い | ZIP 保存のみ（メタデータ保持）、GIF 変換は除外項目へ | 同左（維持） |
 | ストレージ残量 | 実装ブロッカー扱い | 実装ブロッカーではない → 除外項目 | 同左（維持） |
@@ -360,7 +360,7 @@ workmanager 0.9.x でも長時間ダウンロードをバックグラウンド�
 | http.Client 並行制限 | 実機検証要（ブロッカー） | `maxConcurrent=3` で上限制御を明示方針に | 同左（維持） |
 | **合計ブロッカー** | **11 件** | **0 件** | **0 件** |
 
-### 11.6 workmanager 0.9.x API 例とセットアップ手順
+### 11.6 workmanager 0.10.x API 例とセットアップ手順（実装コード一致版）
 
 **pubspec.yaml（最終依存指定）**:
 ```yaml
@@ -368,50 +368,50 @@ dependencies:
   flutter:
     sdk: flutter
   # ...既存...
-  workmanager: ^0.9.0   # 解決: 0.9.0+3（最新安定）。federated 化済み
+  workmanager: ^0.10.9  # 解決: 0.10.9。federated 化済み
 ```
 - 別途 `workmanager_platform_interface` / `workmanager_android` / `workmanager_apple` の手動追加は不要（meta パッケージが透過的に解決）。
 - Web/Linux 用 experimental（`workmanager_web` / `workmanager_linux`）は **追加しない**。
 
-**Dart 初期化（0.9.x pigeon ベース）**:
+**Dart 初期化（0.10.x pigeon ベース・実装コードと同一）**:
 ```dart
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
-    // inputData は 0.9.x ではネイティブ Map<String, dynamic>?（JSON 文字列ではない）
+    // inputData はネイティブ Map<String, dynamic>?（JSON 文字列ではない）
     await DownloadService().runBackgroundOnce(inputData);
-    return Future.value(true);
+    return true;
   });
 }
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // 0.9.x: Android のみ初期化・登録。他OSは初期化しない（no-op）
+  // 0.10.x: Android のみ初期化・登録。他OSは初期化しない（no-op）
   if (Platform.isAndroid) {
-    Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
-    _registerDownloadWorker();
+    await Workmanager().initialize(callbackDispatcher);
+    await DownloadService().registerBackgroundTaskIfAndroid();
   }
   runApp(const MyApp());
 }
 ```
 
-**タスク登録（0.9.x）**:
+**タスク登録（0.10.x・実装コードと同一）**:
 ```dart
-void _registerDownloadWorker() {
-  Workmanager().registerOneOffTask(
-    'pixivDownload',          // taskName
-    'pixivDownload',          // uniqueName
-    inputData: <String, dynamic>{'type': 'queue'}, // 0.9.x: ネイティブ Map を直接渡す
+Future<void> registerBackgroundTaskIfAndroid() async {
+  if (kIsWeb || !Platform.isAndroid) return;
+  await Workmanager().registerOneOffTask(
+    'pixiv_download_queue',   // taskName
+    'pixiv_download_queue',   // uniqueName
     constraints: Constraints(networkType: NetworkType.connected),
-    existingWorkPolicy: ExistingWorkPolicy.append,
-    outOfQuotaPolicy: OutOfQuotaPolicy.runAsNonExpeditedWorkRequest, // 0.9.x 命名
+    existingWorkPolicy: ExistingWorkPolicy.keep, // 既存タスクは維持
+    outOfQuotaPolicy: OutOfQuotaPolicy.runAsNonExpeditedWorkRequest,
   );
 }
 ```
-- `OutOfQuotaPolicy` の命名は 0.9.x で `runAsNonExpeditedWorkRequest`（camelCase）に変更済み。
-- `inputData` は 0.9.x で JSON 文字列からネイティブ `Map` 転送（pigeon）に変更。呼び元でも `Map` のまま渡し、受け側で `jsonDecode` 不要。
+- `OutOfQuotaPolicy` の命名は `runAsNonExpeditedWorkRequest`（camelCase）。
+- `inputData` は JSON 文字列からネイティブ `Map` 転送（pigeon）に変更済み。受け側で `jsonDecode` 不要（本実装では inputData を使用しない）。
 
-**AndroidManifest.xml（0.9.x 用・11.3 の具体化）**:
+**AndroidManifest.xml（0.10.x 用・11.3 の具体化・実装済み）**:
 ```xml
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
@@ -424,7 +424,7 @@ void _registerDownloadWorker() {
     tools:replace="android:foregroundServiceType" />
 ```
 - service 名は実装時に `workmanager_android` パッケージの AndroidManifest を参照して確定。
-- `MainActivity.kt`（または `Application` クラス）側の特別な初期化コードは 0.9.x では不要（#645 の初回起動クラッシュは修正済み。Dart 側 `Workmanager().initialize()` のみ）。
+- `MainActivity.kt`（または `Application` クラス）側の特別な初期化コードは 0.10.x でも不要（#645 の初回起動クラッシュは修正済み。Dart 側 `Workmanager().initialize()` のみ）。
 
 ---
 
@@ -432,7 +432,7 @@ void _registerDownloadWorker() {
 
 | # | 元ブロッカー | 解決方針 | ステータス |
 |---|------------|---------|----------|
-| 1 | workmanager 非採用の妥当性 | ユーザー指示: Android は workmanager 採用。0.9.x 系（0.9.0+3）を指定。技術ブロッカーなし（根拠 11.2）。Web/Linux experimental は除外 | 解決 |
+| 1 | workmanager 非採用の妥当性 | ユーザー指示: Android は workmanager 採用。最終実装は 0.10.x 系（0.10.9）。技術ブロッカーなし（根拠 11.2）。Web/Linux experimental は除外 | 解決 |
 | 2 | うごイラ GIF 変換 | ZIP 保存のみ（メタデータ保持）、GIF 変換は除外項目（11.4） | 解決 |
 | 3 | ストレージ残量チェック | 実装ブロッカーではない。手動確認UIのみとし除外項目へ | 解決 |
 | 4 | 認証ヘッダー伝播（force） | `PixivHttpClient.getAccessToken(refreshToken, force: true)` を追加。既存呼び出しは `force` 省略で従来動作維持 | 解決 |
@@ -450,9 +450,9 @@ void _registerDownloadWorker() {
 
 | ファイル | 変更種別 |
 |---------|--------|
-| `pubspec.yaml` | `workmanager: ^0.9.0` 追加（解決: 0.9.0+3）。federated のため platform パッケージの手動追加不要 |
+| `pubspec.yaml` | `workmanager: ^0.10.9` 追加（解決: 0.10.9）。federated のため platform パッケージの手動追加不要 |
 | `android/app/src/main/AndroidManifest.xml` | `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` 権限、DispatcherService の `foregroundServiceType=dataSync` 宣言、通知チャネル |
-| `lib/main.dart`（または Application 初期化箇所） | `Workmanager().initialize()` を `Platform.isAndroid` ガードで呼び出し（0.9.x pigeon の callbackDispatcher） |
+| `lib/main.dart`（または Application 初期化箇所） | `Workmanager().initialize()` を `Platform.isAndroid` ガードで呼び出し（0.10.x pigeon の callbackDispatcher） |
 | `lib/services/database_service.dart` | `download_queues` 作成 + v17 マイグレーション + `_ensureTablesExist` |
 | `lib/services/database_search.dart` | `exportAllData`/`importAllData` に `download_queues` 追加 |
 | `lib/services/download_service.dart` | キュー永続化・同時制御・リトライ・キャンセル・復旧・workmanager バックグラウンド起動（`runBackgroundOnce`） |
