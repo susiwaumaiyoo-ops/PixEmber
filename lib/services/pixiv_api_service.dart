@@ -6,8 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'database_service.dart';
 import 'pixiv_api_http.dart';
 import '../illust_model.dart';
-import '../novel_model.dart';
 import '../models/search_filter.dart';
+import '../models/trending_tag.dart';
+import '../models/user_model.dart';
+import '../novel_model.dart';
 
 /// 429 Rate Limit エラー用のカスタム例外クラス
 class RateLimitException implements Exception {
@@ -1190,6 +1192,335 @@ class PixivApiService {
   }
 
   /// リフレッシュトークンを登録（永続化）
+  /// ユーザーがブックマークしたイラスト一覧を取得
+  Future<FetchResult<Illust>> getUserBookmarks({
+    int offset = 0,
+    String xRestrict = 'all',
+    String? tag,
+  }) async {
+    try {
+      final params = <String, String>{
+        'user_id': 'me',
+        'restrict': 'public',
+        'offset': offset.toString(),
+        'filter': 'for_android',
+        'x_restrict': xRestrict,
+      };
+      if (tag != null && tag.isNotEmpty) {
+        params['tag'] = tag;
+      }
+      final body = await _get('/v1/user/bookmarks/illust', params: params);
+      final items = await filterIllustsIsolated(body, xRestrict: xRestrict);
+      return _wrap(items: items, rawBody: body);
+    } on RateLimitException {
+      rethrow;
+    } on AuthException {
+      rethrow;
+    } on Exception catch (e) {
+      debugPrint('[API] getUserBookmarks failed: offset=$offset, error=$e');
+      return const FetchResult<Illust>(items: []);
+    }
+  }
+
+  /// ユーザーがブックマークした小説一覧を取得
+  Future<FetchResult<Novel>> getUserBookmarkNovels({
+    int offset = 0,
+    String xRestrict = 'all',
+    String? tag,
+  }) async {
+    try {
+      final params = <String, String>{
+        'user_id': 'me',
+        'restrict': 'public',
+        'offset': offset.toString(),
+        'x_restrict': xRestrict,
+      };
+      if (tag != null && tag.isNotEmpty) {
+        params['tag'] = tag;
+      }
+      final body = await _get('/v1/user/bookmarks/novel', params: params);
+      final items = await filterNovelsIsolated(body, xRestrict: xRestrict);
+      return _wrap(items: items, rawBody: body);
+    } on RateLimitException {
+      rethrow;
+    } on AuthException {
+      rethrow;
+    } on Exception catch (e) {
+      debugPrint(
+        '[API] getUserBookmarkNovels failed: offset=$offset, error=$e',
+      );
+      return const FetchResult<Novel>(items: []);
+    }
+  }
+
+  /// フォロー中イラスト一覧を取得
+  Future<FetchResult<Illust>> getFollowedIllusts({
+    int offset = 0,
+    String xRestrict = 'all',
+  }) async {
+    try {
+      final body = await _get(
+        '/v2/illust/follow',
+        params: {
+          'offset': offset.toString(),
+          'filter': 'for_android',
+          'x_restrict': xRestrict,
+        },
+      );
+      final items = await filterIllustsIsolated(body, xRestrict: xRestrict);
+      return _wrap(items: items, rawBody: body);
+    } on RateLimitException {
+      rethrow;
+    } on AuthException {
+      rethrow;
+    } on Exception catch (e) {
+      debugPrint('[API] getFollowedIllusts failed: offset=$offset, error=$e');
+      return const FetchResult<Illust>(items: []);
+    }
+  }
+
+  /// フォロー中新着一覧を取得
+  Future<FetchResult<Novel>> getFollowedNovels({
+    int offset = 0,
+    String xRestrict = 'all',
+  }) async {
+    try {
+      final body = await _get(
+        '/v1/novel/follow',
+        params: {
+          'offset': offset.toString(),
+          'filter': 'for_android',
+          'x_restrict': xRestrict,
+        },
+      );
+      final items = await filterNovelsIsolated(body, xRestrict: xRestrict);
+      return _wrap(items: items, rawBody: body);
+    } on RateLimitException {
+      rethrow;
+    } on AuthException {
+      rethrow;
+    } on Exception catch (e) {
+      debugPrint('[API] getFollowedNovels failed: offset=$offset, error=$e');
+      return const FetchResult<Novel>(items: []);
+    }
+  }
+
+  /// 新着イラスト一覧を取得
+  Future<FetchResult<Illust>> getNewIllusts({
+    int offset = 0,
+    String xRestrict = 'all',
+  }) async {
+    try {
+      final body = await _get(
+        '/v1/illust/new',
+        params: {
+          'offset': offset.toString(),
+          'filter': 'for_android',
+          'x_restrict': xRestrict,
+        },
+      );
+      final items = await filterIllustsIsolated(body, xRestrict: xRestrict);
+      return _wrap(items: items, rawBody: body);
+    } on RateLimitException {
+      rethrow;
+    } on AuthException {
+      rethrow;
+    } on Exception catch (e) {
+      debugPrint('[API] getNewIllusts failed: offset=$offset, error=$e');
+      return const FetchResult<Illust>(items: []);
+    }
+  }
+
+  /// 新着小説一覧を取得
+  Future<FetchResult<Novel>> getNewNovels({
+    int offset = 0,
+    String xRestrict = 'all',
+  }) async {
+    try {
+      final body = await _get(
+        '/v1/novel/new',
+        params: {
+          'offset': offset.toString(),
+          'filter': 'for_android',
+          'x_restrict': xRestrict,
+        },
+      );
+      final items = await filterNovelsIsolated(body, xRestrict: xRestrict);
+      return _wrap(items: items, rawBody: body);
+    } on RateLimitException {
+      rethrow;
+    } on AuthException {
+      rethrow;
+    } on Exception catch (e) {
+      debugPrint('[API] getNewNovels failed: offset=$offset, error=$e');
+      return const FetchResult<Novel>(items: []);
+    }
+  }
+
+  /// トレンドタグ一覧を取得
+  Future<List<TrendingTag>> getTrendingTags(String type) async {
+    try {
+      final body = await _get('/v1/trending-tags/$type');
+      final data = jsonDecode(body) as Map<String, dynamic>;
+      final tagsJson = data['trend_tags'] as List<dynamic>? ?? const [];
+      return tagsJson
+          .map((e) => TrendingTag.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on RateLimitException {
+      rethrow;
+    } on AuthException {
+      rethrow;
+    } on Exception catch (e) {
+      debugPrint('[API] getTrendingTags failed: type=$type, error=$e');
+      return const <TrendingTag>[];
+    }
+  }
+
+  /// フォロー中のユーザー一覧を取得
+  Future<FetchResult<User>> getFollowedUsers({
+    int offset = 0,
+    bool restrictPublic = true,
+  }) async {
+    try {
+      final body = await _get(
+        '/v1/user/following',
+        params: {
+          'user_id': 'me',
+          'restrict': restrictPublic ? 'public' : 'private',
+          'offset': offset.toString(),
+        },
+      );
+      final data = jsonDecode(body) as Map<String, dynamic>;
+      final usersJson = data['user_previews'] as List<dynamic>? ?? const [];
+      final items = usersJson
+          .map((e) => User.fromJson(e as Map<String, dynamic>))
+          .toList();
+      return _wrap(items: items, rawBody: body);
+    } on RateLimitException {
+      rethrow;
+    } on AuthException {
+      rethrow;
+    } on Exception catch (e) {
+      debugPrint('[API] getFollowedUsers failed: offset=$offset, error=$e');
+      return const FetchResult<User>(items: []);
+    }
+  }
+
+  /// おすすめユーザー一覧を取得
+  Future<FetchResult<User>> getRecommendedUsers({int offset = 0}) async {
+    try {
+      final body = await _get(
+        '/v1/user/recommended',
+        params: {'offset': offset.toString()},
+      );
+      final data = jsonDecode(body) as Map<String, dynamic>;
+      final usersJson = data['user_previews'] as List<dynamic>? ?? const [];
+      final items = usersJson
+          .map((e) => User.fromJson(e as Map<String, dynamic>))
+          .toList();
+      return _wrap(items: items, rawBody: body);
+    } on RateLimitException {
+      rethrow;
+    } on AuthException {
+      rethrow;
+    } on Exception catch (e) {
+      debugPrint('[API] getRecommendedUsers failed: offset=$offset, error=$e');
+      return const FetchResult<User>(items: []);
+    }
+  }
+
+  /// ユーザー検索
+  Future<FetchResult<User>> searchUsers(
+    String word, {
+    int offset = 0,
+    String? sort,
+  }) async {
+    try {
+      final params = <String, String>{
+        'word': word,
+        'offset': offset.toString(),
+        'filter': 'for_android',
+      };
+      if (sort != null && sort.isNotEmpty) {
+        params['sort'] = sort;
+      }
+      final body = await _get('/v1/search/user', params: params);
+      final data = jsonDecode(body) as Map<String, dynamic>;
+      final usersJson = data['user_previews'] as List<dynamic>? ?? const [];
+      final items = usersJson
+          .map((e) => User.fromJson(e as Map<String, dynamic>))
+          .toList();
+      final searchItem = _extractSearchItem(body);
+      return _wrap(items: items, rawBody: body, searchItem: searchItem);
+    } on RateLimitException {
+      rethrow;
+    } on AuthException {
+      rethrow;
+    } on Exception catch (e) {
+      debugPrint(
+        '[API] searchUsers failed: word=$word, offset=$offset, error=$e',
+      );
+      return const FetchResult<User>(items: []);
+    }
+  }
+
+  /// ピックアップ記事一覧を取得
+  Future<List<Map<String, dynamic>>> getSpotlightArticles({
+    String? category,
+    int offset = 0,
+  }) async {
+    try {
+      final params = <String, String>{'offset': offset.toString()};
+      if (category != null && category.isNotEmpty) {
+        params['category'] = category;
+      }
+      final body = await _get('/v1/spotlight/articles', params: params);
+      final data = jsonDecode(body) as Map<String, dynamic>;
+      final articles = data['articles'] as List<dynamic>? ?? const [];
+      return articles
+          .map((e) => (e as Map<String, dynamic>).cast<String, dynamic>())
+          .toList();
+    } on RateLimitException {
+      rethrow;
+    } on AuthException {
+      rethrow;
+    } on Exception catch (e) {
+      debugPrint('[API] getSpotlightArticles failed: offset=$offset, error=$e');
+      return const <Map<String, dynamic>>[];
+    }
+  }
+
+  /// フォロー中ユーザーの詳細情報を一覧取得
+  Future<List<Map<String, dynamic>>> getFollowedUserDetails({
+    int offset = 0,
+    bool restrictPublic = true,
+  }) async {
+    try {
+      final body = await _get(
+        '/v1/user/following/detail',
+        params: {
+          'user_id': 'me',
+          'restrict': restrictPublic ? 'public' : 'private',
+          'offset': offset.toString(),
+        },
+      );
+      final data = jsonDecode(body) as Map<String, dynamic>;
+      final usersJson = data['user_previews'] as List<dynamic>? ?? const [];
+      return usersJson
+          .map((e) => (e as Map<String, dynamic>).cast<String, dynamic>())
+          .toList();
+    } on RateLimitException {
+      rethrow;
+    } on AuthException {
+      rethrow;
+    } on Exception catch (e) {
+      debugPrint(
+        '[API] getFollowedUserDetails failed: offset=$offset, error=$e',
+      );
+      return const <Map<String, dynamic>>[];
+    }
+  }
+
   void setRefreshToken(String refreshToken) {
     SharedPreferences.getInstance().then((prefs) {
       prefs.setString('PIXIV_REFRESH_TOKEN', refreshToken);
