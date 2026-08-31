@@ -8,6 +8,82 @@ class HomeFilterHandler {
 
   HomeFilterHandler(this.state);
 
+  /// 起動時にフィルター設定を SharedPreferences から復元する。
+  /// 既存フィルター（filter_*）と Phase 2 新設フィルター
+  /// （filter_bookmark_num_min/max / filter_use_start_date /
+  /// filter_start_date / filter_use_end_date / filter_end_date）を含む。
+  Future<void> loadFilterPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // 新設フィルタのみ復元（既存の filter_* は従来どおりデフォルト値維持）
+      final minBm = prefs.getString('filter_bookmark_num_min');
+      if (minBm != null && minBm.isNotEmpty) {
+        state.minBookmarkNumController.text = minBm;
+      }
+      final maxBm = prefs.getString('filter_bookmark_num_max');
+      if (maxBm != null && maxBm.isNotEmpty) {
+        state.maxBookmarkNumController.text = maxBm;
+      }
+      final useStart = prefs.getBool('filter_use_start_date') ?? false;
+      final startRaw = prefs.getString('filter_start_date');
+      if (useStart && startRaw != null) {
+        final d = DateTime.tryParse(startRaw);
+        if (d != null) {
+          state.startDateTime = d;
+          state.useStartDate = true;
+        }
+      }
+      final useEnd = prefs.getBool('filter_use_end_date') ?? false;
+      final endRaw = prefs.getString('filter_end_date');
+      if (useEnd && endRaw != null) {
+        final d = DateTime.tryParse(endRaw);
+        if (d != null) {
+          state.endDateTime = d;
+          state.useEndDate = true;
+        }
+      }
+    } catch (e) {
+      debugPrint('フィルター設定読み込みエラー: $e');
+    }
+  }
+
+  /// Phase 2 新設フィルター（期間・日付範囲・ブックマーク数範囲）を保存する。
+  /// 公開メソッド: 日付ピッカーからの直接呼び出しにも使う。
+  Future<void> persistFilterPrefs() => _saveCommonFilterPrefs();
+
+  /// Phase 2 新設フィルターの保存（イラスト・小説シート共通キー）。
+  Future<void> _saveCommonFilterPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final minBm = state.minBookmarkNumController.text.trim();
+      final maxBm = state.maxBookmarkNumController.text.trim();
+      await prefs.setString('filter_bookmark_num_min', minBm);
+      await prefs.setString('filter_bookmark_num_max', maxBm);
+      await prefs.setBool('filter_use_start_date', state.useStartDate);
+      await prefs.setString(
+        'filter_start_date',
+        state.startDateTime?.toIso8601String() ?? '',
+      );
+      await prefs.setBool('filter_use_end_date', state.useEndDate);
+      await prefs.setString(
+        'filter_end_date',
+        state.endDateTime?.toIso8601String() ?? '',
+      );
+    } catch (e) {
+      debugPrint('共通フィルター設定保存エラー: $e');
+    }
+  }
+
+  /// 新設フィルター状態をリセットする（UI リセットボタン用）。
+  void resetCommonFilterState() {
+    state.minBookmarkNumController.clear();
+    state.maxBookmarkNumController.clear();
+    state.useStartDate = false;
+    state.useEndDate = false;
+    state.startDateTime = null;
+    state.endDateTime = null;
+  }
+
   // 一般フィルター設定を保存
   Future<void> _saveFilterPrefs() async {
     try {
@@ -21,6 +97,7 @@ class HomeFilterHandler {
     } catch (e) {
       debugPrint('フィルター設定保存エラー: $e');
     }
+    await _saveCommonFilterPrefs();
   }
 
   Future<void> _saveNovelFilterPrefs() async {
@@ -80,7 +157,186 @@ class HomeFilterHandler {
     } catch (e) {
       debugPrint('小説フィルター設定の保存に失敗: $e');
     }
+    await _saveCommonFilterPrefs();
   }
+
+  /// Phase 2 共通セクション（期間 / 日付範囲 / ブックマーク数範囲）。
+  /// イラスト・小説の両シートで同一の UI を使う。
+  /// [setModalState] はモダルの再描画用。
+  Widget _buildCommonFilterSection(
+    void Function(void Function()) setModalState,
+  ) {
+    // 日付範囲が有効なら duration を無視するため、その旨を補足表示する
+    final dateRangeActive =
+        state.useStartDate && state.startDateTime != null ||
+        state.useEndDate && state.endDateTime != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildFilterSectionTitle('期間'),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _buildChoiceChip(
+              label: 'すべて',
+              isSelected: state.selectedDuration == 'all',
+              onSelected: (bool value) {
+                setModalState(() {
+                  state.selectedDuration = 'all';
+                });
+                _saveFilterPrefs();
+              },
+            ),
+            _buildChoiceChip(
+              label: '1日以内',
+              isSelected: state.selectedDuration == '1d',
+              onSelected: (bool value) {
+                setModalState(() {
+                  state.selectedDuration = '1d';
+                });
+                _saveFilterPrefs();
+              },
+            ),
+            _buildChoiceChip(
+              label: '1週間以内',
+              isSelected: state.selectedDuration == '7d',
+              onSelected: (bool value) {
+                setModalState(() {
+                  state.selectedDuration = '7d';
+                });
+                _saveFilterPrefs();
+              },
+            ),
+            _buildChoiceChip(
+              label: '1ヶ月以内',
+              isSelected: state.selectedDuration == '30d',
+              onSelected: (bool value) {
+                setModalState(() {
+                  state.selectedDuration = '30d';
+                });
+                _saveFilterPrefs();
+              },
+            ),
+            _buildChoiceChip(
+              label: '半年以内',
+              isSelected: state.selectedDuration == '180d',
+              onSelected: (bool value) {
+                setModalState(() {
+                  state.selectedDuration = '180d';
+                });
+                _saveFilterPrefs();
+              },
+            ),
+            _buildChoiceChip(
+              label: '1年以内',
+              isSelected: state.selectedDuration == '365d',
+              onSelected: (bool value) {
+                setModalState(() {
+                  state.selectedDuration = '365d';
+                });
+                _saveFilterPrefs();
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(
+          dateRangeActive
+              ? '※ 日付範囲が設定されているため、期間は無視されます'
+              : 'API の duration パラメータとして送信されます',
+          style: TextStyle(color: Colors.grey[500], fontSize: 11),
+        ),
+        const SizedBox(height: 24),
+
+        _buildFilterSectionTitle('日付範囲（任意）'),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: state.pickStartDate,
+                icon: const Icon(Icons.calendar_today, size: 16),
+                label: Text(
+                  state.useStartDate && state.startDateTime != null
+                      ? _formatFilterDate(state.startDateTime!)
+                      : '開始日を選択',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: state.pickEndDate,
+                icon: const Icon(Icons.calendar_today, size: 16),
+                label: Text(
+                  state.useEndDate && state.endDateTime != null
+                      ? _formatFilterDate(state.endDateTime!)
+                      : '終了日を選択',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+            ),
+            if (state.useStartDate || state.useEndDate)
+              TextButton(
+                onPressed: () {
+                  setModalState(() {
+                    state.useStartDate = false;
+                    state.useEndDate = false;
+                    state.startDateTime = null;
+                    state.endDateTime = null;
+                  });
+                  _saveFilterPrefs();
+                },
+                child: const Text('クリア', style: TextStyle(fontSize: 12)),
+              ),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        _buildFilterSectionTitle('ブックマーク数範囲（任意）'),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: state.minBookmarkNumController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: '最小',
+                  hintText: '例: 1000',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onChanged: (_) => _saveFilterPrefs(),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: state.maxBookmarkNumController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: '最大',
+                  hintText: '例: 5000',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onChanged: (_) => _saveFilterPrefs(),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(
+          '従来の「Nusers入り」フィルターとは別の数値範囲指定です（API パラメータ bookmark_num_min / bookmark_num_max）',
+          style: TextStyle(color: Colors.grey[500], fontSize: 11),
+        ),
+      ],
+    );
+  }
+
+  String _formatFilterDate(DateTime d) =>
+      '${d.year}/${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}';
 
   // 小説専用検索フィルターボトムシートの表示
   void showNovelFilterBottomSheet() {
@@ -228,6 +484,10 @@ class HomeFilterHandler {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 24),
+
+                      // Phase 2: 共通フィルター（期間 / 日付範囲 / ブクマ数範囲）
+                      _buildCommonFilterSection(setModalState),
                       const SizedBox(height: 24),
 
                       // ソート順
@@ -816,55 +1076,9 @@ class HomeFilterHandler {
                       ),
                       const SizedBox(height: 24),
 
-                      // 時間帯
-                      _buildFilterSectionTitle('時間帯'),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _buildChoiceChip(
-                            label: '24時間',
-                            isSelected: state.selectedDuration == 'all',
-                            onSelected: (bool value) {
-                              setModalState(() {
-                                state.selectedDuration = 'all';
-                              });
-                              _saveFilterPrefs();
-                            },
-                          ),
-                          _buildChoiceChip(
-                            label: '過去24時間',
-                            isSelected: state.selectedDuration == '1d',
-                            onSelected: (bool value) {
-                              setModalState(() {
-                                state.selectedDuration = '1d';
-                              });
-                              _saveFilterPrefs();
-                            },
-                          ),
-                          _buildChoiceChip(
-                            label: '過去7日間',
-                            isSelected: state.selectedDuration == '7d',
-                            onSelected: (bool value) {
-                              setModalState(() {
-                                state.selectedDuration = '7d';
-                              });
-                              _saveFilterPrefs();
-                            },
-                          ),
-                          _buildChoiceChip(
-                            label: '過去30日間',
-                            isSelected: state.selectedDuration == '30d',
-                            onSelected: (bool value) {
-                              setModalState(() {
-                                state.selectedDuration = '30d';
-                              });
-                              _saveFilterPrefs();
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
+                      // NOTE: 従来の「時間帯」セクションは Phase 2 の共通セクション
+                      // （期間 / 日付範囲 / ブクマ数範囲、下部の _buildCommonFilterSection）
+                      // に統合されたため削除した。
 
                       // ソート順
                       _buildFilterSectionTitle('ソート順'),
@@ -944,6 +1158,8 @@ class HomeFilterHandler {
                           ),
                         ],
                       ),
+                      // Phase 2: 共通フィルター（期間 / 日付範囲 / ブクマ数範囲）
+                      _buildCommonFilterSection(setModalState),
                       const SizedBox(height: 32),
 
                       // リセットボタン
@@ -964,7 +1180,10 @@ class HomeFilterHandler {
                               state.selectedBookmarkFilter = 0;
                               state.selectedIllustAiFilter = 'all';
                               state.minBookmarkController.clear();
+                              // Phase 2: 共通フィルターもリセット
+                              resetCommonFilterState();
                             });
+                            persistFilterPrefs();
                           },
                           child: const Text(
                             'フィルターをリセット',

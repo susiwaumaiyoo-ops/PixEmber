@@ -7,6 +7,7 @@ import 'database_service.dart';
 import 'pixiv_api_http.dart';
 import '../illust_model.dart';
 import '../novel_model.dart';
+import '../models/search_filter.dart';
 
 /// 429 Rate Limit エラー用のカスタム例外クラス
 class RateLimitException implements Exception {
@@ -555,6 +556,68 @@ class PixivApiService {
     return _wrap(items: items, rawBody: body);
   }
 
+  /// 検索リクエストパラメータを組み立てる（純粋関数・単体テスト用）。
+  ///
+  /// searchIllust / searchNovel が共通するパラメータ構築ロジックを
+  /// 抽出したもので、単体テストで「URLパラメータに含まれるか」を検証できる。
+  static Map<String, String> buildSearchParams({
+    required String word,
+    required String searchTarget,
+    required bool isNovel,
+    required String sort,
+    required int offset,
+    int bookmarkFilter = 0,
+    String xRestrict = 'all',
+    String? duration,
+    DateTime? startDate,
+    DateTime? endDate,
+    int? bookmarkNumMin,
+    int? bookmarkNumMax,
+    int? startTextLength,
+    int? endTextLength,
+  }) {
+    // main.py 互換: bookmark_filter / x_restrict の検索ワード書き換え
+    var effectiveWord = word;
+    if (bookmarkFilter > 0) {
+      effectiveWord = '$effectiveWord ${bookmarkFilter}users入り';
+    }
+    final xLower = xRestrict.toLowerCase();
+    if (xLower == 'r18') {
+      effectiveWord = '$effectiveWord R-18';
+    }
+    final params = <String, String>{
+      'word': effectiveWord,
+      'search_target': normalizeSearchTarget(searchTarget, isNovel: isNovel),
+      'sort': sort,
+      'offset': offset.toString(),
+      'filter': 'for_android',
+    };
+    // 小説の文字数制限
+    if (startTextLength != null) {
+      params['start_text_length'] = startTextLength.toString();
+    }
+    if (endTextLength != null) {
+      params['end_text_length'] = endTextLength.toString();
+    }
+    // 日付範囲が指定されていれば duration より優先して送信する。
+    if (SearchFilter.hasDateRange(startDate, endDate)) {
+      final start = SearchFilter.startDateTimeToUnixSeconds(startDate);
+      final end = SearchFilter.endDateTimeToUnixSeconds(endDate);
+      if (start != null) params['start_date'] = start.toString();
+      if (end != null) params['end_date'] = end.toString();
+    } else {
+      final apiDuration = SearchFilter.durationToApiValue(duration);
+      if (apiDuration != null) params['duration'] = apiDuration;
+    }
+    if (bookmarkNumMin != null && bookmarkNumMin > 0) {
+      params['bookmark_num_min'] = bookmarkNumMin.toString();
+    }
+    if (bookmarkNumMax != null && bookmarkNumMax > 0) {
+      params['bookmark_num_max'] = bookmarkNumMax.toString();
+    }
+    return params;
+  }
+
   /// pixiv App-API が受け付ける search_target の有効値。
   static const Set<String> illustSearchTargets = {
     'partial_match_for_tags',
@@ -578,6 +641,13 @@ class PixivApiService {
   }
 
   /// イラスト検索
+  ///
+  /// 新規プレミアム相当パラメータ（すべて optional。null で既存動作を維持）:
+  /// - [duration]: within_last_day / within_last_week / within_last_month /
+  ///   within_last_halfyear / within_last_year
+  /// - [startDate]/[endDate]: 日付範囲（ローカル日付で指定。内部で Unix 秒へ変換）。
+  ///   指定時は [duration] より優先され、duration は送信しない。
+  /// - [bookmarkNumMin]/[bookmarkNumMax]: ブックマーク数範囲
   Future<FetchResult<Illust>> searchIllust(
     String word,
     String searchTarget,
@@ -586,38 +656,38 @@ class PixivApiService {
     String xRestrict, {
     int bookmarkFilter = 0,
     String? workType,
+    String? duration,
+    DateTime? startDate,
+    DateTime? endDate,
+    int? bookmarkNumMin,
+    int? bookmarkNumMax,
   }) async {
-    // main.py 互換: bookmark_filter / x_restrict の検索ワード書き換え
-    var effectiveWord = word;
-    if (bookmarkFilter > 0) {
-      effectiveWord = '$effectiveWord ${bookmarkFilter}users入り';
-    }
-    final xLower = xRestrict.toLowerCase();
-    // 'r18'（R-18のみ）の場合のみワードに "R-18" を付与（絞り込み強化）。
-    // 'include_r18'（R-18含む）は全年齢+R-18 混合なのでワード追加は不要。
-    if (xLower == 'r18') {
-      effectiveWord = '$effectiveWord R-18';
-    }
+    // NOTE: /v1/search/illust に x_restrict 検索パラメータは存在しない。
+    // R-18 が結果に出るかはアカウントの年齢確認・表示設定に依存する。
+    // 作品単位の R-18 判定はレスポンスの x_restrict フィールドで
+    // クライアント側フィルタ（filterIllustsIsolated）が行う。
+    final params = buildSearchParams(
+      word: word,
+      searchTarget: searchTarget,
+      isNovel: false,
+      sort: sort,
+      offset: offset,
+      bookmarkFilter: bookmarkFilter,
+      xRestrict: xRestrict,
+      duration: duration,
+      startDate: startDate,
+      endDate: endDate,
+      bookmarkNumMin: bookmarkNumMin,
+      bookmarkNumMax: bookmarkNumMax,
+    );
     debugPrint(
-      '[API] searchIllust: word="$effectiveWord" (original: "$word"), '
-      'xRestrict=$xRestrict, bookmarkFilter=$bookmarkFilter, workType=$workType',
+      '[API] searchIllust: word="$word", xRestrict=$xRestrict, '
+      'bookmarkFilter=$bookmarkFilter, workType=$workType, '
+      'duration=$duration, startDate=$startDate, endDate=$endDate, '
+      'bookmarkNumMin=$bookmarkNumMin, bookmarkNumMax=$bookmarkNumMax',
     );
 
-    final body = await _get(
-      '/v1/search/illust',
-      params: {
-        'word': effectiveWord,
-        // 'partial_match_for_tags' / 'exact_match_for_tags' / 'title_and_caption'
-        'search_target': normalizeSearchTarget(searchTarget, isNovel: false),
-        'sort': sort, // 'date_desc', 'date_asc', 'popular_desc'
-        'offset': offset.toString(),
-        'filter': 'for_android',
-        // NOTE: /v1/search/illust に x_restrict 検索パラメータは存在しない。
-        // R-18 が結果に出るかはアカウントの年齢確認・表示設定に依存する。
-        // 作品単位の R-18 判定はレスポンスの x_restrict フィールドで
-        // クライアント側フィルタ（filterIllustsIsolated）が行う。
-      },
-    );
+    final body = await _get('/v1/search/illust', params: params);
     final items = await filterIllustsIsolated(
       body,
       xRestrict: xRestrict,
@@ -692,6 +762,13 @@ class PixivApiService {
   }
 
   /// 小説検索
+  ///
+  /// 新規プレミアム相当パラメータ（すべて optional。null で既存動作を維持）:
+  /// - [duration]: within_last_day / within_last_week / within_last_month /
+  ///   within_last_halfyear / within_last_year
+  /// - [startDate]/[endDate]: 日付範囲（ローカル日付で指定。内部で Unix 秒へ変換）。
+  ///   指定時は [duration] より優先され、duration は送信しない。
+  /// - [bookmarkNumMin]/[bookmarkNumMax]: ブックマーク数範囲
   Future<FetchResult<Novel>> searchNovel(
     String word,
     String searchTarget,
@@ -701,38 +778,39 @@ class PixivApiService {
     int? minLength,
     int? maxLength, {
     int bookmarkFilter = 0,
+    String? duration,
+    DateTime? startDate,
+    DateTime? endDate,
+    int? bookmarkNumMin,
+    int? bookmarkNumMax,
   }) async {
-    // main.py 互換: bookmark_filter / x_restrict の検索ワード書き換え
-    var effectiveWord = word;
-    if (bookmarkFilter > 0) {
-      effectiveWord = '$effectiveWord ${bookmarkFilter}users入り';
-    }
-    final xLower = xRestrict.toLowerCase();
-    if (xLower == 'r18') {
-      effectiveWord = '$effectiveWord R-18';
-    }
-    debugPrint(
-      '[API] searchNovel: word="$effectiveWord" (original: "$word"), '
-      'xRestrict=$xRestrict, bookmarkFilter=$bookmarkFilter, '
-      'minLength=$minLength, maxLength=$maxLength',
+    // NOTE: /v1/search/novel に x_restrict 検索パラメータは存在しない。
+    // R-18 が結果に出るかはアカウントの年齢確認・表示設定に依存する。
+    // 作品単位の R-18 判定はレスポンスの x_restrict フィールドで
+    // クライアント側フィルタ（filterNovelsIsolated）が行う。
+    final params = buildSearchParams(
+      word: word,
+      searchTarget: searchTarget,
+      isNovel: true,
+      sort: sort,
+      offset: offset,
+      bookmarkFilter: bookmarkFilter,
+      xRestrict: xRestrict,
+      duration: duration,
+      startDate: startDate,
+      endDate: endDate,
+      bookmarkNumMin: bookmarkNumMin,
+      bookmarkNumMax: bookmarkNumMax,
+      startTextLength: minLength,
+      endTextLength: maxLength,
     );
-
-    final params = {
-      'word': effectiveWord,
-      // 小説は text / keyword も指定可能
-      'search_target': normalizeSearchTarget(searchTarget, isNovel: true),
-      'sort': sort,
-      'offset': offset.toString(),
-      'filter': 'for_android',
-      // NOTE: /v1/search/novel に x_restrict 検索パラメータは存在しない。
-      // R-18 が結果に出るかはアカウントの年齢確認・表示設定に依存する。
-      // 作品単位の R-18 判定はレスポンスの x_restrict フィールドで
-      // クライアント側フィルタ（filterNovelsIsolated）が行う。
-    };
-
-    // 文字数制限
-    if (minLength != null) params['start_text_length'] = minLength.toString();
-    if (maxLength != null) params['end_text_length'] = maxLength.toString();
+    debugPrint(
+      '[API] searchNovel: word="$word", '
+      'xRestrict=$xRestrict, bookmarkFilter=$bookmarkFilter, '
+      'minLength=$minLength, maxLength=$maxLength, '
+      'duration=$duration, startDate=$startDate, endDate=$endDate, '
+      'bookmarkNumMin=$bookmarkNumMin, bookmarkNumMax=$bookmarkNumMax',
+    );
 
     final body = await _get('/v1/search/novel', params: params);
     final items = await filterNovelsIsolated(body, xRestrict: xRestrict);

@@ -131,6 +131,74 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   // イラスト AI フィルター（アプリ内ローカルで適用）: all, hide, only
   String selectedIllustAiFilter = 'all';
 
+  // ===== 検索リビルド Phase 2: 新規フィルター状態（イラスト・小説共通）=====
+  // ブックマーク数範囲（API パラメータ bookmark_num_min/max の数値範囲指定）
+  late final TextEditingController minBookmarkNumController =
+      TextEditingController();
+  late final TextEditingController maxBookmarkNumController =
+      TextEditingController();
+  // 日付範囲指定（duration より優先して API の start_date/end_date に送信）
+  bool useStartDate = false;
+  bool useEndDate = false;
+  DateTime? startDateTime;
+  DateTime? endDateTime;
+
+  /// 有効なブックマーク数下限（空 or 0 以下なら null=指定なし）
+  int? get effectiveBookmarkNumMin {
+    final v = int.tryParse(minBookmarkNumController.text.trim());
+    return (v != null && v > 0) ? v : null;
+  }
+
+  /// 有効なブックマーク数上限（空 or 0 以下なら null=指定なし）
+  int? get effectiveBookmarkNumMax {
+    final v = int.tryParse(maxBookmarkNumController.text.trim());
+    return (v != null && v > 0) ? v : null;
+  }
+
+  DateTime? get effectiveStartDate => useStartDate ? startDateTime : null;
+
+  DateTime? get effectiveEndDate => useEndDate ? endDateTime : null;
+
+  /// 開始日ピッカーを開く。
+  Future<void> pickStartDate() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: uiContext,
+      initialDate: startDateTime ?? DateTime(now.year, now.month, now.day - 30),
+      firstDate: DateTime(2010, 1, 1),
+      lastDate: DateTime(now.year, now.month, now.day + 1),
+      helpText: '開始日を選択',
+      cancelText: 'キャンセル',
+      confirmText: '確定',
+    );
+    if (date == null) return;
+    applyState(() {
+      startDateTime = date;
+      useStartDate = true;
+    });
+    _filterHandler.persistFilterPrefs();
+  }
+
+  /// 終了日ピッカーを開く。
+  Future<void> pickEndDate() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: uiContext,
+      initialDate: endDateTime ?? now,
+      firstDate: DateTime(2010, 1, 1),
+      lastDate: DateTime(now.year, now.month, now.day + 1),
+      helpText: '終了日を選択',
+      cancelText: 'キャンセル',
+      confirmText: '確定',
+    );
+    if (date == null) return;
+    applyState(() {
+      endDateTime = date;
+      useEndDate = true;
+    });
+    _filterHandler.persistFilterPrefs();
+  }
+
   // 小説専用の検索フィルター設定
   String selectedNovelSearchTarget =
       'all_text'; // all_text(全文検索：タグ + 本文), partial_match_for_tags, exact_match_for_tags, text
@@ -264,6 +332,8 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
 
     _loadSearchHistory();
     _initializeDriveSync();
+    // Phase 2: 新設フィルター（期間 / 日付範囲 / ブクマ数範囲）を復元
+    _filterHandler.loadFilterPrefs();
     fetchData();
     _loadLocalBookmarkIds();
 
@@ -298,6 +368,9 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     maxSeriesTextLengthController?.dispose();
     _excludeTagController?.dispose();
     minBookmarkController.dispose();
+    // Phase 2: 新規フィルター用コントローラ
+    minBookmarkNumController.dispose();
+    maxBookmarkNumController.dispose();
     _syncTimer?.cancel();
     super.dispose();
   }
@@ -518,6 +591,12 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
             0,
             selectedAgeLimit,
             bookmarkFilter: effectiveBookmarkFilter,
+            // Phase 2: 新規フィルター（null なら既存動作を維持）
+            duration: selectedDuration == 'all' ? null : selectedDuration,
+            startDate: effectiveStartDate,
+            endDate: effectiveEndDate,
+            bookmarkNumMin: effectiveBookmarkNumMin,
+            bookmarkNumMax: effectiveBookmarkNumMax,
           );
           // AIフィルター（アプリ内ローカル適用）
           List<Illust> filtered = result.items;
@@ -587,6 +666,12 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               null,
               null,
               bookmarkFilter: selectedNovelBookmarkFilter,
+              // Phase 2: 新規フィルター（null なら既存動作を維持）
+              duration: selectedDuration == 'all' ? null : selectedDuration,
+              startDate: effectiveStartDate,
+              endDate: effectiveEndDate,
+              bookmarkNumMin: effectiveBookmarkNumMin,
+              bookmarkNumMax: effectiveBookmarkNumMax,
             );
             setState(() {
               novels = result.items;
@@ -837,6 +922,12 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
             nextOffset!,
             selectedAgeLimit,
             bookmarkFilter: effectiveBookmarkFilter,
+            // Phase 2: 新規フィルター（null なら既存動作を維持）
+            duration: selectedDuration == 'all' ? null : selectedDuration,
+            startDate: effectiveStartDate,
+            endDate: effectiveEndDate,
+            bookmarkNumMin: effectiveBookmarkNumMin,
+            bookmarkNumMax: effectiveBookmarkNumMax,
           );
           List<Illust> filtered = result.items;
           if (selectedIllustAiFilter != 'all') {
@@ -906,6 +997,12 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               null,
               null,
               bookmarkFilter: selectedNovelBookmarkFilter,
+              // Phase 2: 新規フィルター（null なら既存動作を維持）
+              duration: selectedDuration == 'all' ? null : selectedDuration,
+              startDate: effectiveStartDate,
+              endDate: effectiveEndDate,
+              bookmarkNumMin: effectiveBookmarkNumMin,
+              bookmarkNumMax: effectiveBookmarkNumMax,
             );
             setState(() {
               novels.addAll(result.items);
