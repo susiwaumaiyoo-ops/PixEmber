@@ -18,6 +18,7 @@ import '../services/database_novel.dart' show getDownloadedIllustsList;
 import '../services/database_service.dart';
 import '../services/download_service.dart';
 import '../services/duplicate_detection_service.dart';
+import '../utils/empty_image_message.dart';
 
 class DuplicateFinderScreen extends StatefulWidget {
   const DuplicateFinderScreen({super.key});
@@ -245,7 +246,7 @@ class _DuplicateFinderScreenState extends State<DuplicateFinderScreen> {
             : _items.length == 1
             ? Center(
                 child: Text(
-                  '画像は1件あります。\n重複検出には2件以上必要です。',
+                  buildEmptyImageMessage(_items.length, '重複検出')!,
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.grey, fontSize: 14),
                 ),

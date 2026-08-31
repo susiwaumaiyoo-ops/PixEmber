@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import '../services/database_novel.dart' show getDownloadedIllustsList;
 import '../services/database_service.dart';
 import '../services/visual_search_service.dart';
+import '../utils/empty_image_message.dart';
 
 class VisualSearchScreen extends StatefulWidget {
   const VisualSearchScreen({super.key});
@@ -214,7 +215,7 @@ class _VisualSearchScreenState extends State<VisualSearchScreen> {
           : _items.length == 1
           ? Center(
               child: Text(
-                '画像は1件あります。\n視覚類似検索には2件以上必要です。',
+                buildEmptyImageMessage(_items.length, '視覚類似検索')!,
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey, fontSize: 14),
               ),
