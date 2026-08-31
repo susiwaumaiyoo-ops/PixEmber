@@ -87,6 +87,11 @@ dependencies:
   # federated化済み: workmanager_platform_interface / workmanager_android / workmanager_apple が透過解決
   # experimental (workmanager_web / workmanager_linux) は追加しない
   workmanager: ^0.10.9
+  flutter_tts: ^4.2.5
+
+  # オンデバイス画像処理（視覚類似検索の特徴量抽出・重複検出のdHash計算用）
+  # 純Dartパッケージのためネイティブビルド設定への影響なし
+  image: ^4.0.0
 
 dev_dependencies:
   flutter_test:

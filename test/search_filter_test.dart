@@ -2,7 +2,7 @@
 //
 // 検証内容:
 // 1. SearchFilter モデル: toJson / fromJson / copyWith / null 値の扱い
-// 2. SearchFilter の静的ヘルパー: duration 変換 / 日付 → Unix 秒
+// 2. SearchFilter の静的ヘルパー: duration 変換 / 日付 → yyyy-MM-dd
 // 3. PixivApiService.buildSearchParams:
 //    - 新パラメータ null で呼んだ場合、既存パラメータのみ（既存動作維持）
 //    - duration='within_last_week' → URL パラメータに 'duration' が含まれる
@@ -113,6 +113,36 @@ void main() {
       expect(restored.hashCode, original.hashCode);
     });
 
+    test('JSON 永続化（yyyy-MM-dd 互換）から復元できる', () {
+      // 実際の SharedPreferences 永続化は toIso8601String で保存されるため、
+      // fromJson は ISO8601 文字列を DateTime に復元できなければならない。
+      final f = SearchFilter.fromJson(const {
+        'startDate': '2026-08-01T00:00:00.000',
+        'endDate': '2026-08-31T00:00:00.000',
+      });
+      expect(f.startDate, DateTime(2026, 8, 1));
+      expect(f.endDate, DateTime(2026, 8, 31));
+      // 永続化キー（filter_start_date など）は yyyy-MM-dd 文字列でも可
+      final g = SearchFilter.fromJson(const {
+        'startDate': '2026-08-01',
+        'endDate': '2026-08-31',
+      });
+      expect(g.startDate, DateTime(2026, 8, 1));
+      expect(g.endDate, DateTime(2026, 8, 31));
+      // 復元後も buildSearchParams で yyyy-MM-dd になっている
+      final params = PixivApiService.buildSearchParams(
+        word: '猫',
+        searchTarget: 'partial_match_for_tags',
+        isNovel: false,
+        sort: 'date_desc',
+        offset: 0,
+        startDate: g.startDate,
+        endDate: g.endDate,
+      );
+      expect(params['start_date'], '2026-08-01');
+      expect(params['end_date'], '2026-08-31');
+    });
+
     test('== はフィールド全てで比較される', () {
       const a = SearchFilter(sort: 'date_asc');
       const b = SearchFilter(sort: 'date_asc');
@@ -149,18 +179,23 @@ void main() {
       );
     });
 
-    test('日付 → Unix 秒（開始=当日00:00 / 終了=当日23:59:59）', () {
-      final d = DateTime(2026, 1, 5, 13, 45); // 時刻は無視される
+    test('formatDateForPixivApi: DateTime → yyyy-MM-dd', () {
+      // 時刻部分は無視され、日付のみ yyyy-MM-dd になる
       expect(
-        SearchFilter.startDateTimeToUnixSeconds(d),
-        DateTime(2026, 1, 5).millisecondsSinceEpoch ~/ 1000,
+        SearchFilter.formatDateForPixivApi(DateTime(2026, 8, 1, 13, 45)),
+        '2026-08-01',
       );
       expect(
-        SearchFilter.endDateTimeToUnixSeconds(d),
-        DateTime(2026, 1, 5, 23, 59, 59).millisecondsSinceEpoch ~/ 1000,
+        SearchFilter.formatDateForPixivApi(DateTime(2026, 12, 31)),
+        '2026-12-31',
       );
-      expect(SearchFilter.startDateTimeToUnixSeconds(null), isNull);
-      expect(SearchFilter.endDateTimeToUnixSeconds(null), isNull);
+      expect(SearchFilter.formatDateForPixivApi(null), isNull);
+    });
+
+    test('parseApiDate: yyyy-MM-dd → DateTime（永続化復元用）', () {
+      expect(SearchFilter.parseApiDate('2026-08-01'), DateTime(2026, 8, 1));
+      expect(SearchFilter.parseApiDate(null), isNull);
+      expect(SearchFilter.parseApiDate(''), isNull);
     });
   });
 
@@ -255,25 +290,19 @@ void main() {
       expect(params.containsKey('bookmark_num_max'), isFalse);
     });
 
-    test('日付範囲指定: start_date / end_date が Unix 秒で含まれる', () {
+    test('日付範囲指定: start_date / end_date が yyyy-MM-dd 文字列で含まれる', () {
       final params = PixivApiService.buildSearchParams(
         word: '猫',
         searchTarget: 'partial_match_for_tags',
         isNovel: false,
         sort: 'date_desc',
         offset: 0,
-        startDate: DateTime(2026, 1, 5),
-        endDate: DateTime(2026, 1, 20),
+        startDate: DateTime(2026, 1, 5, 13, 45),
+        endDate: DateTime(2026, 1, 20, 23, 59, 59),
       );
-      expect(
-        params['start_date'],
-        (DateTime(2026, 1, 5).millisecondsSinceEpoch ~/ 1000).toString(),
-      );
-      expect(
-        params['end_date'],
-        (DateTime(2026, 1, 20, 23, 59, 59).millisecondsSinceEpoch ~/ 1000)
-            .toString(),
-      );
+      // API は yyyy-MM-dd 文字列を受け付ける（Unix 秒は不可）
+      expect(params['start_date'], '2026-01-05');
+      expect(params['end_date'], '2026-01-20');
     });
 
     test('日付範囲 + duration 同時指定: 日付範囲が優先し duration は含まれない', () {

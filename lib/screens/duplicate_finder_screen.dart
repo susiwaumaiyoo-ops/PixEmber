@@ -242,6 +242,14 @@ class _DuplicateFinderScreenState extends State<DuplicateFinderScreen> {
                   style: TextStyle(color: Colors.grey, fontSize: 14),
                 ),
               )
+            : _items.length == 1
+            ? Center(
+                child: Text(
+                  '画像は1件あります。\n重複検出には2件以上必要です。',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey, fontSize: 14),
+                ),
+              )
             : TabBarView(
                 children: [
                   _buildGroupList(_exactGroups, exact: true),

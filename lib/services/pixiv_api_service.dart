@@ -600,11 +600,13 @@ class PixivApiService {
       params['end_text_length'] = endTextLength.toString();
     }
     // 日付範囲が指定されていれば duration より優先して送信する。
+    // pixiv App-API は start_date/end_date を `yyyy-MM-dd` 文字列で要求する
+    // （Unix 秒は受け付けないため、必ず formatDateForPixivApi で変換）。
     if (SearchFilter.hasDateRange(startDate, endDate)) {
-      final start = SearchFilter.startDateTimeToUnixSeconds(startDate);
-      final end = SearchFilter.endDateTimeToUnixSeconds(endDate);
-      if (start != null) params['start_date'] = start.toString();
-      if (end != null) params['end_date'] = end.toString();
+      final start = SearchFilter.formatDateForPixivApi(startDate);
+      final end = SearchFilter.formatDateForPixivApi(endDate);
+      if (start != null) params['start_date'] = start;
+      if (end != null) params['end_date'] = end;
     } else {
       final apiDuration = SearchFilter.durationToApiValue(duration);
       if (apiDuration != null) params['duration'] = apiDuration;
@@ -645,8 +647,9 @@ class PixivApiService {
   /// 新規プレミアム相当パラメータ（すべて optional。null で既存動作を維持）:
   /// - [duration]: within_last_day / within_last_week / within_last_month /
   ///   within_last_halfyear / within_last_year
-  /// - [startDate]/[endDate]: 日付範囲（ローカル日付で指定。内部で Unix 秒へ変換）。
-  ///   指定時は [duration] より優先され、duration は送信しない。
+  /// - [startDate]/[endDate]: 日付範囲（ローカル日付で指定。API 送信時に
+  ///   `yyyy-MM-dd` 文字列へ変換される）。指定時は [duration] より優先され、
+  ///   duration は送信しない。
   /// - [bookmarkNumMin]/[bookmarkNumMax]: ブックマーク数範囲
   Future<FetchResult<Illust>> searchIllust(
     String word,
@@ -766,8 +769,9 @@ class PixivApiService {
   /// 新規プレミアム相当パラメータ（すべて optional。null で既存動作を維持）:
   /// - [duration]: within_last_day / within_last_week / within_last_month /
   ///   within_last_halfyear / within_last_year
-  /// - [startDate]/[endDate]: 日付範囲（ローカル日付で指定。内部で Unix 秒へ変換）。
-  ///   指定時は [duration] より優先され、duration は送信しない。
+  /// - [startDate]/[endDate]: 日付範囲（ローカル日付で指定。API 送信時に
+  ///   `yyyy-MM-dd` 文字列へ変換される）。指定時は [duration] より優先され、
+  ///   duration は送信しない。
   /// - [bookmarkNumMin]/[bookmarkNumMax]: ブックマーク数範囲
   Future<FetchResult<Novel>> searchNovel(
     String word,

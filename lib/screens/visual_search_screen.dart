@@ -211,6 +211,14 @@ class _VisualSearchScreenState extends State<VisualSearchScreen> {
                 style: TextStyle(color: Colors.grey, fontSize: 14),
               ),
             )
+          : _items.length == 1
+          ? Center(
+              child: Text(
+                '画像は1件あります。\n視覚類似検索には2件以上必要です。',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey, fontSize: 14),
+              ),
+            )
           : _results.isNotEmpty
           ? _buildGrid(isDark, _results, isResult: true)
           : _buildGrid(isDark, _items, isResult: false),

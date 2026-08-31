@@ -91,16 +91,21 @@ class SearchFilter {
     }
   }
 
-  /// 選択日付を Unix 秒に変換する（開始日 = 当日の 00:00:00・ローカル）。
-  static int? startDateTimeToUnixSeconds(DateTime? d) => d == null
-      ? null
-      : DateTime(d.year, d.month, d.day).millisecondsSinceEpoch ~/ 1000;
+  /// 選択日付を pixiv App-API の日付形式 `yyyy-MM-dd` に変換する。
+  /// null の場合は null を返す（送信しない）。
+  static String? formatDateForPixivApi(DateTime? d) {
+    if (d == null) return null;
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$m-$day';
+  }
 
-  /// 選択日付を Unix 秒に変換する（終了日 = 当日の 23:59:59・ローカル）。
-  static int? endDateTimeToUnixSeconds(DateTime? d) => d == null
-      ? null
-      : DateTime(d.year, d.month, d.day, 23, 59, 59).millisecondsSinceEpoch ~/
-            1000;
+  /// pixiv App-API の日付形式 `yyyy-MM-dd` を [DateTime] に変換する。
+  /// 解析できない場合は null を返す（永続化復元用）。
+  static DateTime? parseApiDate(String? value) {
+    if (value == null || value.isEmpty) return null;
+    return DateTime.tryParse(value);
+  }
 
   SearchFilter copyWith({
     String? searchTarget,
