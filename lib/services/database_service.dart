@@ -32,7 +32,7 @@ class DatabaseService {
     final path = join(dbPath, 'pixiv_viewer.db');
     return await openDatabase(
       path,
-      version: 21,
+      version: 22,
       onConfigure: (db) async {
         // 外部キー制約（ON DELETE CASCADE 等）を有効化。
         // SQLite はデフォルトで無効のため接続毎に設定が必要。
@@ -533,6 +533,7 @@ class DatabaseService {
         work_id INTEGER PRIMARY KEY,
         pages_json TEXT,
         text TEXT,
+        illustrations_json TEXT,
         updated_at TEXT NOT NULL
       )
     ''');
@@ -1173,6 +1174,17 @@ class DatabaseService {
       // 元画像から再生成可能なため Google Drive バックアップ対象外。
       await _createImageFingerprints(db);
       debugPrint('[Migration v20->v21] image_fingerprints を追加');
+    }
+    if (oldVersion < 22) {
+      // 小説リッチレンダリング（Phase 1）: 挿絵 URL キャッシュ列を追加
+      // （既存データ非破壊。NULL=旧データ。設計書 §9.2）。
+      await _addColumnIfMissing(
+        db,
+        'novel_text',
+        'illustrations_json',
+        'ALTER TABLE novel_text ADD COLUMN illustrations_json TEXT',
+      );
+      debugPrint('[Migration v21->v22] novel_text.illustrations_json を追加');
     }
   }
 
@@ -1894,13 +1906,16 @@ class DatabaseService {
   // NOVELS (小説本文・ベクトル・購読タグ) - 便利メソッド
   // ==========================================
 
-  /// 小説本文をキャッシュ（UPSERT）
+  /// 小説本文をキャッシュ（UPSERT）。
+  /// [illustrationsJson] は挿絵 URL マップ（`"{uploadedimageId}": url` /
+  /// `"pixiv:{illustId}:{page}": url`）の JSON エンコード文字列（設計書 §9.2）。
   Future<int> saveNovelText({
     required int workId,
     required String title,
     required String authorName,
     required String text,
     required String pagesJson,
+    String? illustrationsJson,
   }) async {
     final db = await database;
     return await db.insert('novel_text', {
@@ -1909,6 +1924,7 @@ class DatabaseService {
       'author_name': authorName,
       'pages_json': pagesJson,
       'text': text,
+      'illustrations_json': ?illustrationsJson,
       'updated_at': DateTime.now().toIso8601String(),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
@@ -2534,7 +2550,13 @@ class DatabaseService {
         'total_view',
         'meta_json',
       ],
-      'novel_text': ['work_id', 'pages_json', 'text', 'updated_at'],
+      'novel_text': [
+        'work_id',
+        'pages_json',
+        'text',
+        'illustrations_json',
+        'updated_at',
+      ],
       'novel_embeddings': [
         'work_id',
         'embedding',

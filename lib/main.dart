@@ -48,18 +48,13 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final PixivApiService _api = PixivApiService();
   final AppLinks _appLinks = AppLinks();
+  StreamSubscription<Uri>? _linkSub;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initDeepLinks();
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
   }
 
   /// アプリのライフサイクル変化で利用時間トラッキング（Phase 4）を制御する。
@@ -85,7 +80,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       }
     });
     // 起動中にリンクから開かれた場合
-    _appLinks.uriLinkStream.listen(_handleLink);
+    _linkSub = _appLinks.uriLinkStream.listen(_handleLink);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _linkSub?.cancel();
+    super.dispose();
   }
 
   void _handleLink(Uri uri) {

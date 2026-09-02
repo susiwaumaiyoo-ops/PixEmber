@@ -462,6 +462,63 @@ extension _ReaderUiHandler on _NovelReaderScreenState {
                     ),
                     const SizedBox(height: 20),
 
+                    // ルビ表示モード（Phase 1 / 設計書 §6.2: show / brackets / hide）
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'ルビ表示',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SegmentedButton<String>(
+                          style: const ButtonStyle(
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          segments: const [
+                            ButtonSegment(
+                              value: 'show',
+                              label: Text(
+                                'ルビ',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            ButtonSegment(
+                              value: 'brackets',
+                              label: Text(
+                                '括弧',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            ButtonSegment(
+                              value: 'hide',
+                              label: Text(
+                                '非表示',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                          selected: {_rubyMode.name},
+                          onSelectionChanged: (newSelection) {
+                            final mode = RubyDisplayMode.values.firstWhere(
+                              (m) => m.name == newSelection.first,
+                              orElse: () => RubyDisplayMode.show,
+                            );
+                            _safeSetState(() {
+                              _rubyMode = mode;
+                              _cachedPages = null; // 本文キャッシュを無効化
+                            });
+                            setSheetState(() {});
+                            _savePreferences();
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+
                     // 文字サイズ
                     _buildSliderRow(
                       label: '文字サイズ',

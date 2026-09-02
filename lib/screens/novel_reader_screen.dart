@@ -1,15 +1,20 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../illust_model.dart';
 import '../novel_model.dart';
 import '../services/database_service.dart';
 import '../services/embedding_service.dart';
 import '../services/novel_document_text.dart';
+import '../services/novel_parser.dart';
 import '../services/pixiv_api_service.dart';
 import '../services/novel_tts_service.dart';
 import '../services/ruri_model_manager.dart';
 import '../services/usage_tracking_service.dart';
+import '../widgets/pixiv_image.dart';
+import 'full_screen_image_page.dart';
 
 part 'novel_reader_data.dart';
 part 'novel_reader_tts.dart';
@@ -44,6 +49,12 @@ class _NovelReaderScreenState extends State<NovelReaderScreen>
   double _rightPadding = 24.0; // 右マージン (12.0 - 400.0)
   int _themeMode = 1; // 0: 白背景, 1: セピア(文庫風), 2: 漆黒(ダーク)
   String _fontFamily = 'serif'; // デフォルトは読みやすい明朝体 (serif)
+  RubyDisplayMode _rubyMode = RubyDisplayMode.show; // ルビ表示モード（Phase 1 設計書 §6.2）
+
+  // pixivimage 解決キャッシュ（P1-8）: メモリ LRU 上限 20 + 進行中リクエストの重複排除。
+  // Map リテラルは挿入順 LinkedHashMap のため remove→insert で LRU を表現する。
+  final Map<int, Illust> _illustMemoryCache = {};
+  final Map<int, Future<Illust?>> _illustResolveInFlight = {};
 
   // 自動しおり用のステート
   int _savedPageIndex = 0;

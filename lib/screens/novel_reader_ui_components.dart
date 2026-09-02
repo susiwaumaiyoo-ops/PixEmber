@@ -571,7 +571,15 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
     return '$textColor|$_themeMode|$_fontSize|$_lineHeight|'
         '$_leftPadding|$_rightPadding|$_fontFamily|'
         '${_currentNovel.id}|${_currentNovel.title}|${_currentNovel.author.name}|'
-        '${_seriesNovels.length}|$pageCount';
+        '${_seriesNovels.length}|$pageCount|'
+        '${_rubyMode.name}|$_searchQuery|$_illustrationsSignature';
+  }
+
+  // 挿絵 URL マップの署名（未解決 → 解決済みの変化でキャッシュを再構築させる）。
+  String get _illustrationsSignature {
+    final map = _textData?.illustrations ?? const {};
+    if (map.isEmpty) return 'none';
+    return '${map.length}:${map.keys.join('|').hashCode}';
   }
 
   // 各ページのコンテンツ描画
@@ -667,13 +675,8 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
                   const SizedBox(height: 30),
                 ],
 
-                // 本文テキスト（ルビ記法 [[rb:親 > ルビ]] を文庫本風にパース）
-                _parseRubyText(
-                  _formatParagraphs(content),
-                  textColor,
-                  _fontSize,
-                  _lineHeight,
-                ),
+                // 本文（段落列描画 + ルビ行送り拡張 + 挿絵ブロック / Phase 1 案B''）
+                _buildPageBody(content, textColor),
 
                 // 最終ページの場合のみ、シリーズ用ナビゲーションUIを表示
                 if (pageIndex == totalPages - 1 && hasSeriesControl) ...[
@@ -866,109 +869,404 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
     );
   }
 
-  // 段落改行のフォーマット
-  String _formatParagraphs(String text) {
-    var cleaned = text.replaceAll('[newpage]', '');
-    // 空行を適切に圧縮・字下げなどの和文小説特有の成形が必要であればここで処理可能
-    return cleaned;
+  // ===== 本文描画（Phase 1: 段落列化 + 案B'' 行送り拡張 + 挿絵ブロック）=====
+
+  // 1 ページ分の本文を NovelBlock 列へパースし、段落列 + 挿絵ブロックとして描画する。
+  Widget _buildPageBody(String content, Color textColor) {
+    final blocks = NovelParser.parsePage(content);
+    final children = <Widget>[];
+    var uploadedIndex = 0;
+    for (final block in blocks) {
+      switch (block) {
+        case PageBreakBlock():
+          // ページ分割は getNovelText 済みのため本文描画では無視する
+          break;
+        case UploadedImageBlock(:final localId):
+          children.add(
+            _buildUploadedImageBlock(localId, uploadedIndex++, textColor),
+          );
+        case PixivImageBlock():
+          children.add(_buildPixivImageBlock(block, textColor));
+        case ParagraphBlock():
+          children.add(_buildParagraphBlock(block, textColor));
+      }
+    }
+    if (children.isEmpty) {
+      children.add(_buildParagraphBlock(const ParagraphBlock([]), textColor));
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    );
   }
 
-  // Pixiv のルビ記法 [[rb:親文字 > ルビ]] を文庫本風の縦並びルビ表示にパースする。
-  // ルビ箇所は WidgetSpan 内の Column（ルビ→親文字）で埋め込み、通常箇所は TextSpan とする。
-  Widget _parseRubyText(
-    String text,
-    Color textColor,
-    double fontSize,
-    double lineHeight,
-  ) {
-    final rubyRegex = RegExp(r'\[\[rb:(.+?)\s*>\s*(.+?)\]\]');
+  // 1 段落を描画する。ルビ段落（show モード時）のみ行送りを拡張する（案B''）。
+  Widget _buildParagraphBlock(ParagraphBlock block, Color textColor) {
+    final isRubyParagraph = _rubyMode == RubyDisplayMode.show && block.hasRuby;
+    final heightRatio = isRubyParagraph
+        ? NovelParser.rubyLineHeightRatio(_fontSize, _lineHeight)
+        : _lineHeight;
+    // 空段落は半角スペース 1 個で行送りを保持する（空 RichText は高さゼロになるため）
+    final runs = block.runs.isEmpty
+        ? const <InlineRun>[PlainText(' ')]
+        : NovelParser.collapseRunsForDisplay(block.runs, _rubyMode);
+
     final spans = <InlineSpan>[];
-    int lastMatchEnd = 0;
-    final rubyFontSize = fontSize * 0.5;
-
-    for (final match in rubyRegex.allMatches(text)) {
-      if (match.start > lastMatchEnd) {
-        spans.add(
-          TextSpan(
-            text: text.substring(lastMatchEnd, match.start),
-            style: TextStyle(
-              fontSize: fontSize,
-              height: lineHeight,
-              color: textColor,
-              fontFamily: _fontFamily,
-              letterSpacing: 0.8,
-              backgroundColor:
-                  _searchQuery.isNotEmpty &&
-                      text
-                          .substring(lastMatchEnd, match.start)
-                          .contains(_searchQuery)
-                  ? Colors.yellow.withValues(alpha: 0.6)
-                  : null,
+    for (final run in runs) {
+      switch (run) {
+        case PlainText(:final text):
+          spans.add(
+            TextSpan(
+              text: text,
+              style: _paragraphTextStyle(
+                textColor,
+                heightRatio,
+                highlight: text,
+              ),
             ),
-          ),
-        );
+          );
+        case RubyInline(:final base, :final ruby):
+          spans.add(
+            WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(
+                    ruby,
+                    style: TextStyle(
+                      fontSize: _fontSize * 0.5,
+                      height: 1.0,
+                      color: textColor,
+                      fontFamily: _fontFamily,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  Text(
+                    base,
+                    style: TextStyle(
+                      fontSize: _fontSize,
+                      height: 1.0,
+                      color: textColor,
+                      fontFamily: _fontFamily,
+                      letterSpacing: 0.8,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          );
       }
-      final baseText = match.group(1) ?? '';
-      final rubyText = match.group(2) ?? '';
-      spans.add(
-        WidgetSpan(
-          alignment: PlaceholderAlignment.middle,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                rubyText,
-                style: TextStyle(
-                  fontSize: rubyFontSize,
-                  height: 1.0,
-                  color: textColor,
-                  fontFamily: _fontFamily,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              Text(
-                baseText,
-                style: TextStyle(
-                  fontSize: fontSize,
-                  height: 1.0,
-                  color: textColor,
-                  fontFamily: _fontFamily,
-                  letterSpacing: 0.8,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      );
-      lastMatchEnd = match.end;
-    }
-
-    // 残りの通常テキスト
-    if (lastMatchEnd < text.length) {
-      final tail = text.substring(lastMatchEnd);
-      final isHit = _searchQuery.isNotEmpty && tail.contains(_searchQuery);
-      spans.add(
-        TextSpan(
-          text: tail,
-          style: TextStyle(
-            fontSize: fontSize,
-            height: lineHeight,
-            color: textColor,
-            fontFamily: _fontFamily,
-            letterSpacing: 0.8,
-            backgroundColor: isHit
-                ? Colors.yellow.withValues(alpha: 0.6)
-                : null,
-          ),
-        ),
-      );
     }
 
     return RichText(
       text: TextSpan(children: spans),
       textAlign: TextAlign.left,
+    );
+  }
+
+  // 段落テキスト用の共通 TextStyle（行送り拡張 + 検索ハイライトを含む）。
+  TextStyle _paragraphTextStyle(
+    Color textColor,
+    double heightRatio, {
+    String? highlight,
+  }) {
+    final isHit =
+        highlight != null &&
+        _searchQuery.isNotEmpty &&
+        highlight.contains(_searchQuery);
+    return TextStyle(
+      fontSize: _fontSize,
+      height: heightRatio,
+      color: textColor,
+      fontFamily: _fontFamily,
+      letterSpacing: 0.8,
+      backgroundColor: isHit ? Colors.yellow.withValues(alpha: 0.6) : null,
+    );
+  }
+
+  // ===== 挿絵ブロック（Phase 1 設計書 §5）=====
+
+  // 挿絵画像の最大表示高さ（縦長画像が画面を埋め尽くさないよう shortestSide の 3/4）。
+  double get _illustrationMaxHeight =>
+      MediaQuery.of(context).size.shortestSide * 3 / 4;
+
+  // [uploadedimage:ID]（textEmbeddedImages 由来・Phase 0 確定キー）。
+  Widget _buildUploadedImageBlock(
+    String localId,
+    int indexInPage,
+    Color textColor,
+  ) {
+    final url = _textData?.illustrations[localId];
+    final tag = '[uploadedimage:$localId]';
+    if (url == null || url.isEmpty) {
+      return _buildIllustrationPlaceholder(
+        tag: tag,
+        textColor: textColor,
+        isLoading: false,
+        onTap: _retryIllustrations,
+      );
+    }
+    return Padding(
+      key: ValueKey('uploaded_${localId}_$indexInPage'),
+      padding: EdgeInsets.zero,
+      child: _buildNovelIllustrationImage(
+        url: url,
+        tag: tag,
+        textColor: textColor,
+      ),
+    );
+  }
+
+  // [pixivimage:ID] / [pixivimage:ID-page]。
+  // 解決順: DB illustrations → メモリ LRU → getIllustById（FutureBuilder）。
+  Widget _buildPixivImageBlock(PixivImageBlock block, Color textColor) {
+    final cacheKey = 'pixiv:${block.illustId}:${block.page ?? 0}';
+    final pageTag = block.page == null ? '' : '-${block.page}';
+    final tag = '[pixivimage:${block.illustId}$pageTag]';
+
+    final cachedUrl = _textData?.illustrations[cacheKey];
+    if (cachedUrl != null && cachedUrl.isNotEmpty) {
+      return _buildNovelIllustrationImage(
+        url: cachedUrl,
+        tag: tag,
+        textColor: textColor,
+      );
+    }
+
+    final memoIllust = _illustMemoryCache[block.illustId];
+    if (memoIllust != null) {
+      final url = _originalUrlForIllust(memoIllust, block.page);
+      if (url != null && url.isNotEmpty) {
+        return _buildNovelIllustrationImage(
+          url: url,
+          tag: tag,
+          textColor: textColor,
+        );
+      }
+    }
+
+    return FutureBuilder<Illust?>(
+      key: ValueKey('pixiv_${block.illustId}_${block.page ?? 0}'),
+      future: _resolveIllustForPixivImage(block.illustId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return _buildIllustrationPlaceholder(
+            tag: tag,
+            textColor: textColor,
+            isLoading: true,
+            onTap: null,
+          );
+        }
+        final url = snapshot.data == null
+            ? null
+            : _originalUrlForIllust(snapshot.data!, block.page);
+        if (url == null || url.isEmpty) {
+          return _buildIllustrationPlaceholder(
+            tag: tag,
+            textColor: textColor,
+            isLoading: false,
+            onTap: () => _retryPixivImage(block),
+          );
+        }
+        return _buildNovelIllustrationImage(
+          url: url,
+          tag: tag,
+          textColor: textColor,
+        );
+      },
+    );
+  }
+
+  // 解決済み Illust から pixivimage の original URL を決める
+  // （0 始まり page・page 越過時は 1 始まり再解釈・表紙 fallback）。
+  String? _originalUrlForIllust(Illust illust, int? requestedPage) {
+    return NovelParser.resolvePixivImageUrl(
+      coverOriginal: illust.urls.original,
+      metaPageOriginals: [for (final p in illust.metaPages) p.original],
+      requestedPage: requestedPage,
+    );
+  }
+
+  // getIllustById による illust 解決（メモリ LRU 上限 20 + 進行中リクエストの重複排除）。
+  Future<Illust?> _resolveIllustForPixivImage(int illustId) {
+    final memo = _illustMemoryCache[illustId];
+    if (memo != null) {
+      // LRU 更新（remove → insert）
+      _illustMemoryCache.remove(illustId);
+      _illustMemoryCache[illustId] = memo;
+      return SynchronousFuture(memo);
+    }
+    final inFlight = _illustResolveInFlight[illustId];
+    if (inFlight != null) return inFlight;
+
+    final future = PixivApiService()
+        .getIllustById(illustId)
+        .then<Illust?>((illust) {
+          // LRU 登録（上限 20・最も古いものから追い出す）
+          _illustMemoryCache.remove(illustId);
+          _illustMemoryCache[illustId] = illust;
+          while (_illustMemoryCache.length > 20) {
+            _illustMemoryCache.remove(_illustMemoryCache.keys.first);
+          }
+          return illust;
+        })
+        .catchError((Object e) {
+          debugPrint('挿絵の illust 解決に失敗しました (id=$illustId): $e');
+          return null;
+        });
+    _illustResolveInFlight[illustId] = future;
+    return future.whenComplete(() => _illustResolveInFlight.remove(illustId));
+  }
+
+  // 挿絵画像本体（タップ: 全画面表示 / 長押し: タグをスナック表示）。
+  Widget _buildNovelIllustrationImage({
+    required String url,
+    required String tag,
+    required Color textColor,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: GestureDetector(
+        onTap: () => _openNovelIllustrationViewer(url),
+        onLongPress: () => _showIllustrationSnack(tag),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: _illustrationMaxHeight),
+          child: Center(
+            child: PixivImage(
+              url: url,
+              fit: BoxFit.contain,
+              errorWidget: _buildIllustrationPlaceholder(
+                tag: tag,
+                textColor: textColor,
+                isLoading: false,
+                onTap: _retryIllustrations,
+              ),
+              placeholder: _buildIllustrationPlaceholder(
+                tag: tag,
+                textColor: textColor,
+                isLoading: true,
+                onTap: null,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 挿絵プレースホルダー（未解決 / ローディング / エラー共通。設計書 §5.4）。
+  Widget _buildIllustrationPlaceholder({
+    required String tag,
+    required Color textColor,
+    required bool isLoading,
+    required VoidCallback? onTap,
+  }) {
+    final child = Container(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: textColor.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: textColor.withValues(alpha: 0.15)),
+      ),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isLoading)
+            const SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            )
+          else
+            Icon(
+              Icons.image_outlined,
+              size: 36,
+              color: textColor.withValues(alpha: 0.4),
+            ),
+          const SizedBox(height: 8),
+          Text(
+            '挿絵',
+            style: TextStyle(
+              fontSize: 12,
+              color: textColor.withValues(alpha: 0.6),
+            ),
+          ),
+          if (!isLoading) ...[
+            const SizedBox(height: 2),
+            Text(
+              '$tag\nタップして再読み込み',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                color: textColor.withValues(alpha: 0.4),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+    if (onTap == null) return child;
+    return GestureDetector(onTap: onTap, child: child);
+  }
+
+  void _showIllustrationSnack(String tag) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(tag), duration: const Duration(seconds: 2)),
+      );
+  }
+
+  // uploadedimage の再取得（getNovelText 再取得で illustrations マップを更新）。
+  Future<void> _retryIllustrations() async {
+    try {
+      final textData = await PixivApiService().getNovelText(_currentNovel.id);
+      if (textData.illustrations.isEmpty) return;
+      _safeSetState(() {
+        final merged = Map<String, String>.from(
+          _textData?.illustrations ?? const {},
+        );
+        merged.addAll(textData.illustrations);
+        _textData = (_textData ?? textData).copyWith(illustrations: merged);
+        // 挿絵解決状態が変わったため本文キャッシュを無効化
+        _cachedPages = null;
+      });
+    } catch (e) {
+      debugPrint('挿絵の再取得に失敗しました: $e');
+    }
+  }
+
+  // pixivimage 1 枚の再解決（キャッシュ破棄 → 再解決 → 結果を illustrations にも記録）。
+  Future<void> _retryPixivImage(PixivImageBlock block) async {
+    _illustMemoryCache.remove(block.illustId);
+    _illustResolveInFlight.remove(block.illustId);
+    final illust = await _resolveIllustForPixivImage(block.illustId);
+    final url = illust == null
+        ? null
+        : _originalUrlForIllust(illust, block.page);
+    if (url == null || url.isEmpty) return;
+    _safeSetState(() {
+      final merged = Map<String, String>.from(
+        _textData?.illustrations ?? const {},
+      );
+      merged['pixiv:${block.illustId}:${block.page ?? 0}'] = url;
+      _textData = _textData?.copyWith(illustrations: merged);
+      _cachedPages = null;
+    });
+  }
+
+  // 挿絵の全画面表示（既存 FullScreenImagePage を再利用）。
+  void _openNovelIllustrationViewer(String url) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            FullScreenImagePage(images: [PageImage(page: 1, original: url)]),
+      ),
     );
   }
 }

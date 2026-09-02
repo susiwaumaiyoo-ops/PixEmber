@@ -45,6 +45,11 @@ class NovelListCard extends StatelessWidget {
   /// カード高さから横幅を自動計算し、cover でトリミングしつつ大きく表示。
   static const double _coverAspect = 1.4;
 
+  /// 高さ無制限（SliverList 等）で構築される場合の固定カバー高。
+  /// unbounded な maxHeight をそのまま使うと SizedBox(∞) が生成され
+  /// 「BoxConstraints forces an infinite height」でクラッシュするため。
+  static const double _listCoverHeight = 101.0;
+
   static const EdgeInsets _cardPadding = EdgeInsets.all(8.0);
   static const double _hGap = 8.0;
   static const double _vGap = 6.0;
@@ -63,13 +68,23 @@ class NovelListCard extends StatelessWidget {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final bool hasBounded = constraints.maxHeight.isFinite;
-              // 内部利用可能高さ（padding を除く）。カバーはこの高さいっぱいに。
-              final double innerH = constraints.maxHeight;
-              final double coverW = innerH / _coverAspect; // 縦:横 = 1.4:1
+              // カバー高さ:
+              // - bounded（Grid 等）: カード高さいっぱいに表示。
+              // - unbounded（SliverList 等）: 固定高。maxHeight（=∞）をそのまま
+              //   使うと SizedBox(∞) が生成されレイアウトでクラッシュする
+              //   （スマホの1列表示でのみ発生する端末依存クラッシュの根因）。
+              final double coverH = hasBounded
+                  ? constraints.maxHeight
+                  : _listCoverHeight;
+              final double coverW = coverH / _coverAspect; // 縦:横 = 1.4:1
               return Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+                // unbounded のとき stretch は子に tight(∞) を渡してクラッシュ
+                // するため、固定高で上寄せする start に切り替える。
+                crossAxisAlignment: hasBounded
+                    ? CrossAxisAlignment.stretch
+                    : CrossAxisAlignment.start,
                 children: [
-                  _buildCover(coverW: coverW, coverH: innerH),
+                  _buildCover(coverW: coverW, coverH: coverH),
                   const SizedBox(width: _hGap),
                   // Row の幅は有限なので Expanded は安全。
                   Expanded(

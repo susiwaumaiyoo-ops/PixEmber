@@ -175,10 +175,21 @@ class NovelTextData {
   final String novelText;
   final List<String> novelPages;
 
+  /// 挿絵 URL マップ。
+  ///
+  /// - `"{uploadedimageタグID}": url` … uploadedimage の解決済み URL
+  ///   （textEmbeddedImages 由来・Phase 0 確定キー）
+  /// - `"pixiv:{illustId}:{page}": url` … pixivimage の解決済み original URL
+  ///   （リーダー側でキャッシュ併記。DB の illustrations_json と同形式）
+  ///
+  /// 旧形式（キー無し JSON）は空マップに後方互換（設計書 §5.2 / §9.1）。
+  final Map<String, String> illustrations;
+
   NovelTextData({
     required this.id,
     required this.novelText,
     required this.novelPages,
+    this.illustrations = const {},
   });
 
   factory NovelTextData.fromJson(Map<String, dynamic> json) {
@@ -187,10 +198,34 @@ class NovelTextData {
         ? pagesList.map((e) => e.toString()).toList()
         : [];
 
+    final rawIllustrations = json['illustrations'];
+    final illustrations = <String, String>{};
+    if (rawIllustrations is Map) {
+      rawIllustrations.forEach((key, value) {
+        if (value != null) illustrations[key.toString()] = value.toString();
+      });
+    }
+
     return NovelTextData(
       id: json['id'] as int,
       novelText: json['novel_text'] as String? ?? '',
       novelPages: parsedPages,
+      illustrations: illustrations,
     );
   }
+
+  /// 挿絵マップを差し替えたコピーを作る（リトライ時のマージ更新用）。
+  NovelTextData copyWith({Map<String, String>? illustrations}) => NovelTextData(
+    id: id,
+    novelText: novelText,
+    novelPages: novelPages,
+    illustrations: illustrations ?? this.illustrations,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'novel_text': novelText,
+    'novel_pages': novelPages,
+    'illustrations': illustrations,
+  };
 }

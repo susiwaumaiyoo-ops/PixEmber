@@ -39,14 +39,24 @@ class TtsChunk {
 /// Pixiv ルビ記法: [[rb:親文字 > ルビ]]
 final RegExp _rubyPattern = RegExp(r'\[\[rb:(.+?)\s*>\s*(.+?)\]\]');
 
-/// 改ページ・ジャンプ指令（本文装飾タグ。読み上げテキストからは除去する）。
+/// 改ページ・ジャンプ・挿絵タグ（本文装飾タグ。読み上げテキストからは除去する）。
+/// 挿絵タグの除去は Phase 1（設計書 §8）で追加。
 final RegExp _newpagePattern = RegExp(r'\[newpage\]', caseSensitive: false);
 final RegExp _jumpPattern = RegExp(r'\[jump:\d+\]', caseSensitive: false);
+final RegExp _uploadedImagePattern = RegExp(
+  r'\[uploadedimage:\d+\]',
+  caseSensitive: false,
+);
+final RegExp _pixivImagePattern = RegExp(
+  r'\[pixivimage:\d+(?:-\d+)?\]',
+  caseSensitive: false,
+);
 
 /// 読み上げ用に本文を正規化する（純粋関数）。
 ///
 /// - [readRuby] が true ならルビ（かな）側、false なら親文字側を読み上げる。
-/// - `[newpage]` / `[jump:N]` 指令を除去する。
+/// - `[newpage]` / `[jump:N]` 指令と挿絵タグ（`[uploadedimage:N]` /
+///   `[pixivimage:N]` / `[pixivimage:N-M]`）を除去する。
 /// - 3行以上の連続空行を1空行に圧縮し、前後の空白を除去する。
 String normalizeNovelTextForSpeech(String raw, {required bool readRuby}) {
   var text = raw.replaceAllMapped(_rubyPattern, (m) {
@@ -54,6 +64,8 @@ String normalizeNovelTextForSpeech(String raw, {required bool readRuby}) {
   });
   text = text.replaceAll(_newpagePattern, '');
   text = text.replaceAll(_jumpPattern, '');
+  text = text.replaceAll(_uploadedImagePattern, '');
+  text = text.replaceAll(_pixivImagePattern, '');
   text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
   return text.trim();
 }

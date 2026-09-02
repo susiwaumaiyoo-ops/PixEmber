@@ -650,11 +650,22 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
             setState(() {
               novels = result.items;
               _allTextSearchState = result.state;
-              nextOffset = result.state.textNextOffset;
+              // タグ検索を優先した代表 offset。両検索とも終了したら null に
+              // なり、fetchNextPage のガード（nextOffset == null）で停止する。
+              nextOffset = result.state.primaryNextOffset;
               searchItem = result.result.searchItem;
               isLoading = false;
               _computeSeriesTextLengths(novels);
             });
+            // 片方の並行検索が失敗しても成功側の結果は表示済み。
+            // 失敗があったことだけ通知する。
+            if (result.state.hasError && mounted) {
+              final detail =
+                  result.state.tagError ?? result.state.textError ?? '';
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('全文検索の一部が失敗しました（結果は表示中）: $detail')),
+              );
+            }
           } else {
             // 通常検索
             final result = await _pixivApiService.searchNovel(
@@ -982,7 +993,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
             setState(() {
               novels.addAll(result.items);
               _allTextSearchState = result.state;
-              nextOffset = result.state.textNextOffset;
+              nextOffset = result.state.primaryNextOffset;
               _isFetchingNextPage = false;
               _computeSeriesTextLengths(novels);
             });

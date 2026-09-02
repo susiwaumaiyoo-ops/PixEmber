@@ -553,13 +553,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         children: [
           Row(
             children: segments
+                // count == 0 のセグメントは幅を持たせず描画しない。
+                // Expanded(flex: 0) はアサーション違反でクラッシュするため。
+                .where((s) => s.count > 0)
                 .map(
                   (s) => Expanded(
                     flex: s.count,
-                    child: Container(
-                      height: 20,
-                      color: s.count == 0 ? Colors.transparent : s.color,
-                    ),
+                    child: Container(height: 20, color: s.color),
                   ),
                 )
                 .toList(),

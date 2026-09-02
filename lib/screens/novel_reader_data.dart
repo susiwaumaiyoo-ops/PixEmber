@@ -45,6 +45,11 @@ extension _ReaderData on _NovelReaderScreenState {
         _scrollSpeed = prefs.getDouble('novel_pref_scroll_speed') ?? 3.0;
         _ttsRate = prefs.getDouble('novel_pref_tts_rate') ?? 1.0;
         _ttsReadRuby = prefs.getBool('novel_pref_tts_read_ruby') ?? false;
+        final rubyModeStr = prefs.getString('novel_pref_ruby_mode') ?? 'show';
+        _rubyMode = RubyDisplayMode.values.firstWhere(
+          (mode) => mode.name == rubyModeStr,
+          orElse: () => RubyDisplayMode.show,
+        );
       });
     } catch (e) {
       debugPrint('環境設定の読み込みに失敗しました: $e');
@@ -65,6 +70,7 @@ extension _ReaderData on _NovelReaderScreenState {
       await prefs.setDouble('novel_pref_scroll_speed', _scrollSpeed);
       await prefs.setDouble('novel_pref_tts_rate', _ttsRate);
       await prefs.setBool('novel_pref_tts_read_ruby', _ttsReadRuby);
+      await prefs.setString('novel_pref_ruby_mode', _rubyMode.name);
     } catch (e) {
       debugPrint('環境設定の保存に失敗しました: $e');
     }
@@ -393,6 +399,9 @@ extension _ReaderData on _NovelReaderScreenState {
         authorName: _currentNovel.author.name,
         text: data.novelText,
         pagesJson: jsonEncode(data.novelPages),
+        illustrationsJson: data.illustrations.isEmpty
+            ? null
+            : jsonEncode(data.illustrations),
       );
 
       // ベクトル生成・保存（バックグラウンドで実行、失敗してもUIをブロックしない）
@@ -429,10 +438,23 @@ extension _ReaderData on _NovelReaderScreenState {
       final pages = List<String>.from(
         jsonDecode(row['pages_json'] as String) as List,
       );
+      final illustrations = <String, String>{};
+      final rawIllustrations = row['illustrations_json'] as String?;
+      if (rawIllustrations != null && rawIllustrations.isNotEmpty) {
+        final decoded = jsonDecode(rawIllustrations);
+        if (decoded is Map) {
+          decoded.forEach((key, value) {
+            if (value != null) {
+              illustrations[key.toString()] = value.toString();
+            }
+          });
+        }
+      }
       return NovelTextData(
         id: _currentNovel.id,
         novelText: row['text'] as String,
         novelPages: pages,
+        illustrations: illustrations,
       );
     } catch (e) {
       debugPrint('小説本文キャッシュの読み込みに失敗しました: $e');

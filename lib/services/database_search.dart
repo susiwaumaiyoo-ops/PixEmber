@@ -387,8 +387,12 @@ Future<List<Map<String, dynamic>>> searchNovelsLexical({
   if (terms.isEmpty && query.semanticText.trim().isEmpty) return [];
 
   for (final t in terms) {
-    final likeArg = '%${t.trim()}%';
-    if (likeArg.length <= 2) continue; // 極短すぎる語は除外
+    final trimmed = t.trim();
+    if (trimmed.isEmpty) continue;
+    // LIKEパターンではなく語自体の長さで判定（旧実装は likeArg.length で
+    // 常に >= 3 となり極短語の除外が機能していなかった）。
+    if (trimmed.length <= 1) continue; // 1文字の語はノイズが多すぎるため除外
+    final likeArg = '%$trimmed%';
     conditions.add(
       '(title LIKE ? OR description LIKE ? OR tags LIKE ? OR tags_json LIKE ?)',
     );
@@ -512,8 +516,12 @@ Future<List<Map<String, dynamic>>> searchIllustsLexical({
   if (terms.isEmpty && query.semanticText.trim().isEmpty) return [];
 
   for (final t in terms) {
-    final likeArg = '%${t.trim()}%';
-    if (likeArg.length <= 2) continue;
+    final trimmed = t.trim();
+    if (trimmed.isEmpty) continue;
+    // LIKEパターンではなく語自体の長さで判定（旧実装は likeArg.length で
+    // 常に >= 3 となり極短語の除外が機能していなかった）。
+    if (trimmed.length <= 1) continue; // 1文字の語はノイズが多すぎるため除外
+    final likeArg = '%$trimmed%';
     conditions.add(
       '(title LIKE ? OR description LIKE ? OR tags LIKE ? OR tags_json LIKE ?)',
     );

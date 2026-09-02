@@ -270,15 +270,15 @@ class PixivApiService {
         // 0. 年齢制限（x_restrict）フィルタリング（レスポンスの x_restrict フィールドで判定）
         // all=全年齢のみ(0), include_r18=R-18含む(0,1,2), r18=R-18のみ(1), r18g=R-18G含む(0,1,2)
         final int xRestrictVal = itemMap['x_restrict'] as int? ?? 0;
-        if (xRestrict != null) {
-          final String xLower = xRestrict.toLowerCase();
-          if (xLower == 'all' && xRestrictVal > 0) {
-            continue; // 全年齢のみ：R-18(1)/R-18G(2)を除外
-          } else if (xLower == 'r18' && xRestrictVal != 1) {
-            continue; // R-18のみ：全年齢(0)・R-18G(2)を除外
-          }
-          // include_r18 / r18g はすべて表示
+        final String xLower = (xRestrict ?? '').toLowerCase();
+        if (xLower == 'all' && xRestrictVal != 0) {
+          continue; // 全年齢のみ：R-18(1)/R-18G(2)を除外
+        } else if (xLower == 'r18' && xRestrictVal != 1) {
+          continue; // R-18のみ：全年齢(0)・R-18G(2)を除外
+        } else if (xLower == 'r18g' && xRestrictVal != 2) {
+          continue; // R-18Gのみ：全年齢(0)・R-18(1)を除外
         }
+        // include_r18 / その他はすべて表示
 
         // 0.5 work_type（イラストの種類）フィルタ
         if (workType != null &&
@@ -421,15 +421,15 @@ class PixivApiService {
         // 0. 年齢制限（x_restrict）フィルタリング（レスポンスの x_restrict フィールドで判定）
         // all=全年齢のみ(0), include_r18=R-18含む(0,1,2), r18=R-18のみ(1), r18g=R-18G含む(0,1,2)
         final int xRestrictVal = itemMap['x_restrict'] as int? ?? 0;
-        if (xRestrict != null) {
-          final String xLower = xRestrict.toLowerCase();
-          if (xLower == 'all' && xRestrictVal > 0) {
-            continue; // 全年齢のみ：R-18(1)/R-18G(2)を除外
-          } else if (xLower == 'r18' && xRestrictVal != 1) {
-            continue; // R-18のみ：全年齢(0)・R-18G(2)を除外
-          }
-          // include_r18 / r18g はすべて表示
+        final String xLower = (xRestrict ?? '').toLowerCase();
+        if (xLower == 'all' && xRestrictVal != 0) {
+          continue; // 全年齢のみ：R-18(1)/R-18G(2)を除外
+        } else if (xLower == 'r18' && xRestrictVal != 1) {
+          continue; // R-18のみ：全年齢(0)・R-18G(2)を除外
+        } else if (xLower == 'r18g' && xRestrictVal != 2) {
+          continue; // R-18Gのみ：全年齢(0)・R-18(1)を除外
         }
+        // include_r18 / その他はすべて表示
 
         // 1. ユーザーIDミュート
         final int userId = itemMap['user']?['id'] as int? ?? 0;
@@ -578,21 +578,38 @@ class PixivApiService {
     int? startTextLength,
     int? endTextLength,
   }) {
-    // main.py 互換: bookmark_filter / x_restrict の検索ワード書き換え
-    var effectiveWord = word;
+    // 検索ワードの正規化（前後空白の除去、全角スペース・連続空白・改行・
+    // タブを単一の半角スペースに統一）。スペース区切り検索（例: 「猫 イラスト」）
+    // がどの入力形でも正しくキーワード分割されるようにする。
+    var effectiveWord = normalizeSearchQuery(word);
+    // main.py 互換: bookmark_filter の検索ワード書き換え
     if (bookmarkFilter > 0) {
       effectiveWord = '$effectiveWord ${bookmarkFilter}users入り';
     }
-    final xLower = xRestrict.toLowerCase();
-    if (xLower == 'r18') {
-      effectiveWord = '$effectiveWord R-18';
-    }
+    // 年齢制限（x_restrict）は原則ワードに含めず、API 結果を x_restrict
+    // フィールドで絞り込む。例外的にタグ検索のみ R-18 を補助ワードとして
+    // 付与する（全文検索で付与すると「R-18」という文字列を本文に含む
+    // 作品が誤ってヒットするため）。
+    final target = normalizeSearchTarget(searchTarget, isNovel: isNovel);
+    effectiveWord = buildSearchWord(
+      rawQuery: effectiveWord,
+      ageLimit: xRestrict,
+      searchTarget: target,
+    );
+    debugPrint(
+      '[API] buildSearchParams: word="$effectiveWord" (raw="$word", '
+      'ageLimit=$xRestrict, target=$target)',
+    );
     final params = <String, String>{
       'word': effectiveWord,
-      'search_target': normalizeSearchTarget(searchTarget, isNovel: isNovel),
+      'search_target': target,
       'sort': sort,
       'offset': offset.toString(),
       'filter': 'for_android',
+      // 複数キーワード（スペース区切り）検索で複数タグにまたがる結果を
+      // マージして返すためのフラグ。削除前の pixiv_api_search.dart も
+      // merge_results=true を送信していたため同等に復元する。
+      'merge_results': 'true',
     };
     // 小説の文字数制限
     if (startTextLength != null) {
@@ -642,6 +659,123 @@ class PixivApiService {
     final valid = isNovel ? novelSearchTargets : illustSearchTargets;
     if (valid.contains(target)) return target;
     return 'partial_match_for_tags';
+  }
+
+  /// R-18 / R18 / R-18G / R18G トークン検出用パターン。
+  ///
+  /// タグ名や本文の一部（例: 「R-18作品まとめ」のタグ文字列の一部）を
+  /// 誤検出しないよう、トークンの前後が空白または文字列境界である場合のみ
+  /// 一致させる。
+  static final RegExp _r18TokenPattern = RegExp(
+    r'(^|\s)(r-?18g?)(\s|$)',
+    caseSensitive: false,
+  );
+
+  /// 検索クエリを正規化する（純粋関数・単体テスト用）。
+  ///
+  /// - 前後の空白を除去（trim）
+  /// - 全角スペース（U+3000）・改行・タブを含む連続する空白文字列を
+  ///   単一の半角スペースに圧縮
+  ///
+  /// 「猫　イラスト」や「猫  イラスト」も「猫 イラスト」として
+  /// pixiv API へ送信され、AND 検索として正しく処理される。
+  static String normalizeSearchQuery(String query) {
+    return query.trim().replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  /// [normalizeSearchQuery] の別名（既存呼び出し互換用）。
+  static String normalizeSearchWord(String word) {
+    return normalizeSearchQuery(word);
+  }
+
+  /// クエリに R-18 / R-18G トークンが既に含まれるか
+  /// （純粋関数・単体テスト用）。
+  ///
+  /// ワードへの R-18 二重付与を防ぐために使用する。
+  static bool containsR18Token(String query) {
+    return _r18TokenPattern.hasMatch(query);
+  }
+
+  /// 検索ワードと年齢制限から API へ送信するワードを組み立てる
+  /// （純粋関数・単体テスト用）。
+  ///
+  /// ルール:
+  /// - ワードは [normalizeSearchQuery] でのみ正規化する。年齢制限は
+  ///   原則ワードに含めない（pixiv App API に x_restrict 検索パラメータは
+  ///   存在せず、絞り込みは API 結果の x_restrict フィールドで行う）。
+  /// - 例外としてタグ検索（partial_match_for_tags / exact_match_for_tags）
+  ///   の場合のみ R-18 を補助ワードとして付与する。全文検索
+  ///   （text / title_and_caption / keyword）で付与すると、本文に
+  ///   「R-18」という文字列を含む作品が誤ってヒットするため。
+  /// - クエリに既に R-18 トークンが含まれる場合は二重付与しない。
+  /// - 'include_r18'（R-18を含む）や全年齢指定では付与しない。
+  static String buildSearchWord({
+    required String rawQuery,
+    required String ageLimit,
+    required String searchTarget,
+  }) {
+    final base = normalizeSearchQuery(rawQuery);
+    final isTagSearch =
+        searchTarget == 'partial_match_for_tags' ||
+        searchTarget == 'exact_match_for_tags';
+    final wantsR18 = ageLimit.toLowerCase() == 'r18';
+    if (wantsR18 && isTagSearch && !containsR18Token(base)) {
+      return '$base R-18';
+    }
+    return base;
+  }
+
+  /// 年齢制限（ageLimit）に応じて x_restrict フィールドでリストを絞り込む
+  /// （純粋関数・単体テスト用）。
+  ///
+  /// x_restrict の値: 0=全年齢, 1=R-18, 2=R-18G
+  ///
+  /// ポリシー（アプリUIのラベルと整合させる。既存のクライアント側フィルタ
+  /// と同一の挙動を維持）:
+  /// - 'all' / 'all_ages' / 'safe': 全年齢のみ → x_restrict == 0 のみ表示
+  /// - 'include_r18' / その他未知の値: R-18 を含む → すべて表示
+  /// - 'r18': R-18のみ → x_restrict == 1 のみ表示（R-18G(2) は含めない。
+  ///   UIラベル「R-18のみ」に R-18G が混ざると不自然なため既存挙動を維持）
+  /// - 'r18g': R-18Gのみ → x_restrict == 2 のみ表示
+  static List<T> applyAgeLimitFilter<T>(
+    List<T> items,
+    String ageLimit,
+    int Function(T) xRestrictOf,
+  ) {
+    final x = ageLimit.toLowerCase();
+    if (x == 'all' || x == 'all_ages' || x == 'safe') {
+      return items.where((item) => xRestrictOf(item) == 0).toList();
+    }
+    if (x == 'r18') {
+      return items.where((item) => xRestrictOf(item) == 1).toList();
+    }
+    if (x == 'r18g') {
+      return items.where((item) => xRestrictOf(item) == 2).toList();
+    }
+    // include_r18 とその他の値は絞り込まずすべて表示
+    return List<T>.of(items);
+  }
+
+  /// 2つの検索結果リストを ID で統合しつつ重複除去する（純粋関数・単体テスト用）。
+  ///
+  /// [primary]（タグ検索結果）をベースに、[secondary]（本文検索結果）のうち
+  /// 未含のものを末尾へ追加する。順序は primary → secondary の追加順を維持。
+  /// [keyOf] は重複判定に使うキー（通常は作品 ID）を取り出す関数。
+  /// 全文検索で片方の並行検索が失敗した場合も、成功側のリストをそのまま
+  /// 渡すことで結果を守れる。
+  static List<T> mergeById<T>(
+    List<T> primary,
+    List<T> secondary,
+    Object Function(T) keyOf,
+  ) {
+    final Map<Object, T> merged = {};
+    for (final item in primary) {
+      merged[keyOf(item)] = item;
+    }
+    for (final item in secondary) {
+      merged.putIfAbsent(keyOf(item), () => item);
+    }
+    return merged.values.toList();
   }
 
   /// イラスト検索
@@ -846,58 +980,84 @@ class PixivApiService {
     // 初回呼び出し時は空の状態から開始
     state ??= AllTextSearchState.empty;
 
-    // タグ検索と本文検索をそれぞれの offset で並行実行
-    final tagOffset = state.tagNextOffset ?? 0;
-    final textOffset = state.textNextOffset ?? 0;
+    // タグ検索と本文検索をそれぞれの offset で並行実行。
+    // Future.wait は片方が例外を投げると全体が失敗して成功側の結果も
+    // 破棄されるため、各検索を個別に捕捉して失敗を状態に記録する。
+    // 片方が失敗（レート制限・ネットワークエラー等）しても、
+    // 成功したもう片方の結果は必ず返す。
+    Object? tagError;
+    Object? textError;
 
-    final results = await Future.wait([
-      searchNovel(
-        word,
+    // 年齢制限（x_restrict）の R-18 補助ワードはタグ検索側にのみ付与する。
+    // 本文検索側は「R-18」という文字列を本文に含む作品の誤ヒットを
+    // 避けるため、常に元のワードのまま送信する。最終的な年齢制限の
+    // 絞り込みは searchNovel 内の x_restrict フィルタで行われる。
+    final tagWord = buildSearchWord(
+      rawQuery: word,
+      ageLimit: xRestrict,
+      searchTarget: 'partial_match_for_tags',
+    );
+    final textWord = buildSearchWord(
+      rawQuery: word,
+      ageLimit: xRestrict,
+      searchTarget: 'text',
+    );
+
+    final results = await Future.wait<FetchResult<Novel>?>([
+      _searchNovelSafely(
+        tagWord,
         'partial_match_for_tags',
         sort,
-        tagOffset,
+        state.tagNextOffset ?? 0,
         xRestrict,
         minLength,
         maxLength,
         bookmarkFilter: bookmarkFilter,
+        onError: (e) => tagError = e,
       ),
-      searchNovel(
-        word,
+      _searchNovelSafely(
+        textWord,
         'text',
         sort,
-        textOffset,
+        state.textNextOffset ?? 0,
         xRestrict,
         minLength,
         maxLength,
         bookmarkFilter: bookmarkFilter,
+        onError: (e) => textError = e,
       ),
     ]);
 
     final tagResult = results[0];
     final textResult = results[1];
 
-    // ID で統合しつつ重複除去（タグ側をベースに、本文側の未含のものを追加）
-    final Map<int, Novel> merged = {};
-    for (final n in tagResult.items) {
-      merged[n.id] = n;
+    // 両方失敗した場合のみ上位（UI）へエラーを伝播する。
+    if (tagResult == null && textResult == null) {
+      throw Exception('全文検索に失敗しました（タグ: $tagError / 本文: $textError）');
     }
-    for (final n in textResult.items) {
-      merged.putIfAbsent(n.id, () => n);
-    }
-    final items = merged.values.toList();
 
-    // 新しい状態を構築（それぞれの検索の nextUrl/offset を保持）
+    // ID で統合しつつ重複除去（タグ側をベースに、本文側の未含のものを追加）。
+    // 片方の検索が失敗した場合は成功した側のみで結果を構成する。
+    final items = mergeById<Novel>(
+      tagResult?.items ?? const [],
+      textResult?.items ?? const [],
+      (n) => n.id,
+    );
+
+    // 新しい状態を構築（それぞれの検索の nextUrl/offset とエラーを保持）
     final newState = AllTextSearchState(
-      tagNextOffset: tagResult.nextOffset,
-      textNextOffset: textResult.nextOffset,
-      tagNextUrl: tagResult.nextUrl,
-      textNextUrl: textResult.nextUrl,
-      searchItem: tagResult.searchItem ?? textResult.searchItem,
+      tagNextOffset: tagResult?.nextOffset,
+      textNextOffset: textResult?.nextOffset,
+      tagNextUrl: tagResult?.nextUrl,
+      textNextUrl: textResult?.nextUrl,
+      searchItem: tagResult?.searchItem ?? textResult?.searchItem,
+      tagError: tagError?.toString(),
+      textError: textError?.toString(),
     );
 
     // nextUrl は片方でもあれば継続可能（呼び出し側では state.hasNext で判定）
     // 互換性のため、どちらかの nextUrl を代表として返す
-    final nextUrl = tagResult.nextUrl ?? textResult.nextUrl;
+    final nextUrl = tagResult?.nextUrl ?? textResult?.nextUrl;
 
     final fetchResult = FetchResult<Novel>(
       items: items,
@@ -908,14 +1068,141 @@ class PixivApiService {
     return AllTextSearchResult<Novel>(result: fetchResult, state: newState);
   }
 
-  /// 小説本文の取得（NovelTextDataモデルへの変換）
+  /// [searchNovel] を例外が外に漏れないように実行する。
+  /// 失敗時は [onError] に通知し null を返す（全文検索の並行実行用）。
+  /// これにより片方の検索が失敗してももう片方の結果を返せる。
+  Future<FetchResult<Novel>?> _searchNovelSafely(
+    String word,
+    String searchTarget,
+    String sort,
+    int offset,
+    String xRestrict,
+    int? minLength,
+    int? maxLength, {
+    required int bookmarkFilter,
+    required void Function(Object error) onError,
+  }) async {
+    try {
+      return await searchNovel(
+        word,
+        searchTarget,
+        sort,
+        offset,
+        xRestrict,
+        minLength,
+        maxLength,
+        bookmarkFilter: bookmarkFilter,
+      );
+    } catch (e) {
+      debugPrint(
+        '[API] searchNovelAllText: 検索失敗 target=$searchTarget, '
+        'offset=$offset: $e',
+      );
+      onError(e);
+      return null;
+    }
+  }
+
+  /// 小説本文の取得（NovelTextDataモデルへの変換）。
+  ///
+  /// Phase 1（設計書 §5.2 / §12）: Web 版公開エンドポイント
+  /// `GET /ajax/novel/{id}`（未認証 OK・webview と同一の本文データ源）を
+  /// **優先取得元**とし、`body.content` と `body.textEmbeddedImages`
+  /// （Phase 0 確定の挿絵キー、[報告書](../../docs/plans/09-phase0-illustration-keys.md)）を取得する。
+  /// 失敗時のみ従来の webview HTML 正規表現抽出にフォールバックする。
+  Future<NovelTextData> getNovelText(int novelId) async {
+    debugPrint('📍 [DEBUG API] getNovelText リクエスト直前: novelId = $novelId');
+    try {
+      final data = await _getNovelTextViaAjax(novelId);
+      debugPrint(
+        '📍 [DEBUG API] getNovelText: ajax 成功 '
+        'text.length=${data.novelText.length} '
+        'illustrations=${data.illustrations.length}',
+      );
+      return data;
+    } catch (e) {
+      debugPrint(
+        '📍 [DEBUG API] getNovelText: ajax 取得失敗 → webview にフォールバック: $e',
+      );
+      return _getNovelTextViaWebview(novelId);
+    }
+  }
+
+  /// `/ajax/novel/{id}` から本文 + textEmbeddedImages を取得する。
+  ///
+  /// 挿絵 original URL は Referer + UA のみで取得可能（Phase 0 実測）。
+  /// R-18 等の未認証取得不可作品はここで例外 → webview フォールバック。
+  Future<NovelTextData> _getNovelTextViaAjax(int novelId) async {
+    final uri = Uri.parse('https://www.pixiv.net/ajax/novel/$novelId');
+    final response = await PixivHttpClient().client.get(
+      uri,
+      headers: {
+        'User-Agent': _clientHeaders['User-Agent']!,
+        'Referer': 'https://www.pixiv.net/',
+        'Accept-Language': 'ja-JP',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Pixiv ajax novel HTTPエラー: ${response.statusCode}');
+    }
+
+    final dynamic decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic> || decoded['error'] == true) {
+      throw Exception('Pixiv ajax novel エラー応答（未認証制限等）');
+    }
+    final body = decoded['body'];
+    if (body is! Map<String, dynamic>) {
+      throw Exception('Pixiv ajax novel body が不正');
+    }
+
+    final String text = body['content'] as String? ?? '';
+    if (text.isEmpty) {
+      throw Exception('Pixiv ajax novel content が空');
+    }
+
+    final illustrations = _extractIllustrationUrls(body['textEmbeddedImages']);
+
+    return NovelTextData(
+      id: novelId,
+      novelText: text,
+      novelPages: text.split('[newpage]').map((p) => p.trim()).toList(),
+      illustrations: illustrations,
+    );
+  }
+
+  /// textEmbeddedImages（Phase 0 確定キー）から localId → 表示 URL のマップを
+  /// 構築する。URL は urls.original → urls.1200x1200 → urls.480mw の順で優先
+  /// する（設計書 §5.2 / ユーザー確定事項）。
+  Map<String, String> _extractIllustrationUrls(dynamic raw) {
+    final result = <String, String>{};
+    if (raw is! Map) return result;
+    raw.forEach((key, value) {
+      if (value is! Map) return;
+      final urls = value['urls'];
+      if (urls is! Map) return;
+      final url =
+          (urls['original'] as String?) ??
+          (urls['1200x1200'] as String?) ??
+          (urls['480mw'] as String?);
+      if (url != null && url.isNotEmpty) {
+        result[key.toString()] = url;
+      }
+    });
+    return result;
+  }
+
+  /// webview 応答（ログイン状態）に textEmbeddedImages が同梱されるかの
+  /// 確認ログを 1 回だけ出す（設計書 §12 残タスク / §13.1）。
+  static bool _loggedWebviewTextEmbeddedImages = false;
+
+  /// 従来の webview HTML 正規表現抽出（フォールバック経路）。
   ///
   /// Pixiv は /v1/novel/text を廃止したため、HTML を返す
   /// /webview/v2/novel を使用する。レスポンス本文から正規表現で
   /// 埋め込み JSON（novel オブジェクト）を抽出し、その中の 'text' キーから
   /// 本文を取得する。
-  Future<NovelTextData> getNovelText(int novelId) async {
-    debugPrint('📍 [DEBUG API] getNovelText リクエスト直前: novelId = $novelId');
+  Future<NovelTextData> _getNovelTextViaWebview(int novelId) async {
     final token = await getAccessToken(await getRefreshToken());
 
     final uri = Uri.parse('$_baseUrl/webview/v2/novel').replace(
@@ -936,7 +1223,6 @@ class PixivApiService {
     }
 
     final String body = response.body;
-    debugPrint('📍 [DEBUG API] getNovelText 取得: body.length = ${body.length}');
 
     // 埋め込み JSON を抽出: window.preloadData = {...} 等の script 内から
     // `novel: {...}, isOwnWork` のパターンを探す。
@@ -953,17 +1239,27 @@ class PixivApiService {
     final Map<String, dynamic> novelJson =
         jsonDecode(jsonStr) as Map<String, dynamic>;
 
+    if (kDebugMode && !_loggedWebviewTextEmbeddedImages) {
+      _loggedWebviewTextEmbeddedImages = true;
+      debugPrint(
+        '[API] getNovelText(webview): textEmbeddedImages 同梱 = '
+        '${novelJson.containsKey('textEmbeddedImages')}',
+      );
+    }
+
     final String text = novelJson['text'] as String? ?? '';
     debugPrint('📍 [DEBUG API] getNovelText 本文長: text.length = ${text.length}');
 
-    // 改ページ [newpage] でページを分割
-    final List<String> pages = text.split('[newpage]');
-    final List<String> cleanedPages = pages.map((p) => p.trim()).toList();
+    // webview 応答にも同キーがあれば挿絵マップを拾う（無ければ空マップ）
+    final illustrations = _extractIllustrationUrls(
+      novelJson['textEmbeddedImages'],
+    );
 
     return NovelTextData(
       id: novelId,
       novelText: text,
-      novelPages: cleanedPages,
+      novelPages: text.split('[newpage]').map((p) => p.trim()).toList(),
+      illustrations: illustrations,
     );
   }
 
@@ -1584,16 +1880,32 @@ class AllTextSearchState {
   final String? textNextUrl;
   final SearchItem? searchItem;
 
+  /// タグ検索（partial_match_for_tags）の最終エラー。成功時は null。
+  final String? tagError;
+
+  /// 本文検索（text）の最終エラー。成功時は null。
+  final String? textError;
+
   const AllTextSearchState({
     this.tagNextOffset,
     this.textNextOffset,
     this.tagNextUrl,
     this.textNextUrl,
     this.searchItem,
+    this.tagError,
+    this.textError,
   });
 
   /// いずれかの検索に次ページがあるか
   bool get hasNext => tagNextOffset != null || textNextOffset != null;
+
+  /// タグ検索・本文検索のいずれかにエラーがあるか
+  bool get hasError => tagError != null || textError != null;
+
+  /// ページング継続判定に使う代表 offset（タグ側を優先）。
+  /// UI 側の nextOffset ガード（null なら無限スクロール停止）に供給する。
+  /// text 検索が先に終了していても tag 検索が続いていれば非 null を返す。
+  int? get primaryNextOffset => tagNextOffset ?? textNextOffset;
 
   /// 空の状態（初回検索前など）を生成
   static const AllTextSearchState empty = AllTextSearchState();
@@ -1673,15 +1985,15 @@ List<Map<String, dynamic>> _filterIllustsInIsolate(
       final Map<String, dynamic> itemMap = item as Map<String, dynamic>;
 
       final int xRestrictVal = itemMap['x_restrict'] as int? ?? 0;
-      if (xRestrict != null) {
-        final String xLower = xRestrict.toLowerCase();
-        if (xLower == 'all' && xRestrictVal > 0) {
-          continue; // 全年齢のみ：R-18(1)/R-18G(2)を除外
-        } else if (xLower == 'r18' && xRestrictVal != 1) {
-          continue; // R-18のみ：全年齢(0)・R-18G(2)を除外
-        }
-        // include_r18 / r18g はすべて表示
+      final String xLower = (xRestrict ?? '').toLowerCase();
+      if (xLower == 'all' && xRestrictVal != 0) {
+        continue; // 全年齢のみ：R-18(1)/R-18G(2)を除外
+      } else if (xLower == 'r18' && xRestrictVal != 1) {
+        continue; // R-18のみ：全年齢(0)・R-18G(2)を除外
+      } else if (xLower == 'r18g' && xRestrictVal != 2) {
+        continue; // R-18Gのみ：全年齢(0)・R-18(1)を除外
       }
+      // include_r18 / その他はすべて表示
 
       if (workType != null &&
           workType != 'all' &&
@@ -1775,13 +2087,13 @@ List<Map<String, dynamic>> _filterNovelsInIsolate(
       final Map<String, dynamic> itemMap = item as Map<String, dynamic>;
       // 0. 年齢制限（x_restrict）フィルタリング
       final int xRestrictVal = itemMap['x_restrict'] as int? ?? 0;
-      if (xRestrict != null) {
-        final String xLower = xRestrict.toLowerCase();
-        if (xLower == 'all' && xRestrictVal > 0) {
-          continue; // 全年齢のみ
-        } else if (xLower == 'r18' && xRestrictVal != 1) {
-          continue; // R-18のみ
-        }
+      final String xLower = (xRestrict ?? '').toLowerCase();
+      if (xLower == 'all' && xRestrictVal != 0) {
+        continue; // 全年齢のみ
+      } else if (xLower == 'r18' && xRestrictVal != 1) {
+        continue; // R-18のみ
+      } else if (xLower == 'r18g' && xRestrictVal != 2) {
+        continue; // R-18Gのみ
       }
 
       final int userId = itemMap['user']?['id'] as int? ?? 0;

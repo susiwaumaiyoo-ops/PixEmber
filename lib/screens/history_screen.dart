@@ -72,7 +72,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
       while (index < targets.length) {
         final item = targets[index++];
         final workId = item['work_id'] as int? ?? 0;
-        if (workId == 0) return;
+        // work_id 不明の行はスキップ（return だと残り全件の補完が止まる）。
+        if (workId == 0) continue;
         final type = item['type'] as String? ?? 'illust';
         try {
           String title;

@@ -447,7 +447,7 @@ class HomeFilterHandler {
                       const SizedBox(height: 24),
 
                       // 年齢制限
-                      _buildFilterSectionTitle('年齢制限'),
+                      _buildFilterSectionTitle('年齢制限（x_restrict で絞り込み）'),
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
@@ -902,7 +902,7 @@ class HomeFilterHandler {
                       const SizedBox(height: 24),
 
                       // 年齢制限
-                      _buildFilterSectionTitle('年齢制限'),
+                      _buildFilterSectionTitle('年齢制限（x_restrict で絞り込み）'),
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,

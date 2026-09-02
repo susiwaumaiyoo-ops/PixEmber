@@ -40,6 +40,55 @@ class _ThrowingDatabase implements Database {
       throw UnimplementedError('${invocation.memberName}');
 }
 
+/// 比率カード検証用: history に固定行・usage_sessions に空を返す Fake DB。
+class _FakeRatioDatabase implements Database {
+  final int illustCount;
+  final int novelCount;
+  _FakeRatioDatabase({required this.illustCount, required this.novelCount});
+
+  @override
+  Future<List<Map<String, Object?>>> query(
+    String table, {
+    List<String>? columns,
+    bool? distinct,
+    String? where,
+    List<Object?>? whereArgs,
+    String? groupBy,
+    String? having,
+    String? orderBy,
+    int? limit,
+    int? offset,
+  }) async {
+    if (table == 'history') {
+      // 当日の昼12時を created_at にして「今日」バケットに確実に入れる。
+      final n = DateTime.now();
+      final createdAt = DateTime(n.year, n.month, n.day, 12).toIso8601String();
+      final rows = <Map<String, Object?>>[];
+      for (int i = 0; i < illustCount; i++) {
+        rows.add({
+          'type': 'illust',
+          'author_name': 'illustAuthor$i',
+          'created_at': createdAt,
+        });
+      }
+      for (int i = 0; i < novelCount; i++) {
+        rows.add({
+          'type': 'novel',
+          'author_name': 'novelAuthor$i',
+          'created_at': createdAt,
+        });
+      }
+      return rows;
+    }
+    // usage_sessions 等は空を返す。
+    return [];
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('${invocation.memberName}');
+}
+
 void main() {
   // ========================================================================
   // 純粋関数: computeStatistics（決定性 / キャプチャなし）
@@ -132,6 +181,51 @@ void main() {
       rows[0]['author_name'] = 'MUTATED';
       final c = computeStatistics(rows, now: now);
       expect((c['authors'] as List).first, isNot(equals('MUTATED')));
+    });
+  });
+
+  // ========================================================================
+  // StatisticsScreen: 比率カード（0件セグメントでクラッシュしないこと）
+  // ========================================================================
+  group('StatisticsScreen 比率カード', () {
+    testWidgets('小説が0件でも Expanded(flex:0) のアサーション違反でクラッシュしない', (tester) async {
+      // 比率カードは ListView の下層にあるため、全体が描画されるよう縦長にする。
+      tester.view.physicalSize = const Size(1080, 6000);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(tester.view.reset);
+
+      final db = DatabaseService();
+      db.setTestDatabase(_FakeRatioDatabase(illustCount: 3, novelCount: 0));
+
+      await tester.pumpWidget(const MaterialApp(home: StatisticsScreen()));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final exception = tester.takeException();
+      expect(
+        exception,
+        isNull,
+        reason: 'Expanded(flex: 0) のアサーション違反: $exception',
+      );
+
+      // 凡例（Wrap）には 0 件セグメントも表示される。
+      expect(find.textContaining('小説: 0'), findsOneWidget);
+    });
+
+    testWidgets('イラストが0件でも同様にクラッシュしない', (tester) async {
+      tester.view.physicalSize = const Size(1080, 6000);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(tester.view.reset);
+
+      final db = DatabaseService();
+      db.setTestDatabase(_FakeRatioDatabase(illustCount: 0, novelCount: 2));
+
+      await tester.pumpWidget(const MaterialApp(home: StatisticsScreen()));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('イラスト: 0'), findsOneWidget);
     });
   });
 

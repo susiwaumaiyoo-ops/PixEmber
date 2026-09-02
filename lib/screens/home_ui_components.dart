@@ -1,4 +1,5 @@
 import 'home_screen_state.dart';
+import '../services/pixiv_api_service.dart';
 import '../widgets/pixiv_image.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -149,7 +150,14 @@ class HomeUIComponents {
       );
     }
 
-    final List filteredIllusts = state.illusts.where((illust) {
+    // 年齢制限（x_restrict）フィルタは共通純粋関数で先に適用する。
+    // all=全年齢のみ(0), include_r18=すべて, r18=1のみ, r18g=2のみ
+    final ageFilteredIllusts = PixivApiService.applyAgeLimitFilter(
+      state.illusts,
+      state.selectedAgeLimit,
+      (illust) => illust.xRestrict,
+    );
+    final List filteredIllusts = ageFilteredIllusts.where((illust) {
       // 作品種別フィルター
       if (state.selectedWorkType != 'all' && state.selectedWorkType != 'none') {
         if (state.selectedWorkType == 'illust' && illust.type != 'illust') {
@@ -166,12 +174,6 @@ class HomeUIComponents {
           return false;
         }
         if (state.selectedWorkType == 'novel') return false;
-      }
-      // 年齢制限フィルター（x_restrict フィールドベース）
-      // all=全年齢のみ(0), include_r18=R-18含む(0,1,2), r18=R-18のみ(1), r18g=R-18G含む(0,1,2)
-      if (state.selectedAgeLimit == 'all' && illust.xRestrict > 0) return false;
-      if (state.selectedAgeLimit == 'r18' && illust.xRestrict != 1) {
-        return false;
       }
       return true;
     }).toList();

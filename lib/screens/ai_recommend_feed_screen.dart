@@ -90,7 +90,21 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
       );
       if (!mounted) return;
       setState(() {
-        _result = result;
+        // 無限スクロール: 既存候補を保持したまま新規候補を追記する。
+        // buildFeed は都度ローカル検索も再実行するため、重複は排除する。
+        final merged = <RecommendCandidate>[...?_result?.candidates];
+        final seen = {for (final c in merged) '${c.type}:${c.workId}'};
+        for (final c in result.candidates) {
+          if (seen.add('${c.type}:${c.workId}')) merged.add(c);
+        }
+        _result = RecommendFeedResult(
+          candidates: merged,
+          modelReady: result.modelReady,
+          coverageRatio: result.coverageRatio,
+          isFallback: result.isFallback,
+          nextNovelOffset: result.nextNovelOffset,
+          nextIllustOffset: result.nextIllustOffset,
+        );
         _nextNovelOffset = result.nextNovelOffset;
         _nextIllustOffset = result.nextIllustOffset;
         _isFetchingNextPage = false;
