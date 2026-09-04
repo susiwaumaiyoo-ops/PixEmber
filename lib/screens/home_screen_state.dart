@@ -85,6 +85,12 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   late final TextEditingController searchController;
   final FocusNode searchFocusNode = FocusNode();
 
+  // B3: ユーザーが検索バーを明示的にタップしたかのフラグ。
+  // このフラグが true のときだけフォーカス獲得で assisting へ遷移する。
+  // 詳細画面からの pop 等で発生するプログラム的なフォーカス復帰では
+  // 結果一覧（results）を維持する。
+  bool _searchBarManuallyFocused = false;
+
   // ===== Phase 3 検索UI: モード管理（新タブを作らない方式）=====
   /// 現在の検索UIモード（browsing / assisting / results）
   HomeSearchUiMode homeSearchUiMode = HomeSearchUiMode.browsing;
@@ -372,14 +378,20 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     _syncHandler = HomeSyncHandler(this);
 
     // Phase 3: 検索窓フォーカスでアシストビューへ領域置換（オーバーレイ禁止）
+    // B3: 明示的タップ時のみ assisting へ遷移。プログラム的なフォーカス
+    // 復帰（詳細からの pop 等）では結果一覧を維持する。
     searchFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
         if (searchFocusNode.hasFocus) {
-          homeSearchUiMode = HomeSearchUiModeTransitions.onFocus(
-            homeSearchUiMode,
-          );
+          if (_searchBarManuallyFocused) {
+            homeSearchUiMode = HomeSearchUiModeTransitions.onFocusIfManual(
+              homeSearchUiMode,
+              manualTap: _searchBarManuallyFocused,
+            );
+          }
         } else {
+          _searchBarManuallyFocused = false;
           homeSearchUiMode = HomeSearchUiModeTransitions.onUnfocus(
             homeSearchUiMode,
             hasPendingText: searchController.text.trim().isNotEmpty,
@@ -2023,6 +2035,10 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                         child: TextField(
                           controller: searchController,
                           focusNode: searchFocusNode,
+                          onTap: () {
+                            // B3: 明示的タップのみ assisting へ遷移を許可する。
+                            _searchBarManuallyFocused = true;
+                          },
                           decoration: InputDecoration(
                             hintText: currentIndex == illustIndex
                                 ? 'イラスト、タグ、キーワードを検索...'

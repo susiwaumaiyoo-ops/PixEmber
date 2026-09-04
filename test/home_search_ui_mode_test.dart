@@ -146,4 +146,41 @@ void main() {
       expect(HomeContentSource.values.length, 4);
     });
   });
+
+  group('HomeSearchUiModeTransitions.onFocusIfManual (B3)', () {
+    test('明示的タップ時はどの状態からでも assisting になる', () {
+      expect(
+        HomeSearchUiModeTransitions.onFocusIfManual(
+          HomeSearchUiMode.results,
+          manualTap: true,
+        ),
+        HomeSearchUiMode.assisting,
+      );
+      expect(
+        HomeSearchUiModeTransitions.onFocusIfManual(
+          HomeSearchUiMode.browsing,
+          manualTap: true,
+        ),
+        HomeSearchUiMode.assisting,
+      );
+    });
+
+    test('プログラム的フォーカス(manualTap=false)では状態を維持', () {
+      // B3: 詳細から pop した際、results のまま結果一覧を表示する。
+      expect(
+        HomeSearchUiModeTransitions.onFocusIfManual(
+          HomeSearchUiMode.results,
+          manualTap: false,
+        ),
+        HomeSearchUiMode.results,
+      );
+      expect(
+        HomeSearchUiModeTransitions.onFocusIfManual(
+          HomeSearchUiMode.browsing,
+          manualTap: false,
+        ),
+        HomeSearchUiMode.browsing,
+      );
+    });
+  });
 }

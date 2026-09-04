@@ -48,6 +48,18 @@ class HomeSearchUiModeTransitions {
     return HomeSearchUiMode.assisting;
   }
 
+  /// B3: 検索バーのフォーカス獲得時の遷移。
+  /// [manualTap] が true（ユーザーが明示的にタップ）のときのみ assisting へ
+  /// 遷移し、false（詳細画面からの pop 等のプログラム的フォーカス復帰）の
+  /// ときは現在の状態（results 等）を維持する。
+  static HomeSearchUiMode onFocusIfManual(
+    HomeSearchUiMode current, {
+    required bool manualTap,
+  }) {
+    if (!manualTap) return current;
+    return onFocus(current);
+  }
+
   /// 検索を送信したとき（空文字は呼び出し側で抑止する）。
   /// どの状態からでも results になる。
   static HomeSearchUiMode onSubmit(HomeSearchUiMode current) {
