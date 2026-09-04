@@ -4,12 +4,16 @@ import 'package:palette_generator/palette_generator.dart' as palette_generator;
 import '../illust_model.dart';
 import 'illust_detail_handler.dart';
 import 'illust_detail_ui_components.dart';
+import '../services/pixiv_api_service.dart';
 import '../services/similar_works_service.dart';
 import '../services/usage_tracking_service.dart';
 
 /// イラスト詳細画面のステートクラス（public）
 class IllustDetailState extends ChangeNotifier {
-  final Illust illust;
+  Illust _illust;
+
+  /// 現在表示中のイラスト（B1: /v1/illust/detail 再取得で差し替え可能）。
+  Illust get illust => _illust;
   final ValueChanged<String>? onTagTap;
   final ValueChanged<bool>? onBookmarkChanged;
 
@@ -53,10 +57,10 @@ class IllustDetailState extends ChangeNotifier {
   BuildContext? get context => _contextProvider?.call();
 
   IllustDetailState({
-    required this.illust,
+    required Illust illust,
     this.onTagTap,
     this.onBookmarkChanged,
-  }) {
+  }) : _illust = illust {
     _isBookmarked = illust.isBookmarked;
     handler = IllustDetailHandler(
       illust: illust,
@@ -64,6 +68,15 @@ class IllustDetailState extends ChangeNotifier {
       onBookmarkChanged: onBookmarkChanged,
     );
     uiComponents = IllustDetailUIComponents();
+  }
+
+  /// B1: /v1/illust/detail で再取得した完全メタに差し替える。
+  /// （検索APIのレスポンスには image_urls/meta_pages が含まれない）
+  void applyFullMeta(Illust full) {
+    full.isBookmarked = _illust.isBookmarked;
+    _illust = full;
+    handler.illust = full;
+    notifyListeners();
   }
 
   /// State 側から自身の操作手段（コールバック）を受け取る
@@ -217,11 +230,45 @@ class _IllustDetailScreenState extends State<IllustDetailScreen> {
     state.handler.generatePalette(state);
     // バックグラウンドでイラスト意味検索用ベクトルを生成・保存（UIブロックなし）
     unawaited(state.handler.ensureIllustEmbedding());
+    // B1: メタが不完全（検索APIレスポンス）なら完全データを再取得し
+    // 画像ロードが途中で止まる問題を修正
+    unawaited(_ensureFullMeta());
     // 閲覧時間トラッキング開始（Phase 4）
     _usageSession = UsageTrackingService().startSession(
       workId: widget.illust.id,
       workType: 'illust',
     );
+  }
+
+  /// B1: /v1/search/illust のレスポンスアイテムは
+  /// image_urls/meta_single_page/meta_pages を含まずトップレベル url のみ。
+  /// 詳細画面が受け取ったメタが不完全なら /v1/illust/detail から再取得し
+  /// 置き換える（検索結果から開いた詳細の画像ロード停止を修正）。
+  Future<void> _ensureFullMeta() async {
+    final initial = widget.illust;
+    if (!initial.hasIncompleteImageMeta) return;
+    debugPrint(
+      '[ILLUST-DETAIL] B1 meta incomplete: id=${initial.id} '
+      'original=${initial.urls.original != null} '
+      'preview=${initial.urls.preview != null} '
+      'metaPages=${initial.metaPages.length}/${initial.pageCount}',
+    );
+    try {
+      final full = await PixivApiService().getIllustById(initial.id);
+      if (!mounted) return;
+      state.applyFullMeta(full);
+      // 初期 preview URL が欠落してパレット未生成なら、新URLで再試行
+      if (state.paletteGenerator == null &&
+          full.urls.preview != null &&
+          full.urls.preview!.isNotEmpty) {
+        state.handler.generatePalette(state);
+      }
+      debugPrint('[ILLUST-DETAIL] B1 meta refetch done: id=${full.id}');
+    } catch (e) {
+      debugPrint(
+        '[ILLUST-DETAIL] B1 meta refetch failed: id=${initial.id}: $e',
+      );
+    }
   }
 
   @override

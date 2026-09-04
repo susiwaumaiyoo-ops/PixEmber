@@ -52,6 +52,16 @@ class Illust {
   /// 互換用ゲッター（古いコード救済）。実体は totalBookmarks。
   int get bookmarkCount => totalBookmarks;
 
+  /// 画像メタが不完全かどうか（B1）。
+  ///
+  /// 検索API（/v1/search/illust）のレスポンスは image_urls/meta_pages を
+  /// 含まずトップレベル url のみ。true のとき詳細画面は /v1/illust/detail
+  /// から完全データを再取得して置き換える。
+  bool get hasIncompleteImageMeta {
+    if (urls.original == null || urls.preview == null) return true;
+    return pageCount > 1 && metaPages.isEmpty;
+  }
+
   factory Illust.fromJson(Map<String, dynamic> json) {
     final tagsList = json['tags'] as List<dynamic>?;
     final List<String> parsedTags = tagsList != null
@@ -73,10 +83,20 @@ class Illust {
 
     final imageUrls = json['image_urls'] as Map<String, dynamic>?;
     final metaSingle = json['meta_single_page'] as Map<String, dynamic>?;
-    final IllustUrls urls = IllustUrls.fromJson(
-      imageUrls,
-      metaSinglePage: metaSingle,
-    );
+    var urls = IllustUrls.fromJson(imageUrls, metaSinglePage: metaSingle);
+    // B1: 検索API（/v1/search/illust）のアイテムは image_urls/
+    // meta_single_page/meta_pages を持わずトップレベル url（master1200）のみ。
+    // それで補完し、一覧サムネ・詳細画面に必ず表示可能な画像URLを持たせる
+    // （複数ページのオリジナル画質は詳細画面の再取得で補完）。
+    final topUrl = json['url'] as String?;
+    if (urls.preview == null && topUrl != null && topUrl.isNotEmpty) {
+      urls = IllustUrls(
+        preview: topUrl,
+        original: topUrl,
+        rawPreview: topUrl,
+        rawOriginal: topUrl,
+      );
+    }
 
     final pagesList = json['meta_pages'] as List<dynamic>?;
     final List<PageImage> parsedPages = pagesList != null

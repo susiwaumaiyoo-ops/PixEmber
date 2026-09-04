@@ -13,7 +13,8 @@ import '../services/rerank_service.dart';
 import 'illust_detail_state.dart';
 
 class IllustDetailHandler {
-  final Illust illust;
+  /// B1: 非final（/v1/illust/detail 再取得の完全メタで差し替え可能）。
+  Illust illust;
   final ValueChanged<String>? onTagTap;
   final ValueChanged<bool>? onBookmarkChanged;
 
