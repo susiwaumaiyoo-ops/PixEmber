@@ -790,17 +790,14 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     }
   }
 
-  /// シリーズ進捗カード（Phase N3）。「シリーズ 3/12 ・ 次は第4話」+ 次から読む。
+  /// シリーズ進捗カード（B5 コンパクト化）。
+  /// 「シリーズ 3/12話 ▶ 次: 第4話」＋細い進捗バー。
   Widget _buildSeriesProgressCard() {
     final progress = _seriesProgress!;
     final next = progress.nextUnreadWork;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.black54,
-        borderRadius: BorderRadius.circular(10),
-      ),
+    final isComplete = progress.readCount >= progress.totalCount;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -808,58 +805,79 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
             children: [
               const Icon(
                 Icons.auto_stories,
-                size: 16,
+                size: 14,
                 color: Colors.pinkAccent,
               ),
               const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  progress.summaryLabel(),
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              Text(
+                '${progress.readCount}/${progress.totalCount}話',
+                style: const TextStyle(
+                  color: Colors.pinkAccent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(2),
-            child: LinearProgressIndicator(
-              value: progress.progressRatio,
-              backgroundColor: Colors.white12,
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                Colors.pinkAccent,
-              ),
-              minHeight: 4,
-            ),
-          ),
-          if (next != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              next.title,
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _openNextSeriesWork,
-                icon: const Icon(Icons.play_arrow, size: 16),
-                label: const Text('次から読む'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.pinkAccent,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
+              const SizedBox(width: 6),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: progress.progressRatio,
+                    backgroundColor: Colors.white12,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      Colors.pinkAccent,
+                    ),
+                    minHeight: 3,
                   ),
                 ),
               ),
-            ),
-          ],
+              if (isComplete) ...[
+                const SizedBox(width: 8),
+                const Icon(Icons.check_circle, size: 14, color: Colors.green),
+                const SizedBox(width: 2),
+                const Text(
+                  '読了',
+                  style: TextStyle(
+                    color: Colors.green,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ] else if (next != null) ...[
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: _openNextSeriesWork,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '次: ${next.title}',
+                          style: const TextStyle(
+                            color: Colors.pinkAccent,
+                            fontSize: 11,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(width: 2),
+                        const Icon(
+                          Icons.play_arrow,
+                          size: 14,
+                          color: Colors.pinkAccent,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );
