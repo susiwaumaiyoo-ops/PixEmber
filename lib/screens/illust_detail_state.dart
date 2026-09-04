@@ -4,6 +4,7 @@ import 'package:palette_generator/palette_generator.dart' as palette_generator;
 import '../illust_model.dart';
 import 'illust_detail_handler.dart';
 import 'illust_detail_ui_components.dart';
+import '../services/similar_works_service.dart';
 import '../services/usage_tracking_service.dart';
 
 /// イラスト詳細画面のステートクラス（public）
@@ -19,6 +20,10 @@ class IllustDetailState extends ChangeNotifier {
   final List<Illust> _relatedIllusts = [];
   bool _isLoadingRelated = true;
   bool _hasRelatedError = false;
+
+  // 似た作品（Phase D）
+  SimilarWorksResult? _similar;
+  bool _isLoadingSimilar = true;
 
   palette_generator.PaletteGenerator? _paletteGenerator;
   final bool _isZooming = false;
@@ -79,6 +84,8 @@ class IllustDetailState extends ChangeNotifier {
   bool get hasRelatedError => _hasRelatedError;
   bool get isDownloading => _isDownloading;
   bool get isDownloaded => _isDownloaded;
+  SimilarWorksResult? get similar => _similar;
+  bool get isLoadingSimilar => _isLoadingSimilar;
   bool get isZooming => _isZooming;
   int get currentPage => _currentPage;
   String get getHost => host;
@@ -131,6 +138,25 @@ class IllustDetailState extends ChangeNotifier {
     _relatedIllusts.clear();
     _relatedIllusts.addAll(value);
     notifyListeners();
+  }
+
+  /// 似た作品の読み込み（Phase D）。失敗しても空表示で継続。
+  Future<void> loadSimilarWorks() async {
+    if (!_isLoadingSimilar) return;
+    try {
+      final result = await SimilarWorksService.resolve().buildForIllust(
+        illust,
+        limit: 12,
+      );
+      if (!mounted) return;
+      setStateValue(() {
+        _similar = result;
+        _isLoadingSimilar = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setStateValue(() => _isLoadingSimilar = false);
+    }
   }
 
   // State update methods
@@ -186,6 +212,7 @@ class _IllustDetailScreenState extends State<IllustDetailScreen> {
       contextProvider: () => mounted ? context : null,
     );
     state.handler.fetchRelatedIllusts(state);
+    state.loadSimilarWorks();
     state.handler.recordHistory(state);
     state.handler.generatePalette(state);
     // バックグラウンドでイラスト意味検索用ベクトルを生成・保存（UIブロックなし）

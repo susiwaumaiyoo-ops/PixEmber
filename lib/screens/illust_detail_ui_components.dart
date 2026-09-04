@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../illust_model.dart';
+import '../novel_model.dart';
+import '../services/similar_works_service.dart';
 import '../utils/datetime_format.dart';
 import '../widgets/pixiv_image.dart';
 import '../widgets/ugoira_player.dart';
@@ -9,6 +11,7 @@ import '../widgets/folder_selection_bottom_sheet.dart';
 import 'author_profile_screen.dart';
 import 'full_screen_image_page.dart';
 import 'illust_detail_state.dart';
+import 'novel_detail_screen.dart';
 
 const double kTabletBreakpoint = 600.0;
 
@@ -389,6 +392,8 @@ class IllustDetailUIComponents {
           ),
         ),
         const Divider(color: Colors.grey, height: 32),
+        _buildSimilarSection(context, state),
+        const Divider(color: Colors.grey, height: 32),
         const Row(
           children: [
             Icon(Icons.auto_awesome, color: Colors.pinkAccent, size: 18),
@@ -514,6 +519,10 @@ class IllustDetailUIComponents {
         ),
         const Divider(color: Colors.grey, height: 32),
 
+        // 似た作品（Phase D）
+        _buildSimilarSection(context, state),
+        const Divider(color: Colors.grey, height: 32),
+
         // 関連作品セクション
         const Row(
           children: [
@@ -533,6 +542,264 @@ class IllustDetailUIComponents {
         _buildRelatedSection(state),
       ],
     );
+  }
+
+  // ==========================================
+  // 似た作品セクション（Phase D）
+  // ==========================================
+
+  /// 「似た作品」セクション（読み込み中は非表示、候補なしは空状態）。
+  Widget _buildSimilarSection(BuildContext context, IllustDetailState state) {
+    final similar = state.similar;
+    if (state.isLoadingSimilar || similar == null) {
+      return const SizedBox.shrink();
+    }
+    final works = similar.works;
+    if (works.isEmpty) {
+      final msg = similar.modelReady
+          ? '似た作品が見つかりませんでした（データ不足またはオフライン）'
+          : 'AIモデル未導入のため、似た作品が見つかりませんでした。';
+      return SizedBox(
+        height: 60,
+        child: Center(
+          child: Text(
+            msg,
+            style: const TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.auto_awesome, color: Colors.pinkAccent, size: 18),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                '似た作品',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            if (!similar.modelReady)
+              const Text(
+                '(タグベース)',
+                style: TextStyle(color: Colors.grey, fontSize: 11),
+              ),
+            TextButton(
+              onPressed: () => _showSimilarWorksScreen(context, state),
+              child: const Text(
+                'もっと見る',
+                style: TextStyle(color: Colors.pinkAccent, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 150,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: works.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 12),
+            itemBuilder: (context, index) =>
+                _buildSimilarCard(context, state, works[index]),
+          ),
+        ),
+        if (similar.sameSeries.isNotEmpty)
+          ..._buildSimilarLabeledRow(
+            '同じシリーズ',
+            similar.sameSeries,
+            context,
+            state,
+          ),
+        if (similar.sameAuthor.isNotEmpty)
+          ..._buildSimilarLabeledRow(
+            '同じ作者',
+            similar.sameAuthor,
+            context,
+            state,
+          ),
+      ],
+    );
+  }
+
+  /// 同一シリーズ / 同一作者のラベル付きミニ行。
+  List<Widget> _buildSimilarLabeledRow(
+    String label,
+    List<SimilarWork> works,
+    BuildContext context,
+    IllustDetailState state,
+  ) {
+    return [
+      const SizedBox(height: 12),
+      Text(label, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+      const SizedBox(height: 4),
+      SizedBox(
+        height: 110,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: works.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 12),
+          itemBuilder: (context, index) =>
+              _buildSimilarCard(context, state, works[index]),
+        ),
+      ),
+    ];
+  }
+
+  /// 「似た作品」個別カード（カバー + タイトル + 似た理由）。
+  Widget _buildSimilarCard(
+    BuildContext context,
+    IllustDetailState state,
+    SimilarWork work,
+  ) {
+    return GestureDetector(
+      onTap: () => _openSimilarWork(context, state, work),
+      child: SizedBox(
+        width: 110,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Card(
+                color: const Color(0xFF222222),
+                clipBehavior: Clip.antiAlias,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+                child: _buildSimilarCover(work),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _similarTitle(work),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white, fontSize: 11),
+            ),
+            Text(
+              work.reason,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.pinkAccent, fontSize: 10),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSimilarCover(SimilarWork work) {
+    final url = _similarCoverUrl(work);
+    if (url == null) {
+      return Container(
+        color: Colors.grey[800],
+        child: const Icon(Icons.broken_image, color: Colors.grey),
+      );
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        PixivImage(
+          url: url,
+          fit: BoxFit.cover,
+          isThumbnail: true,
+          errorWidget: Container(
+            color: Colors.grey[800],
+            child: const Icon(Icons.broken_image, color: Colors.grey),
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.transparent, Colors.black.withValues(alpha: 0.5)],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 候補行からカバーURLを抽出（DB行 / API行の両形式に対応）。
+  String? _similarCoverUrl(SimilarWork work) {
+    final row = work.row;
+    final imageUrls = row['image_urls'];
+    if (imageUrls is Map) {
+      final u = imageUrls['medium'] ?? imageUrls['large'];
+      if (u is String && u.isNotEmpty) return u;
+    }
+    final cover = row['cover_url'];
+    if (cover is String && cover.isNotEmpty) return cover;
+    return null;
+  }
+
+  String _similarTitle(SimilarWork work) {
+    final title = work.row['title'];
+    if (title is String && title.isNotEmpty) return title;
+    return '作品 #${work.workId}';
+  }
+
+  /// 「似た作品」全一覧画面（軸タブ付き）へ遷移。
+  void _showSimilarWorksScreen(BuildContext context, IllustDetailState state) {
+    final similar = state.similar;
+    if (similar == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SimilarWorksScreen(
+          baseTitle: state.illust.title,
+          result: similar,
+          onOpen: (w) => _openSimilarWork(context, state, w),
+        ),
+      ),
+    );
+  }
+
+  /// 候補の詳細画面へ遷移（小説→小説詳細 / イラスト→イラスト詳細）。
+  void _openSimilarWork(
+    BuildContext context,
+    IllustDetailState state,
+    SimilarWork work,
+  ) {
+    try {
+      if (work.type == 'novel') {
+        final novel = Novel.fromJson(Map<String, dynamic>.from(work.row));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: novel)),
+        );
+        return;
+      }
+      final row = Map<String, dynamic>.from(work.row);
+      // ローカルDB行は cover_url から API形式の image_urls を補完する。
+      if (row['image_urls'] == null) {
+        final cover = row['cover_url'];
+        if (cover is String && cover.isNotEmpty) {
+          row['image_urls'] = {'medium': cover, 'large': cover};
+        }
+      }
+      final illust = Illust.fromJson(row);
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => IllustDetailScreen(
+            illust: illust,
+            onTagTap: state.onTagTap,
+            onBookmarkChanged: state.onBookmarkChanged,
+          ),
+        ),
+      );
+    } catch (_) {
+      // 行構造が不正な場合は遷移をスキップ。
+    }
   }
 
   // ==========================================

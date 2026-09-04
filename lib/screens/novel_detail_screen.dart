@@ -13,6 +13,7 @@ import '../services/novel_document_text.dart';
 import '../services/pixiv_api_service.dart';
 import '../services/reading_speed_service.dart';
 import '../services/ruri_model_manager.dart';
+import '../services/similar_works_service.dart';
 import '../widgets/pixiv_image.dart';
 
 class NovelDetailScreen extends StatefulWidget {
@@ -46,6 +47,10 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   String _emotionProgressLabel = '';
   bool _emotionModelAvailable = false;
   String? _emotionNote;
+  // 似た作品（Phase D）
+  SimilarWorksResult? _similar;
+  bool _similarLoading = false;
+  String? _similarNote;
 
   @override
   void initState() {
@@ -56,6 +61,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     _loadReadingProgress();
     _loadReadingEstimate();
     _loadEmotionCurveState();
+    _loadSimilarWorks();
     _recordHistory();
     debugPrint('📍 [DEBUG Detail] initState 終了');
   }
@@ -178,6 +184,166 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
       });
       debugPrint('感情曲線生成に失敗: $e');
     }
+  }
+
+  /// 似た作品の読み込み（Phase D）。失敗しても注記のみで落とさない。
+  Future<void> _loadSimilarWorks() async {
+    if (_similarLoading) return;
+    setState(() => _similarLoading = true);
+    try {
+      final result = await SimilarWorksService.resolve().buildForNovel(
+        widget.novel,
+        limit: 12,
+      );
+      if (!mounted) return;
+      setState(() {
+        _similar = result;
+        _similarLoading = false;
+        if (result.works.isEmpty &&
+            result.sameAuthor.isEmpty &&
+            result.sameSeries.isEmpty) {
+          _similarNote = result.modelReady
+              ? '似た作品が見つかりませんでした（データ不足またはオフライン）'
+              : 'AIモデル未導入のためタグベースの候補のみ表示しています';
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _similarLoading = false;
+        _similarNote = '似た作品の読み込みに失敗しました';
+      });
+      debugPrint('似た作品読み込みに失敗（無視）: $e');
+    }
+  }
+
+  /// 似た作品カード（Phase D）。横スクロール + 「なぜ似ているか」+ もっと見る。
+  Widget _buildSimilarWorksCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1C),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                '📚 似た作品',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              if (_similar != null &&
+                  (_similar!.works.isNotEmpty ||
+                      _similar!.sameAuthor.isNotEmpty ||
+                      _similar!.sameSeries.isNotEmpty))
+                TextButton(
+                  onPressed: _showSimilarWorksScreen,
+                  child: const Text(
+                    'もっと見る',
+                    style: TextStyle(color: Colors.pinkAccent, fontSize: 12),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_similarLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: CircularProgressIndicator(color: Colors.pinkAccent),
+              ),
+            )
+          else if (_similar == null)
+            const Text(
+              '読み込み中…',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            )
+          else if (_similar!.works.isEmpty &&
+              _similar!.sameAuthor.isEmpty &&
+              _similar!.sameSeries.isEmpty)
+            Text(
+              _similarNote ?? '似た作品はありません',
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            )
+          else ...[
+            if (_similar!.works.isNotEmpty)
+              _buildSimilarHorizontal(_similar!.works),
+            if (_similar!.sameSeries.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              const Text(
+                '同じシリーズ',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              const SizedBox(height: 6),
+              _buildSimilarHorizontal(_similar!.sameSeries),
+            ],
+            if (_similar!.sameAuthor.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              const Text(
+                '同じ作者',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              const SizedBox(height: 6),
+              _buildSimilarHorizontal(_similar!.sameAuthor),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 似た作品の横スクロール列（「なぜ似ているか」の一行理由付き）。
+  Widget _buildSimilarHorizontal(List<SimilarWork> works) {
+    return SizedBox(
+      height: 150,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: works.length,
+        itemBuilder: (context, index) {
+          final w = works[index];
+          return _SimilarWorkCard(work: w, onTap: () => _openSimilar(w));
+        },
+      ),
+    );
+  }
+
+  /// 似た作品を開く（local=DB行 / api=APIモデル）。
+  void _openSimilar(SimilarWork w) {
+    try {
+      if (w.type == 'novel') {
+        final novel = Novel.fromJson(Map<String, dynamic>.from(w.row));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: novel)),
+        );
+      }
+    } catch (e) {
+      debugPrint('似た作品を開けませんでした: $e');
+    }
+  }
+
+  /// 似た作品の一覧画面（軸タブ付き）。
+  void _showSimilarWorksScreen() {
+    final result = _similar;
+    if (result == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SimilarWorksScreen(
+          baseTitle: widget.novel.title,
+          result: result,
+          onOpen: _openSimilar,
+        ),
+      ),
+    );
   }
 
   /// 感情曲線カード（Phase C）。空状態（モデル未導入/データ不足）は注記と生成ボタン。
@@ -958,6 +1124,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
             ),
             const SizedBox(height: 12),
             _buildEmotionCurveCard(),
+            const SizedBox(height: 12),
+            _buildSimilarWorksCard(),
 
             // 2. 詳細メタ情報
             Container(
@@ -1232,5 +1400,209 @@ class _EmotionCurvePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _EmotionCurvePainter oldDelegate) {
     return oldDelegate.curve != curve;
+  }
+}
+
+/// 似た作品カード（Phase D）。表紙 + タイトル + 「なぜ似ているか」の一行理由。
+class _SimilarWorkCard extends StatelessWidget {
+  final SimilarWork work;
+  final VoidCallback onTap;
+
+  const _SimilarWorkCard({required this.work, required this.onTap});
+
+  String _coverUrl() {
+    // DB 行: cover_url / API モデル: image_urls.large 等
+    final cu = work.row['cover_url'];
+    if (cu is String && cu.isNotEmpty) return cu;
+    final iu = work.row['image_urls'];
+    if (iu is Map) {
+      for (final k in const ['large', 'medium', 'square_medium']) {
+        final v = iu[k];
+        if (v is String && v.isNotEmpty) return v;
+      }
+    }
+    return '';
+  }
+
+  String _title() {
+    final t = work.row['title'];
+    return t is String && t.isNotEmpty ? t : '無題';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cover = _coverUrl();
+    return Container(
+      width: 100,
+      margin: const EdgeInsets.only(right: 10),
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                width: 100,
+                height: 88,
+                child: cover.isNotEmpty
+                    ? PixivImage(
+                        url: cover,
+                        fit: BoxFit.cover,
+                        isThumbnail: true,
+                        errorWidget: Container(
+                          color: Colors.grey[800],
+                          child: const Icon(Icons.book, color: Colors.grey),
+                        ),
+                      )
+                    : Container(
+                        color: Colors.grey[800],
+                        child: const Icon(Icons.book, color: Colors.grey),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _title(),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white, fontSize: 11),
+            ),
+            Text(
+              work.reason,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.pinkAccent, fontSize: 9),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 似た作品の一覧画面（Phase D）。軸タブ（総合 / 意味 / タグ）で並べ替え。
+class SimilarWorksScreen extends StatefulWidget {
+  final String baseTitle;
+  final SimilarWorksResult result;
+  final ValueChanged<SimilarWork> onOpen;
+
+  const SimilarWorksScreen({
+    super.key,
+    required this.baseTitle,
+    required this.result,
+    required this.onOpen,
+  });
+
+  @override
+  State<SimilarWorksScreen> createState() => _SimilarWorksScreenState();
+}
+
+class _SimilarWorksScreenState extends State<SimilarWorksScreen> {
+  String _axis = '総合';
+
+  List<SimilarWork> _sorted() {
+    final list = List<SimilarWork>.from(widget.result.works);
+    double key(SimilarWork w) {
+      switch (_axis) {
+        case '意味':
+          return w.semanticScore;
+        case 'タグ':
+          return w.tagScore;
+        case '視覚':
+          return w.visualScore;
+        default:
+          return w.score;
+      }
+    }
+
+    list.sort((a, b) => key(b).compareTo(key(a)));
+    return list;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final axes = ['総合', '意味', 'タグ', '視覚'];
+    final works = _sorted();
+    return Scaffold(
+      backgroundColor: const Color(0xFF121212),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        title: Text(
+          '「${widget.baseTitle}」に似た作品',
+          style: const TextStyle(color: Colors.white, fontSize: 15),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Wrap(
+              spacing: 8,
+              children: [
+                for (final a in axes)
+                  ChoiceChip(
+                    label: Text(a),
+                    selected: _axis == a,
+                    onSelected: (_) => setState(() => _axis = a),
+                    selectedColor: Colors.pinkAccent.withValues(alpha: 0.25),
+                    labelStyle: TextStyle(
+                      color: _axis == a ? Colors.pinkAccent : Colors.white70,
+                      fontSize: 12,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: works.isEmpty
+                ? const Center(
+                    child: Text(
+                      '似た作品はありません',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: works.length,
+                    itemBuilder: (context, i) {
+                      final w = works[i];
+                      return ListTile(
+                        onTap: () => widget.onOpen(w),
+                        title: Text(
+                          w.row['title']?.toString() ?? '無題',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          'スコア ${(w.score * 100).toStringAsFixed(0)}% / '
+                          '意味 ${(w.semanticScore * 100).toStringAsFixed(0)} '
+                          'タグ ${(w.tagScore * 100).toStringAsFixed(0)} '
+                          '視覚 ${(w.visualScore * 100).toStringAsFixed(0)}',
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 11,
+                          ),
+                        ),
+                        trailing: Text(
+                          w.reason,
+                          style: const TextStyle(
+                            color: Colors.pinkAccent,
+                            fontSize: 10,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
   }
 }

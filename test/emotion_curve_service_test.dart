@@ -289,10 +289,10 @@ void main() {
       svc.testEncodeQuery = _fakeQueryEncoder;
       svc.testEncodeDocument = _fakeDocumentEncoder;
 
-// チャンク数が 1 だと z スコアの分散が 0 になり全ゼロになるため、
+      // チャンク数が 1 だと z スコアの分散が 0 になり全ゼロになるため、
       // 各ページをパディングして 2 チャンクぴったり（合計 < 1600 文字）に収める。
-      final p1 = '嬉しい。笑顔で満ちた一日だった。笑い声が響く。' + 'あ' * 772;
-      final p2 = '悲しい別れ。涙が止まらなかった。寂しさが胸を締めつける。' + 'あ' * 762;
+      final p1 = '嬉しい。笑顔で満ちた一日だった。笑い声が響く。${'あ' * 772}';
+      final p2 = '悲しい別れ。涙が止まらなかった。寂しさが胸を締めつける。${'あ' * 762}';
       final pages = [p1, p2];
       final result = await svc.compute(
         workId: 42,
