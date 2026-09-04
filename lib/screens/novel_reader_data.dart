@@ -49,6 +49,8 @@ extension _ReaderData on _NovelReaderScreenState {
         _ttsReadRuby = prefs.getBool('novel_pref_tts_read_ruby') ?? false;
         _showReadingTime =
             prefs.getBool('novel_pref_show_reading_time') ?? true;
+        _showEmotionColor =
+            prefs.getBool('novel_pref_show_emotion_color') ?? false;
         final rubyModeStr = prefs.getString('novel_pref_ruby_mode') ?? 'show';
         _rubyMode = RubyDisplayMode.values.firstWhere(
           (mode) => mode.name == rubyModeStr,
@@ -90,6 +92,7 @@ extension _ReaderData on _NovelReaderScreenState {
       await prefs.setBool('novel_pref_tts_read_ruby', _ttsReadRuby);
       await prefs.setString('novel_pref_ruby_mode', _rubyMode.name);
       await prefs.setBool('novel_pref_show_reading_time', _showReadingTime);
+      await prefs.setBool('novel_pref_show_emotion_color', _showEmotionColor);
     } catch (e) {
       debugPrint('環境設定の保存に失敗しました: $e');
     }
@@ -106,6 +109,13 @@ extension _ReaderData on _NovelReaderScreenState {
 
     // しおりのロード
     await _loadBookmark();
+    // initialPage 指定（Phase C: 感情曲線タップジャンプ）はしおりより優先（初回のみ）
+    final jumpPage = widget.initialPage;
+    if (!_initialPageConsumed && jumpPage != null && jumpPage >= 0) {
+      _savedPageIndex = jumpPage;
+      _savedScrollOffset = 0.0;
+    }
+    _initialPageConsumed = true;
     // 本文の取得
     await _fetchNovelText();
     // 履歴登録
@@ -133,6 +143,8 @@ extension _ReaderData on _NovelReaderScreenState {
       _savedPageIndex = 0;
       _savedScrollOffset = 0.0;
       _cachedPages = null; // 別エピソードへ遷移するため本文キャッシュを無効化
+      _emotionCurve = null; // 別エピソードの感情曲線へリセット（Phase C）
+      _emotionColorNotifier.value = null;
     });
     _initAndFetch();
   }
@@ -289,6 +301,8 @@ extension _ReaderData on _NovelReaderScreenState {
     }
     final progress = ((page + fraction) / totalPages).clamp(0.0, 1.0);
     _progressNotifier.value = progress;
+    // 現在位置の感情色（Phase C）
+    _updateEmotionColor(progress);
 
     // あとで読む登録済み作品の場合、進捗率と最終位置を保存（再開・進捗表示用）。
     _saveReadLaterProgress(page, progress);
@@ -407,7 +421,47 @@ extension _ReaderData on _NovelReaderScreenState {
       _updateProgress(_savedPageIndex, _savedScrollOffset);
       // TTS再開位置（DB v18）を非同期でロード（結果は _ttsResumeIndex に保持）
       _loadTtsResumeIndex();
+      // 感情曲線キャッシュの読み込み（Phase C）。なければ何もしない。
+      unawaited(_loadEmotionCurve());
     });
+  }
+
+  /// 感情曲線キャッシュを読み込む（Phase C）。あれば HUD 感情色を更新する。
+  Future<void> _loadEmotionCurve() async {
+    try {
+      final novelId = _currentNovel.id;
+      final curve = await EmotionCurveService().loadFromCache(novelId);
+      if (!mounted || _currentNovel.id != novelId) return;
+      _emotionCurve = curve;
+      _updateEmotionColor(_progressNotifier.value);
+    } catch (e) {
+      debugPrint('感情曲線の読み込みに失敗（無視）: $e');
+    }
+  }
+
+  /// 読書進捗に応じた HUD 感情色の更新（Phase C）。
+  void _updateEmotionColor(double progress) {
+    if (!_showEmotionColor) {
+      if (_emotionColorNotifier.value != null) {
+        _emotionColorNotifier.value = null;
+      }
+      return;
+    }
+    final curve = _emotionCurve;
+    if (curve == null) return;
+    final dominant = dominantEmotionAtProgress(curve, progress);
+    if (dominant == null) {
+      if (_emotionColorNotifier.value != null) {
+        _emotionColorNotifier.value = null;
+      }
+      return;
+    }
+    final current = _emotionColorNotifier.value;
+    if (current != null && current.label == dominant.label) return;
+    _emotionColorNotifier.value = (
+      color: Color(dominant.colorValue),
+      label: kEmotionNames[dominant.label] ?? dominant.label,
+    );
   }
 
   Future<void> _saveNovelTextToDb(NovelTextData data) async {

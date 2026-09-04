@@ -7,6 +7,7 @@ import '../illust_model.dart';
 import '../novel_model.dart';
 import '../services/database_service.dart';
 import '../services/embedding_service.dart';
+import '../services/emotion_curve_service.dart';
 import '../services/novel_document_text.dart';
 import '../services/novel_parser.dart';
 import '../services/pixiv_api_service.dart';
@@ -25,7 +26,11 @@ part 'novel_reader_ui_components.dart';
 class NovelReaderScreen extends StatefulWidget {
   final Novel novel;
 
-  const NovelReaderScreen({super.key, required this.novel});
+  /// 開いた直後にジャンプするページ番号（Phase C: 感情曲線タップジャンプ用）。
+  /// null ならしおりから復元する。
+  final int? initialPage;
+
+  const NovelReaderScreen({super.key, required this.novel, this.initialPage});
 
   @override
   State<NovelReaderScreen> createState() => _NovelReaderScreenState();
@@ -121,6 +126,13 @@ class _NovelReaderScreenState extends State<NovelReaderScreen>
   bool _readerCpmIsDefault = true;
   bool _showReadingTime = true;
 
+  // 感情曲線（Phase C）: HUDの現在位置感情色設定とキャッシュ曲線。
+  bool _showEmotionColor = false;
+  bool _initialPageConsumed = false;
+  EmotionCurveResult? _emotionCurve;
+  final ValueNotifier<({Color color, String label})?> _emotionColorNotifier =
+      ValueNotifier<({Color color, String label})?>(null);
+
   @override
   void initState() {
     debugPrint('📍 [DEBUG Reader] initState 開始');
@@ -171,6 +183,7 @@ class _NovelReaderScreenState extends State<NovelReaderScreen>
     _currentPageNotifier.dispose();
     _progressNotifier.dispose();
     _showHUDNotifier.dispose();
+    _emotionColorNotifier.dispose();
     super.dispose();
   }
 

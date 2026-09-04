@@ -8,6 +8,7 @@ import 'novel_series_episodes_screen.dart';
 import 'read_later_screen.dart';
 import '../services/database_service.dart';
 import '../services/embedding_service.dart';
+import '../services/emotion_curve_service.dart';
 import '../services/novel_document_text.dart';
 import '../services/pixiv_api_service.dart';
 import '../services/reading_speed_service.dart';
@@ -39,6 +40,12 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   // 読了目安（Phase A）
   int? _estReadingMinutes;
   bool _estReadingIsDefault = false;
+  // 感情曲線（Phase C）
+  EmotionCurveResult? _emotionCurve;
+  bool _emotionGenerating = false;
+  String _emotionProgressLabel = '';
+  bool _emotionModelAvailable = false;
+  String? _emotionNote;
 
   @override
   void initState() {
@@ -48,6 +55,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     _loadReadLaterState();
     _loadReadingProgress();
     _loadReadingEstimate();
+    _loadEmotionCurveState();
     _recordHistory();
     debugPrint('📍 [DEBUG Detail] initState 終了');
   }
@@ -80,6 +88,335 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     } catch (e) {
       debugPrint('読了目安の算出に失敗（無視）: $e');
     }
+  }
+
+  /// 感情曲線状態の読み込み（Phase C）。キャッシュがあれば表示、なければ生成ボタン/注記。
+  Future<void> _loadEmotionCurveState() async {
+    try {
+      final cached = await EmotionCurveService().loadFromCache(widget.novel.id);
+      if (!mounted) return;
+      if (cached != null) {
+        setState(() => _emotionCurve = cached);
+        return;
+      }
+      final available = await EmotionCurveService().isModelAvailable();
+      if (!mounted) return;
+      setState(() {
+        _emotionModelAvailable = available;
+        if (!available) {
+          _emotionNote = 'AIモデルが未導入のため感情曲線を生成できません';
+        }
+      });
+    } catch (e) {
+      debugPrint('感情曲線状態の読み込みに失敗（無視）: $e');
+    }
+  }
+
+  /// 感情曲線の生成（Phase C）。進捗表示付き・キャンセル可能。
+  Future<void> _generateEmotionCurve() async {
+    if (_emotionGenerating) return;
+    setState(() {
+      _emotionGenerating = true;
+      _emotionProgressLabel = '準備中…';
+      _emotionNote = null;
+    });
+    try {
+      final row = await DatabaseService().getNovelText(widget.novel.id);
+      if (!mounted) return;
+      if (row == null) {
+        setState(() {
+          _emotionGenerating = false;
+          _emotionProgressLabel = '';
+          _emotionNote = '本文が未キャッシュです。一度リーダーを開いてから生成できます';
+        });
+        return;
+      }
+      final text = (row['text'] as String?) ?? '';
+      var pages = <String>[];
+      try {
+        final pagesJson = row['pages_json'] as String?;
+        if (pagesJson != null && pagesJson.isNotEmpty) {
+          pages = List<String>.from(jsonDecode(pagesJson) as List);
+        }
+      } catch (_) {
+        // pages_json 破損時は空扱いにする
+      }
+      final curve = await EmotionCurveService().compute(
+        workId: widget.novel.id,
+        text: text,
+        pages: pages,
+        onProgress: (done, total) {
+          if (!mounted) return;
+          setState(() => _emotionProgressLabel = '生成中… $done/$total');
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _emotionGenerating = false;
+        _emotionProgressLabel = '';
+        if (curve == null) {
+          _emotionNote = '本文が短すぎて感情曲線を生成できません';
+        } else {
+          _emotionCurve = curve;
+        }
+      });
+    } on StateError catch (e) {
+      if (!mounted) return;
+      final canceled = e.message.contains('キャンセル');
+      setState(() {
+        _emotionGenerating = false;
+        _emotionProgressLabel = '';
+        _emotionNote = canceled ? '生成をキャンセルしました' : '感情曲線の生成に失敗しました';
+      });
+      debugPrint('感情曲線生成 StateError: $e');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _emotionGenerating = false;
+        _emotionProgressLabel = '';
+        _emotionNote = '感情曲線の生成に失敗しました';
+      });
+      debugPrint('感情曲線生成に失敗: $e');
+    }
+  }
+
+  /// 感情曲線カード（Phase C）。空状態（モデル未導入/データ不足）は注記と生成ボタン。
+  Widget _buildEmotionCurveCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1C),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                '💗 感情曲線',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (_emotionCurve?.isSimpleMode ?? false)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    '簡易モード',
+                    style: TextStyle(color: Colors.orange, fontSize: 10),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (_emotionGenerating) ...[
+            LinearProgressIndicator(
+              minHeight: 4,
+              backgroundColor: Colors.white.withValues(alpha: 0.1),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _emotionProgressLabel,
+                    style: const TextStyle(color: Colors.grey, fontSize: 11),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => EmotionCurveService().cancel(),
+                  child: const Text(
+                    'キャンセル',
+                    style: TextStyle(color: Colors.redAccent, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ] else if (_emotionCurve != null) ...[
+            GestureDetector(
+              onTap: _showEmotionCurveDialog,
+              child: Tooltip(
+                message: 'タップで拡大',
+                child: SizedBox(
+                  height: 110,
+                  width: double.infinity,
+                  child: CustomPaint(
+                    painter: _EmotionCurvePainter(curve: _emotionCurve!),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '物語の色: ${_emotionCurve!.storyColor}',
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'グラフをタップで拡大 / 位置をタップで該当本文へジャンプ',
+              style: TextStyle(color: Colors.grey, fontSize: 10),
+            ),
+          ] else if (_emotionNote != null) ...[
+            Text(
+              _emotionNote!,
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+            if (_emotionModelAvailable) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: _generateEmotionCurve,
+                icon: const Icon(Icons.auto_awesome, size: 16),
+                label: const Text('感情曲線を生成する'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.pinkAccent,
+                  side: const BorderSide(color: Colors.pinkAccent),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              ),
+            ],
+          ] else if (_emotionModelAvailable) ...[
+            const Text(
+              'AIが本文を解析し、感情（喜・悲・怖・怒・穏・切なさ）の移ろいを曲線で表示します',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _generateEmotionCurve,
+              icon: const Icon(Icons.auto_awesome, size: 16),
+              label: const Text('感情曲線を生成する'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.pinkAccent,
+                side: const BorderSide(color: Colors.pinkAccent),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 感情曲線の拡大ダイアログ（Phase C）。タップ位置 → 本文ページへジャンプ。
+  void _showEmotionCurveDialog() {
+    final curve = _emotionCurve;
+    if (curve == null) return;
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1C1C1C),
+          title: Text(
+            '💗 感情曲線${curve.isSimpleMode ? '（簡易モード）' : ''}',
+            style: const TextStyle(color: Colors.white, fontSize: 16),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final width = constraints.maxWidth;
+                    return GestureDetector(
+                      onTapDown: (details) {
+                        _jumpFromChartTap(
+                          curve,
+                          details.localPosition.dx,
+                          width,
+                        );
+                      },
+                      child: SizedBox(
+                        height: 240,
+                        width: width,
+                        child: CustomPaint(
+                          painter: _EmotionCurvePainter(curve: curve),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 6,
+                  children: [
+                    for (final label in kEmotionLabels)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: Color(
+                                kEmotionColorValues[label] ?? 0xFF9E9E9E,
+                              ),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            kEmotionNames[label] ?? label,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'グラフをタップすると、その位置の本文にジャンプします',
+                  style: TextStyle(color: Colors.grey, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('閉じる', style: TextStyle(color: Colors.grey)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// グラフタップ → チャンク → 対応ページのリーダーへジャンプ（Phase C）。
+  void _jumpFromChartTap(EmotionCurveResult curve, double dx, double width) {
+    if (curve.chunks.isEmpty || width <= 0) return;
+    final idx = (dx / width * curve.chunks.length).floor().clamp(
+      0,
+      curve.chunks.length - 1,
+    );
+    final page = curve.chunks[idx].pageStart;
+    Navigator.pop(context);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            NovelReaderScreen(novel: widget.novel, initialPage: page),
+      ),
+    );
   }
 
   Future<void> _toggleReadLater() async {
@@ -619,6 +956,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 12),
+            _buildEmotionCurveCard(),
 
             // 2. 詳細メタ情報
             Container(
@@ -835,5 +1174,63 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     } catch (_) {
       return isoDate;
     }
+  }
+}
+
+/// 感情曲線ペインター（Phase C）。感情ごとの z スコア曲線を折れ線で描画する。
+class _EmotionCurvePainter extends CustomPainter {
+  final EmotionCurveResult curve;
+
+  _EmotionCurvePainter({required this.curve});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bgPaint = Paint()..color = const Color(0xFF161616);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(8)),
+      bgPaint,
+    );
+
+    // 0 ライン（中心線）
+    final midY = size.height / 2;
+    final baselinePaint = Paint()
+      ..color = const Color(0xFFFFFFFF).withValues(alpha: 0.15)
+      ..strokeWidth = 1;
+    canvas.drawLine(Offset(0, midY), Offset(size.width, midY), baselinePaint);
+
+    final chunks = curve.chunks.length;
+    if (chunks < 2) return;
+    final stepX = size.width / (chunks - 1);
+    const zMax = 3.0;
+
+    for (
+      var i = 0;
+      i < curve.zScores.length && i < kEmotionLabels.length;
+      i++
+    ) {
+      final colorValue = kEmotionColorValues[kEmotionLabels[i]] ?? 0xFF9E9E9E;
+      final paint = Paint()
+        ..color = Color(colorValue)
+        ..strokeWidth = 1.6
+        ..style = PaintingStyle.stroke;
+      final path = Path();
+      final series = curve.zScores[i];
+      for (var j = 0; j < series.length; j++) {
+        final x = j * stepX;
+        final z = series[j].clamp(-zMax, zMax);
+        final y = midY - (z / zMax) * (size.height / 2 - 6);
+        if (j == 0) {
+          path.moveTo(x, y);
+        } else {
+          path.lineTo(x, y);
+        }
+      }
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _EmotionCurvePainter oldDelegate) {
+    return oldDelegate.curve != curve;
   }
 }

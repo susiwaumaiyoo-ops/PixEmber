@@ -855,6 +855,44 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
                               ),
                             ),
                           ],
+                          // 現在位置の感情色（Phase C / 設定でON/OFF）
+                          if (_showEmotionColor)
+                            ValueListenableBuilder<
+                              ({Color color, String label})?
+                            >(
+                              valueListenable: _emotionColorNotifier,
+                              builder: (context, emotion, _) {
+                                if (emotion == null) {
+                                  return const SizedBox.shrink();
+                                }
+                                return Padding(
+                                  padding: const EdgeInsets.only(left: 8),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 8,
+                                        height: 8,
+                                        decoration: BoxDecoration(
+                                          color: emotion.color,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '現在: ${emotion.label}',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: textColor.withValues(
+                                            alpha: 0.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
                         ],
                       ),
                       Text(

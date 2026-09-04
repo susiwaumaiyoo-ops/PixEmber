@@ -627,6 +627,29 @@ extension _ReaderUiHandler on _NovelReaderScreenState {
                       contentPadding: EdgeInsets.zero,
                       dense: true,
                     ),
+
+                    // 現在位置の感情色表示ON/OFF（Phase C）
+                    SwitchListTile(
+                      value: _showEmotionColor,
+                      onChanged: (v) {
+                        _safeSetState(() {
+                          _showEmotionColor = v;
+                        });
+                        setSheetState(() {});
+                        _updateEmotionColor(_progressNotifier.value);
+                        _savePreferences();
+                      },
+                      title: const Text(
+                        '現在位置の感情色を表示',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      subtitle: const Text(
+                        '進捗バーに現在位置の感情を色のドットで表示',
+                        style: TextStyle(fontSize: 11),
+                      ),
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                    ),
                     const SizedBox(height: 10),
                   ],
                 ),

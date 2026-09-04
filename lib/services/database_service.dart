@@ -32,7 +32,7 @@ class DatabaseService {
     final path = join(dbPath, 'pixiv_viewer.db');
     return await openDatabase(
       path,
-      version: 22,
+      version: 23,
       onConfigure: (db) async {
         // 外部キー制約（ON DELETE CASCADE 等）を有効化。
         // SQLite はデフォルトで無効のため接続毎に設定が必要。
@@ -80,6 +80,8 @@ class DatabaseService {
     await _createImageEmbeddings(db);
     // 画像指紋（重複検出・v21 追加）
     await _createImageFingerprints(db);
+    // 小説の感情曲線キャッシュ（v23 追加）
+    await _createEmotionCurves(db);
   }
 
   /// ダウンロードキューグループテーブルを作成する（_onCreate / v17 migration / onOpen 共用）。
@@ -210,6 +212,19 @@ class DatabaseService {
       'CREATE INDEX IF NOT EXISTS idx_image_fingerprints_sha256 '
       'ON image_fingerprints(sha256)',
     );
+  }
+
+  /// 小説の感情曲線テーブルを作成する（_onCreate / v23 migration / onOpen 共用）。
+  /// 本文から再生成可能なため Google Drive バックアップ対象外。
+  Future<void> _createEmotionCurves(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS emotion_curves (
+        work_id INTEGER PRIMARY KEY,
+        model_id TEXT NOT NULL,
+        chunks_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
   }
 
   /// 指定テーブルに指定カラムが無ければ ALTER TABLE ADD COLUMN する（冪等）。
@@ -672,6 +687,9 @@ class DatabaseService {
 
     // 画像指紋（重複検出・v21 追加）
     await _createImageFingerprints(db);
+
+    // 小説の感情曲線キャッシュ（v23 追加）
+    await _createEmotionCurves(db);
 
     await db.execute('CREATE INDEX idx_history_workid ON history(work_id)');
     await db.execute(
@@ -1185,6 +1203,12 @@ class DatabaseService {
         'ALTER TABLE novel_text ADD COLUMN illustrations_json TEXT',
       );
       debugPrint('[Migration v21->v22] novel_text.illustrations_json を追加');
+    }
+    if (oldVersion < 23) {
+      // 小説の感情曲線キャッシュテーブルを追加（既存データ非破壊）。
+      // 本文から再生成可能なため Google Drive バックアップ対象外。
+      await _createEmotionCurves(db);
+      debugPrint('[Migration v22->v23] emotion_curves を追加');
     }
   }
 
@@ -2084,6 +2108,48 @@ class DatabaseService {
       'image_fingerprints',
       where: 'illust_id = ?',
       whereArgs: [illustId],
+    );
+  }
+
+  // ==========================================================================
+  // 小説の感情曲線（emotion_curves）CRUD — Phase C (v23)
+  // ==========================================================================
+
+  /// 小説の感情曲線キャッシュを保存（UPSERT）。
+  /// 本文から再生成可能なため Google Drive バックアップ対象外。
+  Future<int> saveEmotionCurve({
+    required int workId,
+    required String modelId,
+    required String chunksJson,
+  }) async {
+    final db = await database;
+    return await db.insert('emotion_curves', {
+      'work_id': workId,
+      'model_id': modelId,
+      'chunks_json': chunksJson,
+      'updated_at': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// 指定小説の感情曲線キャッシュを取得（無い場合は null）。
+  Future<Map<String, dynamic>?> getEmotionCurve(int workId) async {
+    final db = await database;
+    final rows = await db.query(
+      'emotion_curves',
+      where: 'work_id = ?',
+      whereArgs: [workId],
+    );
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  /// 指定小説の感情曲線キャッシュを削除。
+  Future<int> deleteEmotionCurve(int workId) async {
+    final db = await database;
+    return await db.delete(
+      'emotion_curves',
+      where: 'work_id = ?',
+      whereArgs: [workId],
     );
   }
 
