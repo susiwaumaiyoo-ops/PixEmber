@@ -1,0 +1,10 @@
+[33m2224c00[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m docs(visual-model): Phase F - 視覚モデル選定書（承認ゲート）
+[33m8214ec1[m feat(reader-extras): Phase E - 目次感情ピーク・最近読んでないタグ・うごイラ代表フレーム
+[33m2f4d2f6[m feat(similar-works): Phase D - ハイブリッド「似た作品」
+[33mf7e12dd[m feat(emotion-curve): Phase C - 小説の感情曲線
+[33m7f90367[m feat(reading-trends): Phase B - 読書傾向の深い可視化
+[33mb2da6aa[m feat(reading-speed): Phase A - 読了予測時間 + 読書進捗
+[33mba4425d[m feat(search): redesign search UX without new tab
+[33mfb62f48[m feat: novel rich rendering + search fixes + statistics fix
+[33m493075f[m Phase 1: merge API service files into pixiv_api_service.dart
+[33mc7a49cd[m Phase 4: add 12 new endpoints and User/TrendingTag models
