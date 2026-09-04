@@ -11,6 +11,7 @@ import '../services/novel_document_text.dart';
 import '../services/novel_parser.dart';
 import '../services/pixiv_api_service.dart';
 import '../services/novel_tts_service.dart';
+import '../services/reading_speed_service.dart';
 import '../services/ruri_model_manager.dart';
 import '../services/usage_tracking_service.dart';
 import '../widgets/pixiv_image.dart';
@@ -114,6 +115,11 @@ class _NovelReaderScreenState extends State<NovelReaderScreen>
 
   // 読書時間トラッキング（Phase 4）。この画面を開いている間＝読書時間。
   UsageSessionHandle? _usageSession;
+
+  // 読了予測（Phase A）: 個人の読書速度（字/分）と表示ON/OFF設定。
+  double _readerCpm = kDefaultCharsPerMinute;
+  bool _readerCpmIsDefault = true;
+  bool _showReadingTime = true;
 
   @override
   void initState() {

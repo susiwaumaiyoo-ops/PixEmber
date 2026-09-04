@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../illust_model.dart' show Author;
 import '../novel_model.dart';
 import '../services/pixiv_api_service.dart';
+import '../services/reading_speed_service.dart';
 import '../widgets/pixiv_image.dart';
 import 'novel_detail_screen.dart';
 
@@ -29,6 +31,9 @@ class _NovelSeriesEpisodesScreenState extends State<NovelSeriesEpisodesScreen> {
   List<Novel> _episodes = [];
   bool _isLoading = false;
   String? _errorMessage;
+  // シリーズ読了時間（Phase A）。算出不可（オフライン等）なら null で非表示。
+  String? _seriesTimeLabel;
+  String? _seriesUnreadLabel;
   // ディープリンク等でタイトルが空の場合、取得後に最初の話のシリーズ名で補完
   late String _seriesTitle;
 
@@ -56,11 +61,57 @@ class _NovelSeriesEpisodesScreenState extends State<NovelSeriesEpisodesScreen> {
         _episodes = list;
         _isLoading = false;
       });
+      // シリーズ全体の読了時間をバックグラウンドで算出（Phase A）。
+      // 失敗しても一覧表示には影響させない。
+      _loadSeriesStats(list);
     } catch (e) {
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  /// 全話の合計読了時間と未読分の残り時間を算出する（Phase A）。
+  ///
+  /// getNovelSeriesAll で全話を取得して合計する。取得失敗（オフライン等）時は
+  /// 読み込み済みリストで代替し、それも無理ならラベルは null（非表示）のまま。
+  /// 未読分は prefs の `novel_progress_<id>`（0〜100%）から算出する。
+  Future<void> _loadSeriesStats(List<Novel> fallback) async {
+    try {
+      var all = fallback;
+      try {
+        final full = await _api.getNovelSeriesAll(widget.series.id);
+        if (full.isNotEmpty) all = full;
+      } catch (_) {
+        // オフライン・API失敗: 取得済みリストで代替
+      }
+      if (all.isEmpty) return;
+      final speed = await ReadingSpeedService().getPersonalSpeed();
+      final prefs = await SharedPreferences.getInstance();
+      var totalChars = 0;
+      var unreadChars = 0;
+      for (final n in all) {
+        final chars = n.textLength;
+        if (chars <= 0) continue;
+        totalChars += chars;
+        final progress = prefs.getDouble('novel_progress_${n.id}') ?? 0.0;
+        unreadChars += (chars * (1.0 - (progress / 100.0).clamp(0.0, 1.0)))
+            .round();
+      }
+      if (totalChars <= 0 || !mounted) return;
+      setState(() {
+        _seriesTimeLabel = formatReadingTime(
+          estimateRemainingMinutes(totalChars, speed.charsPerMinute),
+        );
+        _seriesUnreadLabel = unreadChars > 0
+            ? formatReadingTime(
+                estimateRemainingMinutes(unreadChars, speed.charsPerMinute),
+              )
+            : null;
+      });
+    } catch (e) {
+      debugPrint('シリーズ読了時間の算出に失敗（無視）: $e');
     }
   }
 
@@ -127,6 +178,25 @@ class _NovelSeriesEpisodesScreenState extends State<NovelSeriesEpisodesScreen> {
                           fontSize: 12,
                         ),
                       ),
+                      // 読了時間サマリー（Phase A / 算出できた場合のみ表示）
+                      if (_seriesTimeLabel != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '⏱ 全話合計 $_seriesTimeLabel',
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                          ),
+                        ),
+                        if (_seriesUnreadLabel != null)
+                          Text(
+                            '未読分 $_seriesUnreadLabel',
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 12,
+                            ),
+                          ),
+                      ],
                     ],
                   ),
                 ),

@@ -276,6 +276,23 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
     );
   }
 
+  /// 「あと約XX分」ラベルを生成する（Phase A）。
+  /// 文字数不明時は空文字（表示しない）。進捗は 0.0〜1.0。
+  String _remainingTimeLabel(double progress) {
+    var totalChars = _currentNovel.textLength;
+    if (totalChars <= 0 && _textData != null) {
+      totalChars = _textData!.novelPages.fold<int>(
+        0,
+        (sum, p) => sum + p.length,
+      );
+    }
+    if (totalChars <= 0) return '';
+    final remaining = (totalChars * (1.0 - progress.clamp(0.0, 1.0))).round();
+    final minutes = estimateRemainingMinutes(remaining, _readerCpm);
+    if (minutes <= 0) return 'まもなく読了';
+    return 'あと約$minutes分';
+  }
+
   // 本文目次（TOC）の各ページラベルを生成（各ページの先頭行を抜粋）
   List<String> _buildTocLabels() {
     final pages = _textData?.novelPages ?? [];
@@ -816,12 +833,29 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        '$percent% 読了',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: textColor.withValues(alpha: 0.5),
-                        ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '$percent% 読了',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: textColor.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          // 残りの読了予測（Phase A / 設定でON/OFF）
+                          if (_showReadingTime &&
+                              _remainingTimeLabel(progress).isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              _remainingTimeLabel(progress),
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: textColor.withValues(alpha: 0.5),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       Text(
                         '${currentPage + 1} / $totalPages ページ',

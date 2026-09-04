@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
+import '../services/reading_speed_service.dart';
 import '../services/usage_tracking_service.dart';
 
 /// 日別閲覧数の1要素。
@@ -206,6 +207,9 @@ class StatisticsScreen extends StatefulWidget {
 class _StatisticsScreenState extends State<StatisticsScreen> {
   StatisticsData? _data;
   UsageStats? _usage;
+  // 読書速度（Phase A）
+  List<ReadingSpeedPoint> _speedHistory = const [];
+  ReadingSpeedResult? _speedResult;
   bool _isLoading = true;
   String? _error;
 
@@ -232,10 +236,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       // 利用時間（Phase 4）: usage_sessions から集計。
       final usageRows = await DatabaseService().getUsageSessions();
       final usageRaw = computeUsageStatsMap(usageRows);
+      // 読書速度（Phase A）: 失敗しても他の統計表示は止めない。
+      List<ReadingSpeedPoint> speedHistory = const [];
+      ReadingSpeedResult? speedResult;
+      try {
+        final speedService = ReadingSpeedService();
+        speedHistory = await speedService.getSpeedHistory();
+        speedResult = await speedService.getPersonalSpeed();
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _data = StatisticsData.fromComputeMap(raw);
         _usage = UsageStats.fromComputeMap(usageRaw);
+        _speedHistory = speedHistory;
+        _speedResult = speedResult;
         _isLoading = false;
       });
     } catch (e) {
@@ -310,6 +324,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           _buildUsageCard(_usage!),
           const SizedBox(height: 12),
         ],
+        _buildReadingSpeedCard(),
+        const SizedBox(height: 12),
         _buildDailyChartCard(data),
         const SizedBox(height: 12),
         _buildRatioCard(data),
@@ -368,6 +384,51 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               )
               .toList(),
         ),
+      ),
+    );
+  }
+
+  /// G. 読書速度の推移（Phase A: 字/分の折れ線）。
+  Widget _buildReadingSpeedCard() {
+    final result = _speedResult;
+    final points = _speedHistory;
+    return _sectionCard(
+      title: '読書速度',
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (result != null)
+            Text(
+              '現在の推定速度: 約${result.charsPerMinute.round()}字/分'
+              '${result.isEstimated ? '（推定値: データ不足のため平均速度）' : ''}',
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          const SizedBox(height: 12),
+          if (points.length < 2)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                'あと数冊読むと、ここに読書速度の推移が表示されます',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            )
+          else ...[
+            const Text(
+              '週別の読書速度（字/分）',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 140,
+              child: CustomPaint(
+                painter: _LineChartPainter(
+                  points.map((p) => p.charsPerMinute).toList(),
+                ),
+                child: Container(),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -739,4 +800,52 @@ class _BarChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _BarChartPainter old) => old.values != values;
+}
+
+/// 週別読書速度の簡易折れ線グラフ（Phase A）。`CustomPainter` で描画する。
+class _LineChartPainter extends CustomPainter {
+  final List<double> values;
+
+  _LineChartPainter(this.values);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.length < 2) return;
+    final maxV = values.reduce((a, b) => a > b ? a : b);
+    final minV = values.reduce((a, b) => a < b ? a : b);
+    final range = (maxV - minV) <= 0 ? 1.0 : (maxV - minV);
+
+    // ベースライン
+    canvas.drawLine(
+      Offset(0, size.height - 1),
+      Offset(size.width, size.height - 1),
+      Paint()..color = Colors.grey.withValues(alpha: 0.3),
+    );
+
+    final stepX = size.width / (values.length - 1);
+    Offset pointAt(int i) {
+      final t = (values[i] - minV) / range;
+      return Offset(i * stepX, (size.height - 8) - t * (size.height - 16));
+    }
+
+    final path = Path()..moveTo(pointAt(0).dx, pointAt(0).dy);
+    for (int i = 1; i < values.length; i++) {
+      path.lineTo(pointAt(i).dx, pointAt(i).dy);
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.pinkAccent
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..strokeJoin = StrokeJoin.round,
+    );
+    final dotPaint = Paint()..color = Colors.pinkAccent;
+    for (int i = 0; i < values.length; i++) {
+      canvas.drawCircle(pointAt(i), 2.5, dotPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LineChartPainter old) => old.values != values;
 }

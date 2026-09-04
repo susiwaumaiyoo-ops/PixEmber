@@ -10,6 +10,7 @@ import '../services/database_service.dart';
 import '../services/embedding_service.dart';
 import '../services/novel_document_text.dart';
 import '../services/pixiv_api_service.dart';
+import '../services/reading_speed_service.dart';
 import '../services/ruri_model_manager.dart';
 import '../widgets/pixiv_image.dart';
 
@@ -35,6 +36,9 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   bool _isToggling = false;
   double? _readingProgress;
   bool _isReadLater = false;
+  // 読了目安（Phase A）
+  int? _estReadingMinutes;
+  bool _estReadingIsDefault = false;
 
   @override
   void initState() {
@@ -43,6 +47,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     _isBookmarked = widget.novel.isBookmarked;
     _loadReadLaterState();
     _loadReadingProgress();
+    _loadReadingEstimate();
     _recordHistory();
     debugPrint('📍 [DEBUG Detail] initState 終了');
   }
@@ -55,6 +60,25 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
       }
     } catch (e) {
       debugPrint('あとで読む状態の取得に失敗しました（無視）: $e');
+    }
+  }
+
+  /// 読了目安の算出（Phase A）。文字数不明なら表示しない。失敗しても無視。
+  Future<void> _loadReadingEstimate() async {
+    final chars = widget.novel.textLength;
+    if (chars <= 0) return;
+    try {
+      final speed = await ReadingSpeedService().getPersonalSpeed();
+      if (!mounted) return;
+      setState(() {
+        _estReadingMinutes = estimateRemainingMinutes(
+          chars,
+          speed.charsPerMinute,
+        );
+        _estReadingIsDefault = speed.isEstimated;
+      });
+    } catch (e) {
+      debugPrint('読了目安の算出に失敗（無視）: $e');
     }
   }
 
@@ -477,6 +501,18 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             fontSize: 12,
                           ),
                         ),
+                        // 読了目安バッジ（Phase A）
+                        if (_estReadingMinutes != null) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            '⏱ 読了目安 ${formatReadingTime(_estReadingMinutes!)}'
+                            '${_estReadingIsDefault ? '（推定）' : ''}',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                         if (_readingProgress != null) ...[
                           const SizedBox(height: 8),
                           Row(

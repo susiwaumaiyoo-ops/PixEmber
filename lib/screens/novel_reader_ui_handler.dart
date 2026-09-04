@@ -603,6 +603,30 @@ extension _ReaderUiHandler on _NovelReaderScreenState {
                         // 動作中の場合は自動更新される
                       },
                     ),
+
+                    // 残り読了時間の表示ON/OFF（Phase A）
+                    SwitchListTile(
+                      value: _showReadingTime,
+                      onChanged: (v) {
+                        _safeSetState(() {
+                          _showReadingTime = v;
+                        });
+                        setSheetState(() {});
+                        _savePreferences();
+                      },
+                      title: const Text(
+                        '残り読書時間を表示',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      subtitle: Text(
+                        _readerCpmIsDefault
+                            ? '平均 550字/分 での推定（データ不足）'
+                            : 'あなたの速度 約${_readerCpm.round()}字/分 で推定',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                    ),
                     const SizedBox(height: 10),
                   ],
                 ),

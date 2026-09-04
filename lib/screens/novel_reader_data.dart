@@ -7,6 +7,8 @@ extension _ReaderData on _NovelReaderScreenState {
     await _loadPreferences();
     if (!mounted) return;
     await _initAndFetch();
+    // 個人の読書速度をバックグラウンドで取得（Phase A）。UIはブロックしない。
+    unawaited(_loadReadingSpeed());
     // あとで読むに登録済みかつ未読なら「読書中」へ自動遷移（last_opened_at 更新）。
     // read_later 未登録の小説は何もしない（余計な自動登録はしない）。
     await _markReadLaterReading();
@@ -45,6 +47,8 @@ extension _ReaderData on _NovelReaderScreenState {
         _scrollSpeed = prefs.getDouble('novel_pref_scroll_speed') ?? 3.0;
         _ttsRate = prefs.getDouble('novel_pref_tts_rate') ?? 1.0;
         _ttsReadRuby = prefs.getBool('novel_pref_tts_read_ruby') ?? false;
+        _showReadingTime =
+            prefs.getBool('novel_pref_show_reading_time') ?? true;
         final rubyModeStr = prefs.getString('novel_pref_ruby_mode') ?? 'show';
         _rubyMode = RubyDisplayMode.values.firstWhere(
           (mode) => mode.name == rubyModeStr,
@@ -53,6 +57,20 @@ extension _ReaderData on _NovelReaderScreenState {
       });
     } catch (e) {
       debugPrint('環境設定の読み込みに失敗しました: $e');
+    }
+  }
+
+  /// 個人の読書速度をロード（Phase A）。失敗時は既定値のまま。
+  Future<void> _loadReadingSpeed() async {
+    try {
+      final result = await ReadingSpeedService().getPersonalSpeed();
+      if (!mounted) return;
+      setState(() {
+        _readerCpm = result.charsPerMinute;
+        _readerCpmIsDefault = result.isEstimated;
+      });
+    } catch (e) {
+      debugPrint('読書速度のロードに失敗（既定値を使用）: $e');
     }
   }
 
@@ -71,6 +89,7 @@ extension _ReaderData on _NovelReaderScreenState {
       await prefs.setDouble('novel_pref_tts_rate', _ttsRate);
       await prefs.setBool('novel_pref_tts_read_ruby', _ttsReadRuby);
       await prefs.setString('novel_pref_ruby_mode', _rubyMode.name);
+      await prefs.setBool('novel_pref_show_reading_time', _showReadingTime);
     } catch (e) {
       debugPrint('環境設定の保存に失敗しました: $e');
     }
