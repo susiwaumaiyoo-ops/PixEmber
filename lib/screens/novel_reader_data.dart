@@ -559,11 +559,47 @@ extension _ReaderData on _NovelReaderScreenState {
         _seriesNovels = list;
         _isLoadingSeries = false;
       });
+      // Phase N3: 取得済みエピソードからローカル読了状態と進捗を合成（API再取得しない）
+      unawaited(_loadSeriesProgressFromList(list));
     } catch (e) {
       debugPrint('シリーズ一覧取得エラー: $e');
       // 画面が Pop 途中の場合は defunct エラーを防ぐため生存確認を最優先で行う
       if (!mounted) return;
       _safeSetState(() => _isLoadingSeries = false);
+    }
+  }
+
+  /// 取得済みエピソード + ローカル読了状態でシリーズ進捗を算出する（Phase N3）。
+  Future<void> _loadSeriesProgressFromList(List<Novel> list) async {
+    try {
+      final service = SeriesProgressService();
+      final works = <SeriesWorkRef>[
+        for (final n in list)
+          SeriesWorkRef(
+            id: n.id,
+            title: n.title,
+            order: n.seriesOrder,
+            textLength: n.textLength,
+          ),
+      ];
+      final (statusByWork, progressByWork) = await service.localReadingState();
+      double? cpm;
+      try {
+        cpm = (await ReadingSpeedService().getPersonalSpeed()).charsPerMinute;
+      } catch (_) {
+        cpm = null;
+      }
+      final progress = computeSeriesProgress(
+        works: works,
+        readLaterStatusByWork: statusByWork,
+        progressByWork: progressByWork,
+        currentWorkId: _currentNovel.id,
+        charsPerMinute: cpm,
+      );
+      if (!mounted) return;
+      _safeSetState(() => _seriesProgress = progress);
+    } catch (e) {
+      debugPrint('シリーズ進捗の算出に失敗（無視）: $e');
     }
   }
 }

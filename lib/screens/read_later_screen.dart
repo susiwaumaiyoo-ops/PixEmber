@@ -9,6 +9,7 @@ import '../widgets/pixiv_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'novel_detail_screen.dart';
 import 'novel_reader_screen.dart';
+import '../services/series_progress_service.dart';
 
 /// あとで読む（小説）一覧画面。
 ///
@@ -387,8 +388,57 @@ class _ReadLaterScreenState extends State<ReadLaterScreen>
     );
   }
 
-  void _showItemMenu(Map<String, dynamic> item) {
+  /// ローカルの novels テーブルから series_id を引く（Phase N3）。
+  /// read_later 行自体には series 情報が無いためここで補完する。
+  Future<int> _seriesIdForWork(int workId) async {
+    try {
+      final db = await DatabaseService().database;
+      final rows = await db.rawQuery(
+        'SELECT series_id FROM novels WHERE id = ?',
+        [workId],
+      );
+      if (rows.isEmpty) return 0;
+      return (rows.first['series_id'] as num?)?.toInt() ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// シリーズの次の未読話へジャンプ（Phase N3）。取得中は SnackBar で指示。
+  Future<void> _openSeriesNext(Map<String, dynamic> item, int seriesId) async {
+    if (seriesId <= 0) {
+      _showSnackBar('この作品はシリーズに属していません');
+      return;
+    }
+    _showSnackBar('シリーズの続きを探しています…');
+    try {
+      final progress = await SeriesProgressService().fetch(seriesId);
+      final next = progress?.nextUnreadWork;
+      if (next == null) {
+        _showSnackBar('このシリーズは全話読了済みです');
+        return;
+      }
+      if (!mounted) return;
+      if (next.id == item['work_id']) {
+        // 次が自分自身（現在話）ならリーダーを再開
+        await _openItem(item);
+        return;
+      }
+      final novel = await PixivApiService().getNovelById(next.id);
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: novel)),
+      );
+    } catch (e) {
+      if (mounted) _showSnackBar('シリーズの取得に失敗しました: $e');
+    }
+  }
+
+  Future<void> _showItemMenu(Map<String, dynamic> item) async {
     final status = item['status'] as int? ?? 0;
+    final seriesId = await _seriesIdForWork(item['work_id'] as int);
+    if (!mounted) return; // async gap 後の context 使用を mounted でガード
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF222222),
@@ -396,6 +446,21 @@ class _ReadLaterScreenState extends State<ReadLaterScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (seriesId > 0)
+              ListTile(
+                leading: const Icon(
+                  Icons.play_circle_outline,
+                  color: Colors.pinkAccent,
+                ),
+                title: const Text(
+                  'シリーズの続きへ',
+                  style: TextStyle(color: Colors.white),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _openSeriesNext(item, seriesId);
+                },
+              ),
             if (status != 0)
               ListTile(
                 leading: const Icon(Icons.remove_done, color: Colors.white70),

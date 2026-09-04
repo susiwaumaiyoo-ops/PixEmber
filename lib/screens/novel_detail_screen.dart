@@ -13,6 +13,7 @@ import '../services/novel_document_text.dart';
 import '../services/pixiv_api_service.dart';
 import '../services/reading_speed_service.dart';
 import '../services/ruri_model_manager.dart';
+import '../services/series_progress_service.dart';
 import '../services/similar_works_service.dart';
 import '../widgets/pixiv_image.dart';
 
@@ -51,6 +52,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   SimilarWorksResult? _similar;
   bool _similarLoading = false;
   String? _similarNote;
+  // シリーズ進捗（Phase N3）
+  SeriesProgress? _seriesProgress;
 
   @override
   void initState() {
@@ -60,6 +63,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     _loadReadLaterState();
     _loadReadingProgress();
     _loadReadingEstimate();
+    _loadSeriesProgress();
     _loadEmotionCurveState();
     _loadSimilarWorks();
     _recordHistory();
@@ -750,6 +754,117 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     );
   }
 
+  /// シリーズ進捗を読み込む（Phase N3）。シリーズ作品・取得成功時のみ表示。
+  Future<void> _loadSeriesProgress() async {
+    final seriesId = widget.novel.series?.id ?? 0;
+    if (seriesId <= 0) return;
+    try {
+      final progress = await SeriesProgressService().fetch(
+        seriesId,
+        currentWorkId: widget.novel.id,
+      );
+      if (!mounted || progress == null) return;
+      setState(() => _seriesProgress = progress);
+    } catch (e) {
+      debugPrint('シリーズ進捗の取得に失敗（無視）: $e');
+    }
+  }
+
+  /// 次の未読話を開く（Phase N3）。全話読了時は SnackBar で通知。
+  Future<void> _openNextSeriesWork() async {
+    final progress = _seriesProgress;
+    final next = progress?.nextUnreadWork;
+    if (next == null) {
+      _showSuccessSnackBar('このシリーズは全話読了済みです');
+      return;
+    }
+    try {
+      final novel = await PixivApiService().getNovelById(next.id);
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: novel)),
+      );
+    } catch (e) {
+      if (mounted) _showErrorSnackBar('次の作品の取得に失敗しました: $e');
+    }
+  }
+
+  /// シリーズ進捗カード（Phase N3）。「シリーズ 3/12 ・ 次は第4話」+ 次から読む。
+  Widget _buildSeriesProgressCard() {
+    final progress = _seriesProgress!;
+    final next = progress.nextUnreadWork;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.black54,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.auto_stories,
+                size: 16,
+                color: Colors.pinkAccent,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  progress.summaryLabel(),
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              value: progress.progressRatio,
+              backgroundColor: Colors.white12,
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                Colors.pinkAccent,
+              ),
+              minHeight: 4,
+            ),
+          ),
+          if (next != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              next.title,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _openNextSeriesWork,
+                icon: const Icon(Icons.play_arrow, size: 16),
+                label: const Text('次から読む'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.pinkAccent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Future<void> _loadReadingProgress() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -1080,6 +1195,11 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             ),
                           ),
                         ),
+                        // シリーズ進捗カード（Phase N3）
+                        if (_seriesProgress != null) ...[
+                          const SizedBox(height: 12),
+                          _buildSeriesProgressCard(),
+                        ],
                         // シリーズ作品の場合のみ「話数の一覧」へ遷移するボタンを表示
                         if (widget.novel.series != null &&
                             widget.novel.series!.id != 0) ...[

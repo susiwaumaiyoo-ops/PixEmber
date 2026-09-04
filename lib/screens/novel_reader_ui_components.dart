@@ -492,6 +492,31 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
                   '連載エピソード一覧',
                   style: TextStyle(fontSize: 11, color: Colors.grey),
                 ),
+                if (_seriesProgress != null) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.check_circle_outline,
+                        size: 13,
+                        color: Colors.pinkAccent,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          '読了 ${_seriesProgress!.readCount}/${_seriesProgress!.totalCount}'
+                          '${_seriesProgress!.remainingEstimateMinutes != null && _seriesProgress!.remainingEstimateMinutes! > 0 ? ' ・ あと${formatReadingTime(_seriesProgress!.remainingEstimateMinutes!)}' : ''}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.pinkAccent,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

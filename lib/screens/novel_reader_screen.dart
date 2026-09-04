@@ -14,6 +14,7 @@ import '../services/pixiv_api_service.dart';
 import '../services/novel_tts_service.dart';
 import '../services/reading_speed_service.dart';
 import '../services/ruri_model_manager.dart';
+import '../services/series_progress_service.dart';
 import '../services/usage_tracking_service.dart';
 import '../widgets/pixiv_image.dart';
 import 'full_screen_image_page.dart';
@@ -80,6 +81,8 @@ class _NovelReaderScreenState extends State<NovelReaderScreen>
   // シリーズ小説用ステート
   List<Novel> _seriesNovels = [];
   bool _isLoadingSeries = false;
+  // シリーズ進捗（Phase N3）: 目次Drawerの「読了 X/N ・ あと約XX分」表示用
+  SeriesProgress? _seriesProgress;
 
   // 没頭モード（HUD表示トグル）
   bool _showHUD = true;
