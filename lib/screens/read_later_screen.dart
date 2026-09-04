@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'novel_detail_screen.dart';
 import 'novel_reader_screen.dart';
 import '../services/series_progress_service.dart';
+import '../services/read_later_organize_service.dart';
 
 /// あとで読む（小説）一覧画面。
 ///
@@ -199,6 +200,11 @@ class _ReadLaterScreenState extends State<ReadLaterScreen>
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.auto_fix_high, color: Colors.pinkAccent),
+            onPressed: _showOrganizeSheet,
+            tooltip: 'あとで読む整理提案',
+          ),
           IconButton(
             icon: Icon(
               _showR18 ? Icons.visibility : Icons.visibility_off,
@@ -502,6 +508,16 @@ class _ReadLaterScreenState extends State<ReadLaterScreen>
     );
   }
 
+  /// 整理提案シートを開く（Phase N5）。dry-run の提案表示のみで、
+  /// フォルダ作成はシート内の「採用」ボタン押下の明示的操作時のみ行う。
+  void _showOrganizeSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E1E),
+      builder: (_) => const _OrganizeProposalSheet(),
+    );
+  }
+
   Widget _statusChip(int status) {
     final data = switch (status) {
       1 => (label: '読書中', color: Colors.blueAccent),
@@ -517,6 +533,271 @@ class _ReadLaterScreenState extends State<ReadLaterScreen>
       child: Text(
         data.label,
         style: const TextStyle(color: Colors.white, fontSize: 11),
+      ),
+    );
+  }
+}
+
+// あとで読む整理提案シート（非AI機能パック Phase N5）。
+class _OrganizeProposalSheet extends StatefulWidget {
+  const _OrganizeProposalSheet();
+
+  @override
+  State<_OrganizeProposalSheet> createState() => _OrganizeProposalSheetState();
+}
+
+class _OrganizeProposalSheetState extends State<_OrganizeProposalSheet> {
+  OrganizeProposal? _proposal;
+  bool _loading = true;
+  List<OrganizeGroup> _visible = [];
+  final Map<String, TextEditingController> _nameControllers = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _nameControllers.values) {
+      c.dispose();
+    }
+    _nameControllers.clear();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final p = await ReadLaterOrganizeService().buildProposal();
+      if (!mounted) return;
+      setState(() {
+        _proposal = p;
+        _visible = p.groups;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  TextEditingController _controllerFor(OrganizeGroup g) => _nameControllers
+      .putIfAbsent(g.id, () => TextEditingController(text: g.suggestedName));
+
+  void _showSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.pink.shade700),
+    );
+  }
+
+  /// 「採用」: フォルダを作成し、グループの作品を追加（唯一の書き込み経路）。
+  Future<void> _adopt(OrganizeGroup g) async {
+    final name = _controllerFor(g).text.trim();
+    if (name.isEmpty) {
+      _showSnackBar('フォルダ名を入力してください');
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      final moved = await ReadLaterOrganizeService().adoptGroup(
+        folderName: name,
+        items: g.items,
+      );
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('「$name」フォルダに $moved 件を追加しました'),
+          backgroundColor: Colors.pink.shade700,
+        ),
+      );
+      navigator.pop();
+    } catch (_) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('フォルダの作成に失敗しました'),
+          backgroundColor: Colors.pink.shade700,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final semantic = _proposal?.semanticMode ?? false;
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.72,
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.folder_copy, color: Colors.pinkAccent),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'あとで読む整理提案',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      semantic ? '意味モード（埋め込み）' : '簡易モード（タグ頻度）',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                'グループは自動で移動しません。「採用」を押したグループのみが対応フォルダに追加されます。',
+                style: TextStyle(color: Colors.white54, fontSize: 11),
+              ),
+            ),
+            const Divider(height: 16, color: Colors.white24),
+            Expanded(
+              child: _loading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: Colors.pinkAccent,
+                      ),
+                    )
+                  : _visible.isEmpty
+                  ? const Center(
+                      child: Text(
+                        '提案できるグループはありません',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      itemCount: _visible.length,
+                      itemBuilder: (context, i) => _buildGroupTile(_visible[i]),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGroupTile(OrganizeGroup g) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.auto_fix_high,
+                color: Colors.pinkAccent,
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                g.suggestedName,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${g.items.length}件',
+                style: const TextStyle(color: Colors.grey, fontSize: 11),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            g.items.take(2).map((i) => i.title).join('、'),
+            style: const TextStyle(color: Colors.grey, fontSize: 11),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _controllerFor(g),
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'フォルダ名',
+              hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
+              filled: true,
+              fillColor: Colors.black.withValues(alpha: 0.3),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 8,
+              ),
+              isDense: true,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {
+                    setState(() {
+                      _visible.remove(g);
+                      _nameControllers[g.id]?.dispose();
+                      _nameControllers.remove(g.id);
+                    });
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.grey,
+                    side: const BorderSide(color: Colors.white24),
+                  ),
+                  child: const Text('スキップ'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => _adopt(g),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.pinkAccent,
+                    foregroundColor: Colors.black,
+                  ),
+                  child: const Text(
+                    '採用（フォルダに追加）',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
