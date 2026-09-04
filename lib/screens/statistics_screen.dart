@@ -1,6 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
 import '../services/reading_speed_service.dart';
+import '../services/reading_trends_service.dart';
 import '../services/usage_tracking_service.dart';
 
 /// 日別閲覧数の1要素。
@@ -210,6 +213,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   // 読書速度（Phase A）
   List<ReadingSpeedPoint> _speedHistory = const [];
   ReadingSpeedResult? _speedResult;
+  // 読書傾向（Phase B）
+  TrendPeriod _trendPeriod = TrendPeriod.d90;
+  ReadingTrendsBundle? _trends;
   bool _isLoading = true;
   String? _error;
 
@@ -244,12 +250,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         speedHistory = await speedService.getSpeedHistory();
         speedResult = await speedService.getPersonalSpeed();
       } catch (_) {}
+      // 読書傾向（Phase B）: 失敗しても他の統計表示は止めない。
+      ReadingTrendsBundle? trends;
+      try {
+        trends = await ReadingTrendsService().fetch(_trendPeriod);
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _data = StatisticsData.fromComputeMap(raw);
         _usage = UsageStats.fromComputeMap(usageRaw);
         _speedHistory = speedHistory;
         _speedResult = speedResult;
+        _trends = trends;
         _isLoading = false;
       });
     } catch (e) {
@@ -259,6 +271,19 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  /// Phase B: 期間変更後に再集計する。
+  Future<void> _onTrendPeriodChanged(TrendPeriod p) async {
+    if (p == _trendPeriod) return;
+    setState(() {
+      _trendPeriod = p;
+      _trends = null;
+    });
+    try {
+      final t = await ReadingTrendsService().fetch(p);
+      if (mounted) setState(() => _trends = t);
+    } catch (_) {}
   }
 
   @override
@@ -327,6 +352,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         _buildReadingSpeedCard(),
         const SizedBox(height: 12),
         _buildDailyChartCard(data),
+        const SizedBox(height: 12),
+        _buildTrendsSection(),
         const SizedBox(height: 12),
         _buildRatioCard(data),
         const SizedBox(height: 12),
@@ -578,6 +605,283 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  /// H. 読書傾向（Phase B: 期間切替 + 6つの可視化）。
+  Widget _buildTrendsSection() {
+    final bundle = _trends;
+    if (bundle == null) {
+      return _sectionCard(
+        title: '読書傾向',
+        body: const Text(
+          '読み込み中…',
+          style: TextStyle(color: Colors.grey, fontSize: 12),
+        ),
+      );
+    }
+    if (!bundle.hasAnyData) {
+      return _sectionCard(
+        title: '読書傾向',
+        body: const Text(
+          'あと数日使うとここに傾向が出ます',
+          style: TextStyle(color: Colors.grey, fontSize: 12),
+        ),
+      );
+    }
+    return _sectionCard(
+      title: '読書傾向',
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: TrendPeriod.values
+                .map(
+                  (p) => ChoiceChip(
+                    label: Text(p.label),
+                    selected: p == _trendPeriod,
+                    onSelected: (_) => _onTrendPeriodChanged(p),
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 12),
+          _trendSubheading('曜日 × 時間帯（セッション数）'),
+          const SizedBox(height: 8),
+          _buildHeatmap(bundle.heatmap),
+          const SizedBox(height: 16),
+          _trendSubheading('スティーク'),
+          const SizedBox(height: 8),
+          _buildStreak(bundle.streak),
+          const SizedBox(height: 16),
+          _trendSubheading('今年'),
+          const SizedBox(height: 8),
+          _buildAnnualSummary(bundle.annualSummary),
+          const SizedBox(height: 16),
+          _trendSubheading('月別のトップタグ'),
+          const SizedBox(height: 8),
+          _buildTagEvolution(bundle.monthlyTags),
+          const SizedBox(height: 16),
+          _trendSubheading('作者集中度'),
+          const SizedBox(height: 8),
+          _buildAuthorDonut(bundle.authorConcentration),
+          const SizedBox(height: 16),
+          _trendSubheading('発掘率'),
+          const SizedBox(height: 8),
+          _buildDiscoveryRate(bundle.discoveryRate),
+        ],
+      ),
+    );
+  }
+
+  Widget _trendSubheading(String t) =>
+      Text(t, style: const TextStyle(color: Colors.white70, fontSize: 12));
+
+  Widget _buildHeatmap(List<int> heatmap) {
+    final max = heatmap.isEmpty ? 0 : heatmap.reduce((a, b) => a > b ? a : b);
+    if (max == 0) {
+      return const Text(
+        'この期間に利用記録がありません',
+        style: TextStyle(color: Colors.grey, fontSize: 12),
+      );
+    }
+    return SizedBox(
+      height: 150,
+      child: CustomPaint(
+        painter: _HeatmapPainter(heatmap),
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+
+  Widget _buildStreak(Map<String, dynamic> streak) {
+    final current = (streak['current'] as int?) ?? 0;
+    final longest = (streak['longest'] as int?) ?? 0;
+    final atRisk = (streak['atRisk'] as bool?) ?? false;
+    if (longest == 0) {
+      return const Text(
+        'まだ連続記録がありません',
+        style: TextStyle(color: Colors.grey, fontSize: 12),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '🔥 $current日連続',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '最長: $longest日',
+          style: const TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        if (atRisk)
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text(
+              '⚠️ 今日の閲覧がまだ記録されていません（連続が途切れそう）',
+              style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildAnnualSummary(Map<String, dynamic> annual) {
+    final works = (annual['workCount'] as int?) ?? 0;
+    final chars = (annual['totalChars'] as int?) ?? 0;
+    final seconds = (annual['totalSeconds'] as int?) ?? 0;
+    if (works == 0) {
+      return const Text(
+        '今年はまだ小説を読んでいません',
+        style: TextStyle(color: Colors.grey, fontSize: 12),
+      );
+    }
+    return Text(
+      '今年の読書: $works作品 / 約${formatCharCount(chars)} / '
+      '${formatHoursMinutes(seconds)}',
+      style: const TextStyle(color: Colors.white, fontSize: 13),
+    );
+  }
+
+  Widget _buildTagEvolution(List<Map<String, dynamic>> months) {
+    if (months.isEmpty) {
+      return const Text(
+        'この期間にタグ記録がありません',
+        style: TextStyle(color: Colors.grey, fontSize: 12),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: months.map((m) {
+        final tags = (m['tags'] as List).cast<Map<String, dynamic>>();
+        final label = tags
+            .map((t) => '${t['name']} (${t['count']})')
+            .join(', ');
+        final month = (m['month'] as int?) ?? 1;
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 56,
+                child: Text(
+                  '${m['year']}-${month.toString().padLeft(2, '0')}',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  label.isEmpty ? '-' : label,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildAuthorDonut(Map<String, dynamic> author) {
+    final top = (author['top'] as List).cast<Map<String, dynamic>>();
+    final totalAuthors = (author['totalAuthors'] as int?) ?? 0;
+    if (totalAuthors == 0) {
+      return const Text(
+        'この期間に作者記録がありません',
+        style: TextStyle(color: Colors.grey, fontSize: 12),
+      );
+    }
+    const palette = [
+      Colors.pinkAccent,
+      Colors.tealAccent,
+      Colors.orangeAccent,
+      Colors.lightBlueAccent,
+      Colors.purpleAccent,
+      Colors.grey,
+    ];
+    final segments = <_TrendDonutSegment>[];
+    for (final e in top) {
+      final name = (e['name'] as String?) ?? '';
+      segments.add(
+        _TrendDonutSegment(
+          name.isEmpty ? '不明' : name,
+          (e['count'] as int?) ?? 0,
+        ),
+      );
+    }
+    final totalRows = (author['totalRows'] as int?) ?? 0;
+    final topSum = segments.fold<int>(0, (a, s) => a + s.count);
+    if (totalRows - topSum > 0) {
+      segments.add(_TrendDonutSegment('その他', totalRows - topSum));
+    }
+    final topShare = ((author['topShare'] as double?) ?? 0.0) * 100;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 120,
+          height: 120,
+          child: CustomPaint(
+            painter: _DonutPainter(segments, palette),
+            child: const SizedBox.expand(),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'TOP 占比 ${topShare.toStringAsFixed(0)}%（全 $totalAuthors 作者）',
+          style: const TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 10,
+          runSpacing: 2,
+          children: [
+            for (int i = 0; i < segments.length; i++)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    color: palette[i % palette.length],
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    segments[i].label,
+                    style: const TextStyle(color: Colors.white70, fontSize: 11),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDiscoveryRate(Map<String, dynamic> d) {
+    final total = (d['totalAuthors'] as int?) ?? 0;
+    final fresh = (d['newAuthors'] as int?) ?? 0;
+    final rate = (d['rate'] as double?) ?? 0.0;
+    if (total == 0) {
+      return const Text(
+        'この期間に作者記録がありません',
+        style: TextStyle(color: Colors.grey, fontSize: 12),
+      );
+    }
+    return Text(
+      '発掘率 ${(rate * 100).toStringAsFixed(0)}%（$total作者中 $fresh が初見）',
+      style: const TextStyle(color: Colors.white, fontSize: 13),
     );
   }
 
@@ -848,4 +1152,113 @@ class _LineChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _LineChartPainter old) => old.values != values;
+}
+
+/// 曜日（月曜始まり）× 時間帯 のヒートマップ（Phase B）。
+/// `values` は長さ168の配列（weekday * 24 + hour）。
+class _HeatmapPainter extends CustomPainter {
+  final List<int> values;
+
+  _HeatmapPainter(this.values);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.length != 7 * 24) return;
+    final maxV = values.reduce((a, b) => a > b ? a : b);
+    const labelW = 18.0;
+    const bottomH = 14.0;
+    const gap = 2.0;
+    final cellW = (size.width - labelW - gap * 23) / 24;
+    final cellH = (size.height - bottomH - gap * 6) / 7;
+
+    const names = ['月', '火', '水', '木', '金', '土', '日'];
+    final tp = TextPainter(textDirection: TextDirection.ltr);
+    for (int w = 0; w < 7; w++) {
+      tp.text = TextSpan(
+        text: names[w],
+        style: const TextStyle(color: Colors.grey, fontSize: 8),
+      );
+      tp.layout();
+      tp.paint(
+        canvas,
+        Offset(0, w * (cellH + gap) + cellH / 2 - tp.height / 2),
+      );
+    }
+    for (int w = 0; w < 7; w++) {
+      for (int h = 0; h < 24; h++) {
+        final v = values[w * 24 + h];
+        final t = maxV == 0 ? 0.0 : v / maxV;
+        final x = labelW + h * (cellW + gap);
+        final y = w * (cellH + gap);
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(x, y, cellW, cellH),
+            const Radius.circular(2),
+          ),
+          Paint()..color = Colors.pinkAccent.withValues(alpha: 0.08 + 0.92 * t),
+        );
+      }
+    }
+    const hours = [0, 6, 12, 18, 23];
+    for (final h in hours) {
+      tp.text = TextSpan(
+        text: '$h',
+        style: const TextStyle(color: Colors.grey, fontSize: 8),
+      );
+      tp.layout();
+      tp.paint(
+        canvas,
+        Offset(
+          labelW + h * (cellW + gap) + cellW / 2 - tp.width / 2,
+          size.height - bottomH + 2,
+        ),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _HeatmapPainter old) => old.values != values;
+}
+
+/// ドーナツの1セグメント。
+class _TrendDonutSegment {
+  final String label;
+  final int count;
+  _TrendDonutSegment(this.label, this.count);
+}
+
+/// 作者集中度ドーナツ（Phase B）。
+class _DonutPainter extends CustomPainter {
+  final List<_TrendDonutSegment> segments;
+  final List<Color> palette;
+
+  _DonutPainter(this.segments, this.palette);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final total = segments.fold<int>(0, (a, s) => a + s.count);
+    if (total == 0) return;
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) / 2;
+    final sw = radius * 0.35;
+    var start = -math.pi / 2;
+    for (int i = 0; i < segments.length; i++) {
+      final sweep = segments[i].count / total * 2 * math.pi;
+      if (sweep <= 0) continue;
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius - sw / 2),
+        start,
+        sweep,
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = sw
+          ..color = palette[i % palette.length],
+      );
+      start += sweep;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DonutPainter old) => old.segments != segments;
 }
