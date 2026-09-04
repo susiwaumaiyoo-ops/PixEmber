@@ -20,6 +20,7 @@ import 'offline_bookshelf_screen.dart';
 import 'download_queue_screen.dart';
 import 'visual_search_screen.dart';
 import 'duplicate_finder_screen.dart';
+import 'settings_screen.dart';
 import 'home_ui_components.dart';
 import 'home_filter_handler.dart';
 import 'home_sync_handler.dart';
@@ -1816,6 +1817,18 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                       ),
                     );
                   },
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings, color: Colors.pinkAccent),
+              title: const Text('設定'),
+              subtitle: const Text('検索・リーダー・バックアップ'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
                 );
               },
             ),
