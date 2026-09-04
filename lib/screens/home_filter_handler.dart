@@ -1,4 +1,5 @@
 import 'home_screen_state.dart';
+import '../services/search_preset_service.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -159,6 +160,204 @@ class HomeFilterHandler {
     }
     await _saveCommonFilterPrefs();
   }
+
+  // ===== Phase N1: 検索プリセット =====
+
+  /// 現在の検索条件をプリセット用の filter_json として取得。
+  Map<String, dynamic> capturePresetFilters() {
+    return {
+      'illust': {
+        'searchTarget': state.selectedSearchTarget,
+        'workType': state.selectedWorkType,
+        'ageLimit': state.selectedAgeLimit,
+        'duration': state.selectedDuration,
+        'bookmarkFilter': state.selectedBookmarkFilter,
+        'aiFilter': state.selectedIllustAiFilter,
+        'minBookmarkText': state.minBookmarkController.text.trim(),
+      },
+      'novel': {
+        'searchTarget': state.selectedNovelSearchTarget,
+        'ageLimit': state.selectedNovelAgeLimit,
+        'bookmarkFilter': state.selectedNovelBookmarkFilter,
+        'textLengthLimit': state.selectedNovelTextLengthLimit,
+        'minText': state.minTextLengthController?.text.trim() ?? '',
+        'maxText': state.maxTextLengthController?.text.trim() ?? '',
+        'seriesTextLengthLimit': state.selectedNovelSeriesTextLengthLimit,
+        'seriesMinText': state.minSeriesTextLengthController?.text.trim() ?? '',
+        'seriesMaxText': state.maxSeriesTextLengthController?.text.trim() ?? '',
+        'aiFilter': state.selectedNovelAiFilter,
+        'seriesOnly': state.novelSeriesOnly,
+        'excludeTags': state.novelExcludeTags,
+        'density': state.novelDensityMode,
+      },
+      'common': {
+        'bmNumMin': state.minBookmarkNumController.text.trim(),
+        'bmNumMax': state.maxBookmarkNumController.text.trim(),
+        'useStartDate': state.useStartDate,
+        'startDate': state.startDateTime?.toIso8601String(),
+        'useEndDate': state.useEndDate,
+        'endDate': state.endDateTime?.toIso8601String(),
+      },
+    };
+  }
+
+  /// 名前入力ダイアログを表示し、現在の条件をプリセットとして保存。
+  Future<void> saveCurrentAsPreset(
+    BuildContext context, {
+    required String category,
+  }) async {
+    final keyword = state.searchController.text.trim();
+    final defaultName = keyword.isEmpty
+        ? (category == 'novel' ? '小説の検索' : 'イラストの検索')
+        : keyword;
+    final nameController = TextEditingController(text: defaultName);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('プリセットとして保存'),
+        content: TextField(
+          controller: nameController,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'プリセット名'),
+          onSubmitted: (_) => Navigator.pop(ctx, true),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    final rawName = nameController.text.trim();
+    nameController.dispose();
+    if (confirmed != true || !context.mounted) return;
+    final saveName = rawName.isEmpty ? defaultName : rawName;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await SearchPresetService().save(
+        name: saveName,
+        category: category,
+        keyword: keyword,
+        filterJson: capturePresetFilters(),
+        keywordMode: state.selectedKeywordMode,
+        excludeKeyword: state.excludeKeywordController.text.trim(),
+      );
+      if (!context.mounted) return;
+      Navigator.pop(context);
+      messenger.showSnackBar(
+        SnackBar(content: Text('プリセット「$saveName」を保存しました')),
+      );
+    } catch (e) {
+      debugPrint('検索プリセットの保存に失敗: $e');
+      if (!context.mounted) return;
+      messenger.showSnackBar(const SnackBar(content: Text('プリセットの保存に失敗しました')));
+    }
+  }
+
+  /// プリセットのフィルター条件を現在の状態に適用。
+  void applyPresetFilters(SearchPreset preset) {
+    final f = preset.filterJson;
+    final illust = (f['illust'] as Map? ?? const <String, dynamic>{}).map(
+      (k, v) => MapEntry(k.toString(), v),
+    );
+    final novel = (f['novel'] as Map? ?? const <String, dynamic>{}).map(
+      (k, v) => MapEntry(k.toString(), v),
+    );
+    final common = (f['common'] as Map? ?? const <String, dynamic>{}).map(
+      (k, v) => MapEntry(k.toString(), v),
+    );
+
+    state.selectedKeywordMode = preset.keywordMode;
+    state.excludeKeywordController.text = preset.excludeKeyword;
+
+    // イラスト
+    state.selectedSearchTarget =
+        (illust['searchTarget'] as String?) ?? state.selectedSearchTarget;
+    state.selectedWorkType =
+        (illust['workType'] as String?) ?? state.selectedWorkType;
+    state.selectedAgeLimit =
+        (illust['ageLimit'] as String?) ?? state.selectedAgeLimit;
+    state.selectedDuration =
+        (illust['duration'] as String?) ?? state.selectedDuration;
+    state.selectedBookmarkFilter =
+        (illust['bookmarkFilter'] as int?) ?? state.selectedBookmarkFilter;
+    state.selectedIllustAiFilter =
+        (illust['aiFilter'] as String?) ?? state.selectedIllustAiFilter;
+    state.minBookmarkController.text =
+        (illust['minBookmarkText'] as String?) ?? '';
+
+    // 小説
+    state.selectedNovelSearchTarget =
+        (novel['searchTarget'] as String?) ?? state.selectedNovelSearchTarget;
+    state.selectedNovelAgeLimit =
+        (novel['ageLimit'] as String?) ?? state.selectedNovelAgeLimit;
+    state.selectedNovelBookmarkFilter =
+        (novel['bookmarkFilter'] as int?) ?? state.selectedNovelBookmarkFilter;
+    state.selectedNovelTextLengthLimit =
+        (novel['textLengthLimit'] as String?) ??
+        state.selectedNovelTextLengthLimit;
+    final minText = novel['minText'] as String?;
+    final maxText = novel['maxText'] as String?;
+    if (state.selectedNovelTextLengthLimit == 'custom') {
+      if (minText != null && minText.isNotEmpty) {
+        state.minTextLengthController ??= TextEditingController();
+        state.minTextLengthController!.text = minText;
+      }
+      if (maxText != null && maxText.isNotEmpty) {
+        state.maxTextLengthController ??= TextEditingController();
+        state.maxTextLengthController!.text = maxText;
+      }
+    } else {
+      state.minTextLengthController?.clear();
+      state.maxTextLengthController?.clear();
+    }
+    state.selectedNovelSeriesTextLengthLimit =
+        (novel['seriesTextLengthLimit'] as String?) ??
+        state.selectedNovelSeriesTextLengthLimit;
+    final seriesMin = novel['seriesMinText'] as String?;
+    final seriesMax = novel['seriesMaxText'] as String?;
+    if (state.selectedNovelSeriesTextLengthLimit == 'custom') {
+      if (seriesMin != null && seriesMin.isNotEmpty) {
+        state.minSeriesTextLengthController ??= TextEditingController();
+        state.minSeriesTextLengthController!.text = seriesMin;
+      }
+      if (seriesMax != null && seriesMax.isNotEmpty) {
+        state.maxSeriesTextLengthController ??= TextEditingController();
+        state.maxSeriesTextLengthController!.text = seriesMax;
+      }
+    } else {
+      state.minSeriesTextLengthController?.clear();
+      state.maxSeriesTextLengthController?.clear();
+    }
+    state.selectedNovelAiFilter =
+        (novel['aiFilter'] as String?) ?? state.selectedNovelAiFilter;
+    state.novelSeriesOnly =
+        (novel['seriesOnly'] as bool?) ?? state.novelSeriesOnly;
+    final excludeTags = novel['excludeTags'];
+    if (excludeTags is List) {
+      state.novelExcludeTags
+        ..clear()
+        ..addAll(excludeTags.whereType<String>());
+    }
+    state.novelDensityMode =
+        (novel['density'] as String?) ?? state.novelDensityMode;
+
+    // 共通
+    state.minBookmarkNumController.text = (common['bmNumMin'] as String?) ?? '';
+    state.maxBookmarkNumController.text = (common['bmNumMax'] as String?) ?? '';
+    state.useStartDate = (common['useStartDate'] as bool?) ?? false;
+    state.startDateTime = _parsePresetDate(common['startDate']);
+    state.useEndDate = (common['useEndDate'] as bool?) ?? false;
+    state.endDateTime = _parsePresetDate(common['endDate']);
+  }
+
+  DateTime? _parsePresetDate(Object? value) =>
+      value is String ? DateTime.tryParse(value) : null;
 
   /// Phase 2 共通セクション（期間 / 日付範囲 / ブックマーク数範囲）。
   /// イラスト・小説の両シートで同一の UI を使う。
@@ -755,6 +954,18 @@ class HomeFilterHandler {
                       ],
                       const SizedBox(height: 32),
 
+                      // プリセット保存ボタン（Phase N1）
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.bookmark_add, size: 18),
+                          label: const Text('プリセットとして保存'),
+                          onPressed: () =>
+                              saveCurrentAsPreset(context, category: 'novel'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
                       // 適用ボタン
                       SizedBox(
                         width: double.infinity,
@@ -1189,6 +1400,18 @@ class HomeFilterHandler {
                             'フィルターをリセット',
                             style: TextStyle(color: Colors.pinkAccent),
                           ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // プリセット保存ボタン（Phase N1）
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.bookmark_add, size: 18),
+                          label: const Text('プリセットとして保存'),
+                          onPressed: () =>
+                              saveCurrentAsPreset(context, category: 'illust'),
                         ),
                       ),
                       const SizedBox(height: 12),

@@ -34,6 +34,7 @@ import '../services/database_service.dart';
 import '../services/embedding_service.dart';
 import '../services/ruri_model_manager.dart';
 import '../services/novel_document_text.dart';
+import '../services/search_preset_service.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:crypto/crypto.dart';
 
@@ -551,6 +552,23 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   }
 
   // タブ変更（subMode を指定した場合はそのサブモードへ切り替える）
+  /// Phase N1: 検索プリセットを復元 — フィルタ条件を適用し、対象タブに切替えて即検索。
+  Future<void> restoreSearchPreset(SearchPreset preset) async {
+    final targetIndex = preset.category == 'novel' ? novelIndex : illustIndex;
+    _filterHandler.applyPresetFilters(preset);
+    if (currentIndex != targetIndex) {
+      setState(() {
+        currentIndex = targetIndex;
+        illustSubMode = 0;
+        novelSubMode = 0;
+      });
+    }
+    searchController.text = preset.keyword;
+    onSearchSubmit(preset.keyword);
+    unawaited(SearchPresetService().markUsed(preset.id));
+    notifySearchListeners();
+  }
+
   void changeTab(int index, [int? subMode]) {
     if (currentIndex == index) return;
 

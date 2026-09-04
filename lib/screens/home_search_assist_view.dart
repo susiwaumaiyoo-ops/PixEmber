@@ -6,6 +6,7 @@ import '../models/trending_tag.dart';
 import '../services/database_service.dart';
 import '../services/pixiv_api_service.dart';
 import 'home_screen_state.dart';
+import '../services/search_preset_service.dart';
 
 /// Phase 3 検索アシストビュー。
 ///
@@ -38,6 +39,9 @@ class _SearchAssistViewState extends State<SearchAssistView> {
   /// トレンドタグ（上位12件）
   List<TrendingTag> _trending = [];
 
+  /// 保存した検索プリセット（Phase N1・現在のタブカテゴリ、上位12件）
+  List<SearchPreset> _presets = [];
+
   /// 入力中の候補（デバウンス後のフィルタ結果）
   List<Map<String, dynamic>> _typedSuggestions = [];
 
@@ -67,12 +71,14 @@ class _SearchAssistViewState extends State<SearchAssistView> {
   void _onExternalChanged() {
     if (!mounted) return;
     _loadHistory();
+    _loadPresets();
     _applyTypedFilter(widget.state.searchController.text);
   }
 
   Future<void> _loadAll() async {
     await _loadHistory();
     await _loadTrending();
+    await _loadPresets();
     _applyTypedFilter(widget.state.searchController.text);
   }
 
@@ -172,6 +178,136 @@ class _SearchAssistViewState extends State<SearchAssistView> {
     _onExternalChanged();
   }
 
+  // -------------------------------------------------------------------------
+  // Phase N1: 保存した検索（プリセット）
+  // -------------------------------------------------------------------------
+
+  Future<void> _loadPresets() async {
+    try {
+      final all = await SearchPresetService().load();
+      final cat = widget.isNovelTab ? 'novel' : 'illust';
+      if (!mounted) return;
+      setState(() {
+        _presets = sortPresetsByUse(
+          all.where((p) => p.category == cat).toList(),
+        ).take(12).toList();
+      });
+    } catch (_) {
+      if (mounted) setState(() => _presets = const []);
+    }
+  }
+
+  /// タップ: 条件を復元して即検索。
+  Future<void> _restorePreset(SearchPreset preset) async {
+    await widget.state.restoreSearchPreset(preset);
+    _loadPresets();
+  }
+
+  /// 長押し: メニュー（名前変更 / 削除）。
+  Future<void> _showPresetMenu(SearchPreset preset) async {
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text('プリセット「${preset.name}」'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'rename'),
+            child: const Text('名前を変更'),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'delete'),
+            child: const Text('削除', style: TextStyle(color: Colors.redAccent)),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('キャンセル'),
+          ),
+        ],
+      ),
+    );
+    if (action == 'rename') {
+      await _renamePreset(preset);
+    } else if (action == 'delete') {
+      await _deletePreset(preset);
+    }
+  }
+
+  Future<void> _renamePreset(SearchPreset preset) async {
+    final controller = TextEditingController(text: preset.name);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('プリセットの名前を変更'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'プリセット名'),
+          onSubmitted: (_) => Navigator.pop(ctx, true),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('変更'),
+          ),
+        ],
+      ),
+    );
+    final name = controller.text.trim();
+    controller.dispose();
+    if (ok != true || !mounted || name.isEmpty) return;
+    await SearchPresetService().rename(preset.id, name);
+    _loadPresets();
+  }
+
+  Future<void> _deletePreset(SearchPreset preset) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('プリセットを削除'),
+        content: Text('プリセット「${preset.name}」を削除しますか？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('削除', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await SearchPresetService().delete(preset.id);
+    _loadPresets();
+  }
+
+  Widget _buildPresetChip(SearchPreset preset, int index) {
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('preset-${preset.id}'),
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: Duration(milliseconds: 40 + (index * 12).clamp(0, 80)),
+      curve: Curves.easeOutCubic,
+      builder: (ctx, v, child) => Opacity(opacity: v, child: child),
+      child: GestureDetector(
+        onLongPress: () => _showPresetMenu(preset),
+        child: ActionChip(
+          avatar: const Icon(Icons.bookmark, size: 14),
+          label: Text(
+            preset.name,
+            style: const TextStyle(fontSize: 12),
+            overflow: TextOverflow.ellipsis,
+          ),
+          onPressed: () => _restorePreset(preset),
+        ),
+      ),
+    );
+  }
+
   void _runSearch(String keyword) {
     widget.state.searchController.text = keyword;
     widget.state.onSearchSubmit(keyword);
@@ -188,7 +324,7 @@ class _SearchAssistViewState extends State<SearchAssistView> {
       opacity: _initialFadedIn ? 1.0 : 0.0,
       duration: const Duration(milliseconds: 120),
       curve: Curves.easeOutCubic,
-      child: _recent.isEmpty && _frequent.isEmpty && !typing
+      child: _recent.isEmpty && _frequent.isEmpty && _presets.isEmpty && !typing
           ? _buildEmptyState()
           : ListView(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -243,6 +379,18 @@ class _SearchAssistViewState extends State<SearchAssistView> {
                     icon: Icons.history,
                     accent: const Color(0xFFB0BEC5),
                     deletable: true,
+                  ),
+                ],
+                if (_presets.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _buildSectionHeader('保存した検索', icon: Icons.bookmark_border),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      for (var i = 0; i < _presets.length; i++)
+                        _buildPresetChip(_presets[i], i),
+                    ],
                   ),
                 ],
                 if (_frequent.isNotEmpty) ...[
