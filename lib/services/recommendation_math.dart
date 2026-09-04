@@ -4,6 +4,7 @@
 /// [RecommendationService] から利用される。
 library;
 
+import 'dart:convert';
 import 'dart:typed_data';
 
 /// レコメンド候補1件。
@@ -19,12 +20,16 @@ class RecommendCandidate {
   final String source;
   final Map<String, dynamic> row;
 
+  /// Phase N2: 推薦理由（構築後に取り付け。null も可）。
+  final RecommendationReason? reasons;
+
   const RecommendCandidate({
     required this.workId,
     required this.type,
     required this.score,
     required this.source,
     required this.row,
+    this.reasons,
   });
 
   /// 作者ID（row に author_id があればint、なければ0）。
@@ -57,13 +62,15 @@ class RecommendCandidate {
     return 0;
   }
 
-  RecommendCandidate copyWith({double? score}) => RecommendCandidate(
-    workId: workId,
-    type: type,
-    score: score ?? this.score,
-    source: source,
-    row: row,
-  );
+  RecommendCandidate copyWith({double? score, RecommendationReason? reasons}) =>
+      RecommendCandidate(
+        workId: workId,
+        type: type,
+        score: score ?? this.score,
+        source: source,
+        row: row,
+        reasons: reasons ?? this.reasons,
+      );
 }
 
 /// 履歴ベクトル（新→旧順）とお気に入りベクトルから、加重平均後に
@@ -380,3 +387,173 @@ List<RecommendCandidate> suppressAuthorSeriesBias({
   result.sort((a, b) => b.score.compareTo(a.score));
   return result;
 }
+
+// ============================================================================
+// Phase N2: 推薦理由説明（純粋関数・UI非依存）
+// ============================================================================
+
+/// 推薦理由が参照する履歴・お気に入りの作品（タグ比較用）。
+class RecentWorkRef {
+  final int workId;
+  final String title;
+  final String authorName;
+  final List<String> tags;
+
+  const RecentWorkRef({
+    required this.workId,
+    required this.title,
+    this.authorName = '',
+    required this.tags,
+  });
+}
+
+/// 推薦理由が類似と判断した直近の作品。
+class SimilarRecentWork {
+  final int workId;
+  final String title;
+
+  const SimilarRecentWork({required this.workId, required this.title});
+}
+
+/// DB行（tags_json / tags）またはAPIモデル（tags リスト）からタグ列を取得（純粋関数）。
+List<String> extractTagsFromRow(Map<String, dynamic> row) {
+  final tags = row['tags'];
+  if (tags is List) {
+    final out = <String>[];
+    for (final t in tags) {
+      if (t is Map) {
+        final n = t['name']?.toString() ?? '';
+        if (n.isNotEmpty) out.add(n);
+      } else if (t is String && t.isNotEmpty) {
+        out.add(t);
+      }
+    }
+    if (out.isNotEmpty) return out;
+  }
+  final tagsJson = row['tags_json'];
+  if (tagsJson is String && tagsJson.isNotEmpty) {
+    try {
+      final decoded = jsonDecode(tagsJson);
+      if (decoded is List) {
+        return decoded
+            .map((e) => e.toString())
+            .where((s) => s.isNotEmpty)
+            .toList();
+      }
+    } catch (_) {}
+  }
+  if (tags is String) {
+    return tags
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
+  return const [];
+}
+
+/// DB行（author_name）またはAPIモデル（user.name）から作者名を取得（純粋関数）。
+String authorNameFromRow(Map<String, dynamic> row) {
+  final name = row['author_name'];
+  if (name is String && name.trim().isNotEmpty) return name.trim();
+  final user = row['user'];
+  if (user is Map) {
+    final n = user['name']?.toString() ?? '';
+    if (n.isNotEmpty) return n;
+  }
+  return '';
+}
+
+/// 候補の推薦理由（Phase N2）。
+class RecommendationReason {
+  final List<String> matchedTags;
+  final List<SimilarRecentWork> similarToRecentWorks;
+  final bool fromFavorites;
+  final bool unreadAuthor;
+
+  /// 意味類似度（ローカル候補のみ。API候補は null）。
+  final double? semanticScore;
+
+  const RecommendationReason({
+    this.matchedTags = const [],
+    this.similarToRecentWorks = const [],
+    this.fromFavorites = false,
+    this.unreadAuthor = false,
+    this.semanticScore,
+  });
+
+  /// 意味類似度バンドラベル（ローカル候補のみ）。
+  String? get bandLabel {
+    final s = semanticScore;
+    if (s == null) return null;
+    if (s >= 0.75) return '類似度が高い';
+    if (s >= 0.6) return '類似度の中程度';
+    return 'ある程度の類似度';
+  }
+
+  /// 短いラベル（表示順）。理由がなければ空。
+  List<String> get labels {
+    final out = <String>[];
+    if (matchedTags.isNotEmpty) out.add('タグ${matchedTags.length}件一致');
+    if (similarToRecentWorks.isNotEmpty) out.add('最近読んだ作品に近い');
+    if (fromFavorites) out.add('お気に入り傾向');
+    if (unreadAuthor) out.add('未読の作者');
+    final band = bandLabel;
+    if (band != null) out.add(band);
+    return out;
+  }
+
+  bool get hasReasons => labels.isNotEmpty;
+}
+
+/// 候補の推薦理由を構築（純粋関数）。
+///
+/// - [recentWorks]: 同タイプの直近作品（新しい順）。
+/// - [favoriteWorks]: 同タイプのお気に入り作品。
+/// - [knownAuthorNames]: 履歴に存在する作者名。
+RecommendationReason buildRecommendationReason({
+  required RecommendCandidate candidate,
+  required List<RecentWorkRef> recentWorks,
+  required List<RecentWorkRef> favoriteWorks,
+  required Set<String> knownAuthorNames,
+  int minTagsForSimilar = 2,
+  int maxSimilarWorks = 2,
+}) {
+  final candidateTags = extractTagsFromRow(candidate.row);
+  final favTagSet = favoriteWorks.expand((w) => w.tags).toSet();
+  final allPrefTagSet = <String>{
+    ...recentWorks.expand((w) => w.tags),
+    ...favTagSet,
+  };
+
+  final matchedTags = candidateTags
+      .where((t) => allPrefTagSet.contains(t))
+      .toList();
+  final fromFavorites = candidateTags.any((t) => favTagSet.contains(t));
+
+  final similar = <SimilarRecentWork>[];
+  for (final w in recentWorks) {
+    if (similar.length >= maxSimilarWorks) break;
+    final shared = candidateTags.where((t) => w.tags.contains(t)).length;
+    if (shared >= minTagsForSimilar) {
+      similar.add(SimilarRecentWork(workId: w.workId, title: w.title));
+    }
+  }
+
+  final authorName = authorNameFromRow(candidate.row);
+  final unreadAuthor =
+      authorName.isNotEmpty && knownAuthorNames.contains(authorName);
+
+  return RecommendationReason(
+    matchedTags: matchedTags,
+    similarToRecentWorks: similar,
+    fromFavorites: fromFavorites,
+    unreadAuthor: unreadAuthor,
+    semanticScore: candidate.source == 'local' ? candidate.score : null,
+  );
+}
+
+/// 理由説明シートの行テキスト（UI・テスト用純粋関数）。
+/// 理由がなければ汎用文言1行を返す。
+List<String> buildReasonSheetLines(RecommendationReason reason) =>
+    reason.labels.isEmpty ? const ['総合的な類似度で推薦'] : reason.labels;

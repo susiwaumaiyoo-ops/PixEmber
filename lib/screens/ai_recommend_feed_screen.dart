@@ -448,10 +448,13 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
     final matchLabel = candidate.source == 'local'
         ? '類似度 ${(candidate.score * 100).toInt()}%'
         : 'APIおすすめ';
-    return NovelListCard(
-      novel: novel,
-      onTap: () => _navigateToDetail(candidate),
-      matchLabel: matchLabel,
+    return _wrapWithReasonIcon(
+      candidate,
+      NovelListCard(
+        novel: novel,
+        onTap: () => _navigateToDetail(candidate),
+        matchLabel: matchLabel,
+      ),
     );
   }
 
@@ -461,7 +464,7 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
         ? '類似度 ${(candidate.score * 100).toInt()}%'
         : 'APIおすすめ';
     final previewUrl = illust.urls.preview ?? '';
-    return Card(
+    final card = Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: InkWell(
         onTap: () => _navigateToDetail(candidate),
@@ -516,6 +519,146 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+    return _wrapWithReasonIcon(candidate, card);
+  }
+
+  /// Phase N2: 理由がある場合のみカード上に ⓘ アイコンを乗せる。
+  Widget _wrapWithReasonIcon(RecommendCandidate candidate, Widget card) {
+    final reason = candidate.reasons;
+    if (reason == null || !reason.hasReasons) return card;
+    return Stack(
+      clipBehavior: Clip.hardEdge,
+      children: [
+        card,
+        Positioned(
+          top: 6,
+          right: 6,
+          child: Tooltip(
+            message: 'この作品をおすすめする理由',
+            child: InkWell(
+              onTap: () => _showReasonSheet(candidate, reason),
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.info_outline,
+                  size: 15,
+                  color: Colors.white70,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Phase N2: 推薦理由説明の BottomSheet。
+  void _showReasonSheet(
+    RecommendCandidate candidate,
+    RecommendationReason reason,
+  ) {
+    final title = (candidate.row['title'] as String? ?? '').trim();
+    final lines = buildReasonSheetLines(reason);
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 32,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade400,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'この作品をおすすめする理由',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              if (title.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  title,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              const SizedBox(height: 14),
+              for (final line in lines)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.psychology_alt,
+                        size: 16,
+                        color: Colors.pinkAccent,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(line, style: const TextStyle(fontSize: 14)),
+                      ),
+                    ],
+                  ),
+                ),
+              if (reason.matchedTags.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  '一致タグ',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final t in reason.matchedTags.take(8))
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.pinkAccent.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '#$t',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.pinkAccent,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+              if (reason.similarToRecentWorks.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  '類似元: 「${reason.similarToRecentWorks.first.title}」',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

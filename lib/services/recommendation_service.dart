@@ -420,8 +420,11 @@ class RecommendationService {
       settings: settings,
     );
 
+    // Phase N2: 推薦理由を取り付ける
+    final withReasons = await _attachReasons(diversified);
+
     return RecommendFeedResult(
-      candidates: diversified,
+      candidates: withReasons,
       modelReady: true,
       coverageRatio: coverage,
       isFallback: false,
@@ -469,8 +472,11 @@ class RecommendationService {
     );
     final diversified = suppressAuthorSeriesBias(candidates: filtered);
 
+    // Phase N2: 推薦理由を取り付ける（フォールバック時はタグ・作者ベースのみ）
+    final withReasons = await _attachReasons(diversified);
+
     return RecommendFeedResult(
-      candidates: diversified,
+      candidates: withReasons,
       modelReady: false,
       coverageRatio: 0,
       isFallback: true,
@@ -639,4 +645,149 @@ class RecommendationService {
     if (total == 0) return 0;
     return emb / total;
   }
+
+  // ==================== Phase N2: 推薦理由 ====================
+
+  /// 理由コンテキストを読み込む（履歴＋お気に入り＋タグ）。クエリ失敗は許容。
+  Future<_ReasonContext> _loadReasonContext() async {
+    final db = await DatabaseService().database;
+    final historyRows = await searchDistinctHistoryByWork(db: db, limit: 100);
+    final knownAuthorNames = <String>{};
+    final recentNovelIds = <int>[];
+    final recentIllustIds = <int>[];
+    final recentTitles = <int, String>{};
+    for (final r in historyRows) {
+      final name = (r['author_name'] as String? ?? '').trim();
+      if (name.isNotEmpty) knownAuthorNames.add(name);
+      final wid = (r['work_id'] as num?)?.toInt() ?? 0;
+      if (wid <= 0) continue;
+      final title = (r['title'] as String? ?? '').trim();
+      if (title.isNotEmpty) recentTitles[wid] = title;
+      if ((r['type'] as String? ?? '') == 'illust') {
+        recentIllustIds.add(wid);
+      } else {
+        recentNovelIds.add(wid);
+      }
+    }
+    final favNovelIds = <int>{};
+    final favIllustIds = <int>{};
+    try {
+      final favRows = await db.rawQuery(
+        'SELECT DISTINCT work_id, type FROM folder_items',
+      );
+      for (final r in favRows) {
+        final wid = (r['work_id'] as num?)?.toInt() ?? 0;
+        if (wid <= 0) continue;
+        if ((r['type'] as String? ?? '') == 'illust') {
+          favIllustIds.add(wid);
+        } else {
+          favNovelIds.add(wid);
+        }
+      }
+    } catch (e) {
+      debugPrint('[RecFeed] favorites query failed: $e');
+    }
+    return _ReasonContext(
+      recentNovels: await _workRefs(
+        db,
+        'novel',
+        recentNovelIds,
+        titles: recentTitles,
+      ),
+      recentIllusts: await _workRefs(
+        db,
+        'illust',
+        recentIllustIds,
+        titles: recentTitles,
+      ),
+      favoriteNovels: await _workRefs(db, 'novel', favNovelIds.toList()),
+      favoriteIllusts: await _workRefs(db, 'illust', favIllustIds.toList()),
+      knownAuthorNames: knownAuthorNames,
+    );
+  }
+
+  /// novels/illusts テーブルを ID 指定で参照し作品参照を構築する。
+  Future<List<RecentWorkRef>> _workRefs(
+    Database db,
+    String type,
+    List<int> ids, {
+    Map<int, String>? titles,
+  }) async {
+    if (ids.isEmpty) return const [];
+    final table = type == 'illust' ? 'illusts' : 'novels';
+    final ph = List.filled(ids.length, '?').join(',');
+    final meta = <int, Map<String, dynamic>>{};
+    try {
+      final rows = await db.query(
+        table,
+        columns: ['id', 'title', 'author_name', 'tags_json', 'tags'],
+        where: 'id IN ($ph)',
+        whereArgs: ids,
+      );
+      for (final r in rows) {
+        final id = r['id'] as int?;
+        if (id != null) meta[id] = r;
+      }
+    } catch (_) {
+      return const [];
+    }
+    final refs = <RecentWorkRef>[];
+    for (final id in ids) {
+      final m = meta[id];
+      if (m == null) continue;
+      final historyTitle = titles?[id];
+      refs.add(
+        RecentWorkRef(
+          workId: id,
+          title: (historyTitle != null && historyTitle.isNotEmpty)
+              ? historyTitle
+              : (m['title'] as String? ?? '').trim(),
+          authorName: (m['author_name'] as String? ?? '').trim(),
+          tags: extractTagsFromRow(m),
+        ),
+      );
+    }
+    return refs;
+  }
+
+  /// 候補に推薦理由を取り付ける（失敗時はそのまま返す）。
+  Future<List<RecommendCandidate>> _attachReasons(
+    List<RecommendCandidate> candidates,
+  ) async {
+    if (candidates.isEmpty) return candidates;
+    try {
+      final ctx = await _loadReasonContext();
+      return candidates.map((c) {
+        final isNovel = c.type == 'novel';
+        return c.copyWith(
+          reasons: buildRecommendationReason(
+            candidate: c,
+            recentWorks: isNovel ? ctx.recentNovels : ctx.recentIllusts,
+            favoriteWorks: isNovel ? ctx.favoriteNovels : ctx.favoriteIllusts,
+            knownAuthorNames: ctx.knownAuthorNames,
+          ),
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint('[RecFeed] recommendation reason build failed: $e');
+      return candidates;
+    }
+  }
+}
+
+/// 理由コンテキスト（履歴・お気に入りの作品＋既知作者名）。
+class _ReasonContext {
+  final List<RecentWorkRef> recentNovels;
+  final List<RecentWorkRef> recentIllusts;
+  final List<RecentWorkRef> favoriteNovels;
+  final List<RecentWorkRef> favoriteIllusts;
+  final Set<String> knownAuthorNames;
+
+  const _ReasonContext({
+    required this.recentNovels,
+    required this.recentIllusts,
+    required this.favoriteNovels,
+    required this.favoriteIllusts,
+    required this.knownAuthorNames,
+  });
 }
