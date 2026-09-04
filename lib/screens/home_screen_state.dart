@@ -23,6 +23,10 @@ import 'duplicate_finder_screen.dart';
 import 'home_ui_components.dart';
 import 'home_filter_handler.dart';
 import 'home_sync_handler.dart';
+import 'home_search_assist_view.dart';
+import 'home_search_source_chips.dart';
+import '../utils/home_search_ui_mode.dart';
+import '../models/trending_tag.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'package:http/http.dart' as http;
@@ -78,6 +82,49 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
 
   late final TextEditingController searchController;
   final FocusNode searchFocusNode = FocusNode();
+
+  // ===== Phase 3 検索UI: モード管理（新タブを作らない方式）=====
+  /// 現在の検索UIモード（browsing / assisting / results）
+  HomeSearchUiMode homeSearchUiMode = HomeSearchUiMode.browsing;
+
+  /// 現在のコンテンツソース（おすすめ / 新着 / フォロー / ブックマーク）
+  HomeContentSource currentContentSource = HomeContentSource.recommend;
+
+  /// ソースチップの選択状態（ランキング・検索結果中は選択なし）
+  HomeContentSource? get activeContentSource {
+    final sub = currentIndex == illustIndex ? illustSubMode : novelSubMode;
+    if (sub != 0) return null;
+    return currentContentSource;
+  }
+
+  /// 現在のタブで有効な検索結果が存在するか（unfocus 時の遷移判定用）
+  bool get _hasActiveSearchResults {
+    if (currentIndex == illustIndex) return illustSubMode == 1;
+    if (currentIndex == novelIndex) return novelSubMode == 1;
+    return false;
+  }
+
+  // 検索アシストビュー用リスナー（履歴の外部変更を通知）
+  final List<VoidCallback> _searchListeners = [];
+
+  void addSearchListener(VoidCallback cb) => _searchListeners.add(cb);
+
+  void removeSearchListener(VoidCallback cb) => _searchListeners.remove(cb);
+
+  void notifySearchListeners() {
+    for (final cb in List<VoidCallback>.from(_searchListeners)) {
+      cb();
+    }
+  }
+
+  // トレンドタグキャッシュ（タブ切替時のスラッシング防止）
+  final Map<String, List<TrendingTag>> _trendingTagCache = {};
+
+  List<TrendingTag>? getTrendingTagCache(String key) => _trendingTagCache[key];
+
+  void setTrendingTagCache(String key, List<TrendingTag> tags) {
+    _trendingTagCache[key] = tags;
+  }
 
   // 共有される検索条件 State（カテゴリを跨いで保持されます）
   String _currentSearchWord = '';
@@ -295,9 +342,8 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     {'value': 'day_female_r18', 'label': 'R-18 女性向け'},
   ];
 
-  // 検索履歴
-  List<String> searchHistory = [];
-  bool _showHistoryList = false;
+  // 検索履歴は DB（search_history テーブル）を正とする。
+  // 旧 SharedPreferences 履歴は起動時に1回だけ DB へ移行して削除する。
 
   // ハンドラーインスタンス
   late HomeFilterHandler _filterHandler;
@@ -323,14 +369,26 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     _uiComponents = HomeUIComponents(this);
     _syncHandler = HomeSyncHandler(this);
 
-    // 検索窓フォーカス時に候補オーバーレイを表示（空欄なら履歴全件）
+    // Phase 3: 検索窓フォーカスでアシストビューへ領域置換（オーバーレイ禁止）
     searchFocusNode.addListener(() {
-      if (searchFocusNode.hasFocus && !_showHistoryList) {
-        setState(() => _showHistoryList = true);
-      }
+      if (!mounted) return;
+      setState(() {
+        if (searchFocusNode.hasFocus) {
+          homeSearchUiMode = HomeSearchUiModeTransitions.onFocus(
+            homeSearchUiMode,
+          );
+        } else {
+          homeSearchUiMode = HomeSearchUiModeTransitions.onUnfocus(
+            homeSearchUiMode,
+            hasPendingText: searchController.text.trim().isNotEmpty,
+            hasSearchResult: _hasActiveSearchResults,
+          );
+        }
+      });
     });
 
-    _loadSearchHistory();
+    // 旧 SharedPreferences の検索履歴を DB へ1回だけ移行（失敗しても落とさない）
+    _migratePrefsSearchHistoryToDb();
     _initializeDriveSync();
     // Phase 2: 新設フィルター（期間 / 日付範囲 / ブクマ数範囲）を復元
     _filterHandler.loadFilterPrefs();
@@ -375,56 +433,59 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     super.dispose();
   }
 
-  // 検索履歴の読み込み
-  Future<void> _loadSearchHistory() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      searchHistory = prefs.getStringList('search_history') ?? [];
-    });
+  /// 旧 SharedPreferences の検索履歴を DB へ移行する（起動時1回のみ）。
+  /// 移行後は旧キーを削除し、以降は DB を正とする。失敗してもアプリは落とさない。
+  Future<void> _migratePrefsSearchHistoryToDb() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final legacy = prefs.getStringList('search_history');
+      if (legacy != null && legacy.isNotEmpty) {
+        final db = DatabaseService();
+        // 先頭が最新のリストなので、末尾（古い順）から投入して
+        // last_searched_at の順序を保つ。
+        for (final word in legacy.reversed) {
+          final k = word.trim();
+          if (k.isEmpty) continue;
+          try {
+            await db.addSearchHistory(k);
+          } catch (e) {
+            debugPrint('検索履歴移行: エントリ保存失敗($k): $e');
+          }
+        }
+      }
+      await prefs.remove('search_history');
+    } catch (e) {
+      debugPrint('検索履歴移行失敗（無視）: $e');
+    }
   }
 
-  // 検索履歴の保存
-  Future<void> _saveSearchHistory(String word) async {
-    if (word.trim().isEmpty) return;
-    final prefs = await SharedPreferences.getInstance();
-    final history = prefs.getStringList('search_history') ?? [];
-    history.remove(word);
-    history.insert(0, word);
-    if (history.length > 20) history.removeLast();
-    await prefs.setStringList('search_history', history);
-    setState(() {
-      searchHistory = history;
-    });
+  /// 検索履歴を個別削除する（DB 正）。
+  Future<void> deleteDbSearchHistoryItem(String word) async {
+    try {
+      await DatabaseService().deleteSearchHistory(word);
+    } catch (e) {
+      debugPrint('検索履歴削除失敗（無視）: $e');
+    }
+    notifySearchListeners();
   }
 
-  // 検索履歴の削除
-  Future<void> deleteSearchHistoryItem(String word) async {
-    final prefs = await SharedPreferences.getInstance();
-    final history = prefs.getStringList('search_history') ?? [];
-    history.remove(word);
-    await prefs.setStringList('search_history', history);
-    setState(() {
-      searchHistory = history;
-    });
+  /// 検索履歴を全件削除する（DB 正）。
+  Future<void> clearDbSearchHistory() async {
+    try {
+      await DatabaseService().clearSearchHistory();
+    } catch (e) {
+      debugPrint('検索履歴全削除失敗（無視）: $e');
+    }
+    notifySearchListeners();
   }
 
-  // 検索履歴の全クリア
-  Future<void> clearAllSearchHistory() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('search_history');
-    setState(() {
-      searchHistory = [];
-      _showHistoryList = false;
-    });
-  }
-
-  // 検索ワード送信時の処理
+  // 検索ワード送信時の処理（Phase 3: キーボードを閉じて results へ。履歴は DB のみ）
   void onSearchSubmit(String query) {
-    if (query.trim().isEmpty) return;
-    _saveSearchHistory(query);
-    // DB 検索履歴にも保存（使用回数・最新日時付き）。失敗しても検索は継続。
+    final q = query.trim();
+    if (q.isEmpty) return;
+    // DB 検索履歴に保存（使用回数・最新日時付き）。失敗しても検索は継続。
     DatabaseService()
-        .addSearchHistory(query.trim())
+        .addSearchHistory(q)
         .catchError((e) => debugPrint('検索履歴DB保存に失敗（無視）: $e'));
     setState(() {
       _currentSearchWord = buildSearchWord(
@@ -432,13 +493,16 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
         mode: selectedKeywordMode,
         exclude: excludeKeywordController.text,
       );
-      _showHistoryList = false;
+      homeSearchUiMode = HomeSearchUiModeTransitions.onSubmit(homeSearchUiMode);
       if (currentIndex == illustIndex) {
         illustSubMode = 1;
       } else if (currentIndex == novelIndex) {
         novelSubMode = 1;
       }
     });
+    notifySearchListeners();
+    // キーボードを閉じる（モード確定後に呼ぶことでリスナーの巻き戻しを防ぐ）
+    FocusScope.of(context).unfocus();
     fetchData();
   }
 
@@ -448,19 +512,23 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     onSearchSubmit(query);
   }
 
-  // 検索リセット
+  // 検索クリア（Phase 3: フォーカス中なら assisting 維持、結果表示中なら閲覧へ）
   void resetSearch() {
     searchController.clear();
+    final backToBrowsing = homeSearchUiMode == HomeSearchUiMode.results;
     setState(() {
-      _currentSearchWord = '';
-      _showHistoryList = false;
-      if (currentIndex == illustIndex) {
-        illustSubMode = 0;
-      } else if (currentIndex == novelIndex) {
-        novelSubMode = 0;
+      homeSearchUiMode = HomeSearchUiModeTransitions.onClear(homeSearchUiMode);
+      if (backToBrowsing) {
+        _currentSearchWord = '';
+        if (currentIndex == illustIndex) {
+          illustSubMode = 0;
+        } else if (currentIndex == novelIndex) {
+          novelSubMode = 0;
+        }
       }
     });
-    fetchData();
+    notifySearchListeners();
+    if (backToBrowsing) fetchData();
   }
 
   // タグ選択時の処理
@@ -486,6 +554,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   void changeTab(int index, [int? subMode]) {
     if (currentIndex == index) return;
 
+    searchFocusNode.unfocus();
     setState(() {
       currentIndex = index;
       // サブモードをリセット（おすすめに）
@@ -494,6 +563,9 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
       } else if (index == novelIndex) {
         novelSubMode = subMode ?? 0;
       }
+      // Phase 3: タブ切替時は検索UIモード・ソースもリセット
+      homeSearchUiMode = HomeSearchUiMode.browsing;
+      currentContentSource = HomeContentSource.recommend;
       // フィーリング発掘は Pixiv API 一覧取得タブではないためローディングを解除
       if (index == feelingDiscoveryIndex) {
         isLoading = false;
@@ -508,12 +580,48 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
 
   /// 現在のタブのサブモードを変更する公開 API。
   void changeSubMode(int subMode) {
+    searchFocusNode.unfocus();
     setState(() {
       if (currentIndex == illustIndex) {
         illustSubMode = subMode;
       } else if (currentIndex == novelIndex) {
         novelSubMode = subMode;
       }
+      // Phase 3: サブモード切替（おすすめ/ランキング）では閲覧へ戻す。
+      // ランキングはソースチップに出さず別導線として維持する。
+      homeSearchUiMode = HomeSearchUiMode.browsing;
+      if (subMode == 0) {
+        currentContentSource = HomeContentSource.recommend;
+      }
+    });
+    fetchData();
+  }
+
+  /// Phase 3: コンテンツソース切替（おすすめ/新着/フォロー/ブックマーク）。
+  /// キーワード結果は破棄して閲覧へ戻る（検索バーの文字は残す）。
+  void onContentSourceSelected(HomeContentSource source) {
+    FocusScope.of(context).unfocus();
+    // 未ログインでフォロー/ブックマーク → クラッシュさせずログイン誘導のみ。
+    if (!isLoggedIn &&
+        (source == HomeContentSource.following ||
+            source == HomeContentSource.bookmarks)) {
+      setState(() {
+        homeSearchUiMode = HomeSearchUiMode.browsing;
+      });
+      showPKCELoginDialog();
+      return;
+    }
+    setState(() {
+      homeSearchUiMode = HomeSearchUiModeTransitions.onSourceSelected(
+        homeSearchUiMode,
+      );
+      currentContentSource = source;
+      if (currentIndex == illustIndex) {
+        illustSubMode = 0;
+      } else if (currentIndex == novelIndex) {
+        novelSubMode = 0;
+      }
+      _currentSearchWord = '';
     });
     fetchData();
   }
@@ -570,8 +678,8 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
       if (currentIndex == illustIndex) {
         // イラストモード
         if (illustSubMode == 0) {
-          // おすすめ
-          final result = await _pixivApiService.getRecommend(offset: 0);
+          // ソース別閲覧（おすすめ/新着/フォロー/ブックマーク）
+          final result = await _fetchIllustsBySource(currentContentSource, 0);
           setState(() {
             illusts = result.items;
             nextOffset = result.nextOffset;
@@ -627,8 +735,8 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
       } else if (currentIndex == novelIndex) {
         // 小説モード
         if (novelSubMode == 0) {
-          // おすすめ
-          final result = await _pixivApiService.getNovelRecommend(offset: 0);
+          // ソース別閲覧（おすすめ/新着/フォロー/ブックマーク）
+          final result = await _fetchNovelsBySource(currentContentSource, 0);
           setState(() {
             novels = result.items;
             nextOffset = result.nextOffset;
@@ -911,9 +1019,10 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
       if (currentIndex == illustIndex) {
         // イラストモード
         if (illustSubMode == 0) {
-          // おすすめ
-          final result = await _pixivApiService.getRecommend(
-            offset: nextOffset!,
+          // ソース別閲覧（おすすめ/新着/フォロー/ブックマーク）
+          final result = await _fetchIllustsBySource(
+            currentContentSource,
+            nextOffset!,
           );
           setState(() {
             illusts.addAll(result.items);
@@ -968,9 +1077,10 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
       } else if (currentIndex == novelIndex) {
         // 小説モード
         if (novelSubMode == 0) {
-          // おすすめ
-          final result = await _pixivApiService.getNovelRecommend(
-            offset: nextOffset!,
+          // ソース別閲覧（おすすめ/新着/フォロー/ブックマーク）
+          final result = await _fetchNovelsBySource(
+            currentContentSource,
+            nextOffset!,
           );
           setState(() {
             novels.addAll(result.items);
@@ -1048,6 +1158,40 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
           rateLimited = true;
         }
       });
+    }
+  }
+
+  /// Phase 3: コンテンツソース別のイラスト一覧取得（閲覧モード用）。
+  Future<FetchResult<Illust>> _fetchIllustsBySource(
+    HomeContentSource source,
+    int offset,
+  ) async {
+    switch (source) {
+      case HomeContentSource.recommend:
+        return _pixivApiService.getRecommend(offset: offset);
+      case HomeContentSource.latest:
+        return _pixivApiService.getNewIllusts(offset: offset);
+      case HomeContentSource.following:
+        return _pixivApiService.getFollowedIllusts(offset: offset);
+      case HomeContentSource.bookmarks:
+        return _pixivApiService.getUserBookmarks(offset: offset);
+    }
+  }
+
+  /// Phase 3: コンテンツソース別の小説一覧取得（閲覧モード用）。
+  Future<FetchResult<Novel>> _fetchNovelsBySource(
+    HomeContentSource source,
+    int offset,
+  ) async {
+    switch (source) {
+      case HomeContentSource.recommend:
+        return _pixivApiService.getNovelRecommend(offset: offset);
+      case HomeContentSource.latest:
+        return _pixivApiService.getNewNovels(offset: offset);
+      case HomeContentSource.following:
+        return _pixivApiService.getFollowedNovels(offset: offset);
+      case HomeContentSource.bookmarks:
+        return _pixivApiService.getUserBookmarkNovels(offset: offset);
     }
   }
 
@@ -1872,14 +2016,9 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                           textInputAction: TextInputAction.search,
                           onSubmitted: onSearchSubmit,
                           onChanged: (val) {
-                            // 入力中は検索候補（DB履歴 + 購読タグ）オーバーレイを表示
-                            if (searchFocusNode.hasFocus && val.isNotEmpty) {
-                              if (!_showHistoryList) {
-                                setState(() => _showHistoryList = true);
-                              } else {
-                                setState(() {});
-                              }
-                            }
+                            // Phase 3: フォーカス中はアシストビューが候補を絞込む。
+                            // ここではクリアボタンの描画だけ再構築する。
+                            setState(() {});
                           },
                         ),
                       ),
@@ -1912,6 +2051,10 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                   ),
                 ),
 
+              // Phase 3: コンテンツソースチップ（おすすめ/新着/フォロー/ブックマーク）
+              if (currentIndex != feelingDiscoveryIndex)
+                HomeSearchSourceChips(state: this),
+
               // 3. サブモードセレクター (おすすめ / ランキング)。※検索結果時はサブタブは表示しません。
               // フィーリング発掘タブでは非表示
               if (currentIndex != feelingDiscoveryIndex && activeSubMode != 1)
@@ -1928,37 +2071,66 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                   searchItem != null)
                 _uiComponents.buildEncyclopediaCard(context),
 
-              // 6. メインデータコンテンツ
-              // フィーリング発掘はホーム側の共通ローディング/エラーに遮断されない
-              // 独立画面として扱う（判定を isLoading / errorMessage より前に置く）
+              // 6. メインデータコンテンツ ⇄ 検索アシストビュー（Phase 3）
+              // Stack の Positioned オーバーレイではなく同一領域の置換。
+              // AnimatedSwitcher 200ms / easeOutCubic・easeInCubic、
+              // Fade + わずかな縦スライド（約 2% ≒ 10px 前後）。
               Expanded(
-                child: currentIndex == feelingDiscoveryIndex
-                    ? const FeelingDiscoveryScreen()
-                    : isLoading
-                    ? const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(color: Colors.pinkAccent),
-                            SizedBox(height: 16),
-                            Text(
-                              'Pixiv からデータを取得中...',
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                          ],
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) {
+                    final slide = Tween<Offset>(
+                      begin: const Offset(0, 0.02),
+                      end: Offset.zero,
+                    ).animate(animation);
+                    return SlideTransition(
+                      position: slide,
+                      child: FadeTransition(opacity: animation, child: child),
+                    );
+                  },
+                  child: homeSearchUiMode == HomeSearchUiMode.assisting
+                      ? SearchAssistView(
+                          key: const ValueKey('home-search-assist-view'),
+                          state: this,
+                          isNovelTab: currentIndex == novelIndex,
+                        )
+                      : KeyedSubtree(
+                          key: ValueKey(
+                            'home-content-$currentIndex-$activeSubMode-'
+                            '$currentContentSource',
+                          ),
+                          // フィーリング発掘はホーム側の共通ローディング/エラーに
+                          // 遮断されない独立画面として扱う。
+                          child: currentIndex == feelingDiscoveryIndex
+                              ? const FeelingDiscoveryScreen()
+                              : isLoading
+                              ? const Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      CircularProgressIndicator(
+                                        color: Colors.pinkAccent,
+                                      ),
+                                      SizedBox(height: 16),
+                                      Text(
+                                        'Pixiv からデータを取得中...',
+                                        style: TextStyle(color: Colors.grey),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : errorMessage != null
+                              ? _uiComponents.buildErrorWidget()
+                              : currentIndex == illustIndex
+                              ? _uiComponents.buildIllustGrid(crossAxisCount)
+                              : _uiComponents.buildNovelList(),
                         ),
-                      )
-                    : errorMessage != null
-                    ? _uiComponents.buildErrorWidget()
-                    : currentIndex == illustIndex
-                    ? _uiComponents.buildIllustGrid(crossAxisCount)
-                    : _uiComponents.buildNovelList(),
+                ),
               ),
             ],
           ),
-
-          // 🔍 検索履歴候補オーバーレイリスト
-          if (_showHistoryList) _uiComponents.buildSearchHistoryOverlay(),
 
           // 🔄 サブスクリプション同期プログレス HUD
           if (isSyncing && _syncProgress != null)

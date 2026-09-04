@@ -4,18 +4,9 @@ import '../widgets/pixiv_image.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../services/database_service.dart';
 import 'illust_detail_screen.dart';
 import 'novel_detail_screen.dart';
 import '../widgets/novel_list_card.dart';
-
-/// 検索候補の1件（履歴 or 購読タグ）
-class _SearchSuggestion {
-  final String keyword;
-  final bool isTag;
-
-  const _SearchSuggestion({required this.keyword, required this.isTag});
-}
 
 /// UIコンポーネントを管理するクラス
 class HomeUIComponents {
@@ -644,146 +635,6 @@ class HomeUIComponents {
         ),
       ),
     );
-  }
-
-  // =========================================================================
-  // 検索履歴オーバーレイ
-  // =========================================================================
-  Widget buildSearchHistoryOverlay() {
-    final query = state.searchController.text.trim();
-    return Positioned(
-      top: 110,
-      left: 8,
-      right: 8,
-      child: Card(
-        color: const Color(0xFF1E1E1E),
-        elevation: 8,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 300),
-          child: FutureBuilder<List<_SearchSuggestion>>(
-            future: _buildSearchSuggestions(query),
-            builder: (ctx, snap) {
-              final suggestions = snap.data ?? <_SearchSuggestion>[];
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12.0,
-                      vertical: 8.0,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          query.isEmpty ? '最近の検索履歴' : '検索候補',
-                          style: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        if (query.isEmpty)
-                          TextButton(
-                            onPressed: state.clearAllSearchHistory,
-                            child: const Text(
-                              'すべてクリア',
-                              style: TextStyle(
-                                color: Colors.pinkAccent,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1, color: Colors.grey),
-                  if (suggestions.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: Text(
-                        '候補がありません',
-                        style: TextStyle(color: Colors.grey, fontSize: 13),
-                      ),
-                    )
-                  else
-                    Flexible(
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        padding: EdgeInsets.zero,
-                        itemCount: suggestions.length,
-                        itemBuilder: (ctx, idx) {
-                          final s = suggestions[idx];
-                          return ListTile(
-                            dense: true,
-                            leading: Icon(
-                              s.isTag ? Icons.tag : Icons.history,
-                              size: 16,
-                              color: s.isTag
-                                  ? Colors.orangeAccent
-                                  : Colors.grey,
-                            ),
-                            title: Text(
-                              s.keyword,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                              ),
-                            ),
-                            trailing: s.isTag
-                                ? null
-                                : IconButton(
-                                    icon: const Icon(
-                                      Icons.close,
-                                      size: 14,
-                                      color: Colors.grey,
-                                    ),
-                                    onPressed: () => state
-                                        .deleteSearchHistoryItem(s.keyword),
-                                  ),
-                            onTap: () => state.onHistoryItemTap(s.keyword),
-                          );
-                        },
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 検索候補を組み立てる（DB検索履歴の部分一致 + 購読タグの部分一致）。
-  /// 重複はキーワード単位で排除し、履歴優先で表示する。
-  Future<List<_SearchSuggestion>> _buildSearchSuggestions(String query) async {
-    final db = DatabaseService();
-    try {
-      final histRows = await db.searchSearchHistory(query: query);
-      final tags = await db.getSubscribedTags();
-      final seen = <String>{};
-      final result = <_SearchSuggestion>[];
-      for (final r in histRows) {
-        final kw = (r['keyword'] as String?) ?? '';
-        if (kw.isNotEmpty && seen.add(kw)) {
-          result.add(_SearchSuggestion(keyword: kw, isTag: false));
-        }
-      }
-      final q = query.toLowerCase();
-      for (final t in tags) {
-        final tag = (t['tag'] as String?) ?? '';
-        if (tag.isEmpty || !seen.add(tag)) continue;
-        if (query.isEmpty || tag.toLowerCase().contains(q)) {
-          result.add(_SearchSuggestion(keyword: tag, isTag: true));
-        }
-      }
-      return result;
-    } catch (e) {
-      debugPrint('検索候補の構築に失敗（無視）: $e');
-      return <_SearchSuggestion>[];
-    }
   }
 
   // =========================================================================
