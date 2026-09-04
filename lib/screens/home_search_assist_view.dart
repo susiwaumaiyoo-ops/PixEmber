@@ -7,6 +7,10 @@ import '../services/database_service.dart';
 import '../services/pixiv_api_service.dart';
 import 'home_screen_state.dart';
 import '../services/search_preset_service.dart';
+import '../services/discovery_card_service.dart';
+import '../novel_model.dart';
+import 'novel_detail_screen.dart';
+import 'author_profile_screen.dart';
 
 /// Phase 3 検索アシストビュー。
 ///
@@ -49,10 +53,14 @@ class _SearchAssistViewState extends State<SearchAssistView> {
   String _lastQuery = '';
   bool _initialFadedIn = false;
 
+  // Phase N4: 今日の再発見カード（非ブロッキング取得・0件なら非表示）
+  List<DiscoveryCard> _discovery = [];
+
   @override
   void initState() {
     super.initState();
     _loadAll();
+    _loadDiscovery();
     widget.state.addSearchListener(_onExternalChanged);
     // 初回表示の軽いフェード（履歴チップ出現、合計120ms 程度）
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -314,6 +322,128 @@ class _SearchAssistViewState extends State<SearchAssistView> {
   }
 
   // -------------------------------------------------------------------------
+  // Phase N4: 今日の再発見カード
+  // -------------------------------------------------------------------------
+
+  Future<void> _loadDiscovery() async {
+    try {
+      final cards = await DiscoveryCardService().fetch();
+      if (!mounted) return;
+      setState(() => _discovery = cards);
+    } catch (_) {
+      if (mounted) setState(() => _discovery = const []);
+    }
+  }
+
+  Future<void> _openDiscovery(DiscoveryCard card) async {
+    switch (card.tapTarget) {
+      case DiscoveryTapTarget.searchTag:
+        final tag = card.tag ?? '';
+        if (tag.isNotEmpty) _runSearch(tag);
+        break;
+      case DiscoveryTapTarget.openNovel:
+        await _openDiscoveryNovel(card.workId ?? 0);
+        break;
+      case DiscoveryTapTarget.openAuthor:
+        final authorId = card.authorId ?? 0;
+        if (authorId <= 0) return;
+        if (!mounted) return;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AuthorProfileScreen(userId: authorId),
+          ),
+        );
+        break;
+    }
+  }
+
+  Future<void> _openDiscoveryNovel(int workId) async {
+    if (workId <= 0) return;
+    try {
+      Novel? novel;
+      try {
+        novel = await DatabaseService().getNovelMeta(workId);
+      } catch (_) {
+        novel = null;
+      }
+      novel ??= await PixivApiService().getNovelById(workId);
+      if (!mounted) return;
+      final target = novel;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: target)),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('作品を開けませんでした')));
+      }
+    }
+  }
+
+  ({IconData icon, Color accent}) _discoveryStyle(DiscoveryCardKind kind) {
+    switch (kind) {
+      case DiscoveryCardKind.dormantTag:
+        return (icon: Icons.tag, accent: Colors.tealAccent);
+      case DiscoveryCardKind.seriesNext:
+        return (icon: Icons.auto_stories, accent: Colors.pinkAccent);
+      case DiscoveryCardKind.longUnseenAuthor:
+        return (icon: Icons.person_search, accent: Colors.amberAccent);
+      case DiscoveryCardKind.downloadedUnread:
+        return (icon: Icons.download_done, accent: Colors.greenAccent);
+    }
+  }
+
+  Widget _buildDiscoveryCard(DiscoveryCard c) {
+    final style = _discoveryStyle(c.kind);
+    return InkWell(
+      onTap: () => _openDiscovery(c),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: style.accent.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Icon(style.icon, size: 18, color: style.accent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    c.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    c.subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.grey, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 18, color: Colors.grey),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // -------------------------------------------------------------------------
   // 描画
   // -------------------------------------------------------------------------
 
@@ -324,11 +454,21 @@ class _SearchAssistViewState extends State<SearchAssistView> {
       opacity: _initialFadedIn ? 1.0 : 0.0,
       duration: const Duration(milliseconds: 120),
       curve: Curves.easeOutCubic,
-      child: _recent.isEmpty && _frequent.isEmpty && _presets.isEmpty && !typing
+      child:
+          _recent.isEmpty &&
+              _frequent.isEmpty &&
+              _presets.isEmpty &&
+              _discovery.isEmpty &&
+              !typing
           ? _buildEmptyState()
           : ListView(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               children: [
+                if (_discovery.isNotEmpty && !typing) ...[
+                  _buildSectionHeader('今日の再発見', icon: Icons.auto_awesome),
+                  for (final c in _discovery) _buildDiscoveryCard(c),
+                  const SizedBox(height: 12),
+                ],
                 if (typing) ...[
                   _buildSectionHeader('候補', icon: Icons.search),
                   if (_typedSuggestions.isEmpty)
