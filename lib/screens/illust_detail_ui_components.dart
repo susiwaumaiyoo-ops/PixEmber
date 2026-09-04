@@ -554,6 +554,10 @@ class IllustDetailUIComponents {
     if (state.isLoadingSimilar || similar == null) {
       return const SizedBox.shrink();
     }
+    // B4: AIモデル未導入時は「似た作品」セクションを丸ごと非表示（導入案内も出さない）。
+    if (!similar.modelReady) {
+      return const SizedBox.shrink();
+    }
     final works = similar.works;
     if (works.isEmpty) {
       final msg = similar.modelReady

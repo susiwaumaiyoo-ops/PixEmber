@@ -1243,9 +1243,16 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            _buildEmotionCurveCard(),
-            const SizedBox(height: 12),
-            _buildSimilarWorksCard(),
+            // B4: AIモデル未導入時は感情曲線カードを丸ごと非表示（導入案内も出さない）。
+            if (_emotionModelAvailable) ...[
+              _buildEmotionCurveCard(),
+              const SizedBox(height: 12),
+            ],
+            // B4: AIモデル未導入時は似た作品セクションを丸ごと非表示。
+            if (_similar?.modelReady ?? false) ...[
+              _buildSimilarWorksCard(),
+              const SizedBox(height: 12),
+            ],
 
             // 2. 詳細メタ情報
             Container(
