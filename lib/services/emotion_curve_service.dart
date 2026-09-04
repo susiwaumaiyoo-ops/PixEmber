@@ -421,6 +421,65 @@ class EmotionCurveResult {
   });
 }
 
+/// 目次用の感情ピークハイライト（Phase E1）。
+class EmotionTocHighlight {
+  final int chunkIndex;
+  final int pageIndex;
+  final String label;
+  final int colorValue;
+  final double score;
+
+  const EmotionTocHighlight({
+    required this.chunkIndex,
+    required this.pageIndex,
+    required this.label,
+    required this.colorValue,
+    required this.score,
+  });
+}
+
+/// 感情曲線から「感情が高まる箇所（ピーク）」を抽出し、目次項目候補とする（純粋関数）。
+///
+/// 各チャンクについて 6 感情の z スコアのうち最大のものを評価し、
+/// [minZ] 以上のチャンクを上位 [maxItems] 件返す。
+/// 戻り値は [EmotionTocHighlight]（ページ位置 = チャンクの pageStart）。
+List<EmotionTocHighlight> pickEmotionHighlights(
+  EmotionCurveResult? curve, {
+  int maxItems = 5,
+  double minZ = 1.0,
+}) {
+  if (curve == null || curve.zScores.isEmpty || curve.chunks.isEmpty) {
+    return const [];
+  }
+  final byAxis = curve.zScores; // [axis][chunk]
+  final chunkCount = curve.chunks.length;
+  final peaks = <EmotionTocHighlight>[];
+  for (var c = 0; c < chunkCount; c++) {
+    var bestJ = -1;
+    var bestZ = minZ; // 閾値未満は除外
+    for (var j = 0; j < byAxis.length && j < kEmotionLabels.length; j++) {
+      final z = byAxis[j][c];
+      if (z > bestZ) {
+        bestZ = z;
+        bestJ = j;
+      }
+    }
+    if (bestJ < 0 || bestJ >= kEmotionLabels.length) continue;
+    peaks.add(
+      EmotionTocHighlight(
+        chunkIndex: c,
+        pageIndex: curve.chunks[c].pageStart,
+        label: kEmotionLabels[bestJ],
+        colorValue: kEmotionColorValues[kEmotionLabels[bestJ]] ?? 0xFF9E9E9E,
+        score: bestZ,
+      ),
+    );
+  }
+  peaks.sort((a, b) => b.score.compareTo(a.score));
+  if (peaks.length > maxItems) return peaks.sublist(0, maxItems);
+  return peaks;
+}
+
 /// 本文を約 [chunkSize] 文字のチャンクに分割する（純粋関数）。
 ///
 /// [novelPages] はページごとの本文。各チャンクは含む文字位置から

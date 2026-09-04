@@ -1873,7 +1873,10 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const StatisticsScreen()),
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        StatisticsScreen(onTagTap: (tag) => onTagSelected(tag)),
+                  ),
                 );
               },
             ),

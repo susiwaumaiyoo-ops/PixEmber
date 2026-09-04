@@ -335,6 +335,7 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
             ),
           ),
           const Divider(height: 1, color: Colors.grey),
+          _buildEmotionPeakTocSection(sheetTextColor),
           Expanded(
             child: labels.isEmpty
                 ? Center(
@@ -389,6 +390,66 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
         ],
       ),
     );
+  }
+
+  // 感情のピークを目次項目として表示（Phase E1・感情曲線と連携）
+  Widget _buildEmotionPeakTocSection(Color sheetTextColor) {
+    final curve = _emotionCurve;
+    if (curve == null) return const SizedBox.shrink();
+
+    final peaks = pickEmotionHighlights(curve, maxItems: 5, minZ: 1.0);
+    final children = <Widget>[
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        child: Text(
+          '感情のピーク',
+          style: TextStyle(
+            color: sheetTextColor.withValues(alpha: 0.7),
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    ];
+    if (peaks.isEmpty) {
+      children.add(
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Text(
+            '特に強い感情のピークはありません',
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+        ),
+      );
+      return Column(children: children);
+    }
+    for (final p in peaks) {
+      children.add(
+        ListTile(
+          dense: true,
+          leading: Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              color: Color(p.colorValue),
+              shape: BoxShape.circle,
+            ),
+          ),
+          title: Text(
+            '「${p.label}」のピーク (p.${p.pageIndex + 1})',
+            style: TextStyle(color: sheetTextColor, fontSize: 13),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: () {
+            Navigator.pop(context);
+            _pageController?.jumpToPage(p.pageIndex);
+          },
+        ),
+      );
+    }
+    children.add(const Divider(height: 1, color: Colors.grey));
+    return Column(children: children);
   }
 
   // シリーズ目次 Drawer コンテンツ

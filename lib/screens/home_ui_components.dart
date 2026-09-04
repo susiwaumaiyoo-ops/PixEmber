@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'illust_detail_screen.dart';
 import 'novel_detail_screen.dart';
 import '../widgets/novel_list_card.dart';
+import '../widgets/ugoira_thumb.dart';
 
 /// UIコンポーネントを管理するクラス
 class HomeUIComponents {
@@ -203,6 +204,27 @@ class HomeUIComponents {
     );
   }
 
+  Widget _buildUgoiraThumb(dynamic illust, String? previewUrl) {
+    int? id;
+    try {
+      id = illust.id as int?;
+    } catch (_) {
+      id = null;
+    }
+    if (id == null) {
+      return previewUrl != null && previewUrl.isNotEmpty
+          ? PixivImage(
+              url: previewUrl,
+              fit: BoxFit.cover,
+              isThumbnail: true,
+              cacheWidth: 300,
+              errorWidget: Container(color: Colors.black26),
+            )
+          : Container(color: Colors.black26);
+    }
+    return UgoiraThumb(illustId: id, fallbackUrl: previewUrl);
+  }
+
   Widget _buildIllustGridItem(BuildContext context, dynamic illust) {
     String? previewUrl;
     try {
@@ -237,7 +259,9 @@ class HomeUIComponents {
             fit: StackFit.expand,
             children: [
               // プレビュー画像
-              if (previewUrl != null && previewUrl.isNotEmpty)
+              if (illust.type == 'ugoira')
+                _buildUgoiraThumb(illust, previewUrl)
+              else if (previewUrl != null && previewUrl.isNotEmpty)
                 PixivImage(
                   url: previewUrl,
                   fit: BoxFit.cover,

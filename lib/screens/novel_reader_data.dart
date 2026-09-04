@@ -434,6 +434,8 @@ extension _ReaderData on _NovelReaderScreenState {
       if (!mounted || _currentNovel.id != novelId) return;
       _emotionCurve = curve;
       _updateEmotionColor(_progressNotifier.value);
+      // 目次 Drawer が遅延ロード後に再描画されるよう通知（Phase E1）。
+      _safeSetState(() {});
     } catch (e) {
       debugPrint('感情曲線の読み込みに失敗（無視）: $e');
     }

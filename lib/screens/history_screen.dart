@@ -3,6 +3,7 @@ import 'novel_detail_screen.dart';
 import 'illust_detail_screen.dart';
 import 'statistics_screen.dart';
 import '../widgets/pixiv_image.dart';
+import '../widgets/ugoira_thumb.dart';
 import '../services/database_service.dart';
 import '../services/pixiv_api_service.dart';
 
@@ -249,29 +250,34 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             child: SizedBox(
                               width: 64,
                               height: 90,
-                              child: thumbUrl.isNotEmpty
-                                  ? PixivImage(
-                                      url: thumbUrl,
-                                      fit: BoxFit.cover,
-                                      isThumbnail: true,
-                                      cacheWidth:
-                                          (64 *
-                                                  MediaQuery.devicePixelRatioOf(
-                                                    context,
-                                                  ))
-                                              .round(),
-                                      errorWidget: const Icon(
-                                        Icons.image,
-                                        color: Colors.grey,
-                                      ),
+                              child: workType == 'ugoira'
+                                  ? UgoiraThumb(
+                                      illustId: (item['work_id'] as int?) ?? 0,
+                                      fallbackUrl: thumbUrl,
                                     )
-                                  : Container(
-                                      color: Colors.black,
-                                      child: const Icon(
-                                        Icons.image,
-                                        color: Colors.grey,
-                                      ),
-                                    ),
+                                  : (thumbUrl.isNotEmpty
+                                        ? PixivImage(
+                                            url: thumbUrl,
+                                            fit: BoxFit.cover,
+                                            isThumbnail: true,
+                                            cacheWidth:
+                                                (64 *
+                                                        MediaQuery.devicePixelRatioOf(
+                                                          context,
+                                                        ))
+                                                    .round(),
+                                            errorWidget: const Icon(
+                                              Icons.image,
+                                              color: Colors.grey,
+                                            ),
+                                          )
+                                        : Container(
+                                            color: Colors.black,
+                                            child: const Icon(
+                                              Icons.image,
+                                              color: Colors.grey,
+                                            ),
+                                          )),
                             ),
                           ),
                           const SizedBox(width: 10),

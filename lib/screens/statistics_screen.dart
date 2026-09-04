@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
+import '../services/dormant_tags_service.dart';
 import '../services/reading_speed_service.dart';
 import '../services/reading_trends_service.dart';
 import '../services/usage_tracking_service.dart';
@@ -201,7 +202,8 @@ Map<String, dynamic> computeStatistics(
 /// 既存の履歴データを読み取り専用で集計し、閲覧傾向を可視化する。
 /// DB スキーマ・バージョン(16) は変更せず、ネットワーク通信も行わない。
 class StatisticsScreen extends StatefulWidget {
-  const StatisticsScreen({super.key});
+  final ValueChanged<String>? onTagTap;
+  const StatisticsScreen({super.key, this.onTagTap});
 
   @override
   State<StatisticsScreen> createState() => _StatisticsScreenState();
@@ -218,6 +220,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   ReadingTrendsBundle? _trends;
   bool _isLoading = true;
   String? _error;
+  // 最近読んでいないタグ（Phase E2）
+  List<DormantTagInfo> _staleTags = const [];
 
   @override
   void initState() {
@@ -255,6 +259,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       try {
         trends = await ReadingTrendsService().fetch(_trendPeriod);
       } catch (_) {}
+      // 最近読んでいないタグ（Phase E2）: 失敗しても他の表示は止めない。
+      List<DormantTagInfo> staleTags = const [];
+      try {
+        staleTags = await DormantTagsService().fetch();
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _data = StatisticsData.fromComputeMap(raw);
@@ -262,6 +271,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         _speedHistory = speedHistory;
         _speedResult = speedResult;
         _trends = trends;
+        _staleTags = staleTags;
         _isLoading = false;
       });
     } catch (e) {
@@ -360,6 +370,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         _buildTagCard(data),
         const SizedBox(height: 12),
         _buildAuthorCard(data),
+        const SizedBox(height: 12),
+        _buildDormantTagsCard(),
         const SizedBox(height: 12),
       ],
     );
@@ -1019,6 +1031,37 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         }).toList(),
       ),
     );
+  }
+
+  // 最近読んでいないタグ（Phase E2）
+  Widget _buildDormantTagsCard() {
+    final tags = _staleTags;
+    final body = tags.isEmpty
+        ? const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Text(
+              '最近読んでいないタグはまだありません',
+              style: TextStyle(color: Colors.grey),
+            ),
+          )
+        : Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final t in tags)
+                ActionChip(
+                  backgroundColor: Colors.pinkAccent.withValues(alpha: 0.15),
+                  label: Text(
+                    '${t.tag}・${t.daysSinceLast}日ぶり',
+                    style: const TextStyle(color: Colors.pinkAccent),
+                  ),
+                  onPressed: widget.onTagTap == null
+                      ? null
+                      : () => widget.onTagTap!(t.tag),
+                ),
+            ],
+          );
+    return _sectionCard(title: '最近読んでいないタグ', body: body);
   }
 
   Widget _sectionCard({required String title, required Widget body}) {
