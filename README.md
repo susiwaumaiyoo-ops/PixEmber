@@ -52,9 +52,41 @@ fullscreen image viewer.
   - SHA-256 exact-duplicate and dHash near-duplicate detection with interruptible scanning. Deletion always requires per-image confirmation — nothing is ever removed automatically.
   - SHA-256 による完全一致と dHash による近似重複の検出。スキャンは中断可能で、削除は画像ごとの確認必須（自動削除は一切行いません）。
 
+- **Search Presets (検索プリセット)**
+  - Save your complete search + filter combination as a named preset and restore it with one tap (up to 30). Manage presets from the search assist view or the settings screen.
+  - 検索＋フィルタ条件一式を名前付きプリセットとして保存し、1タップで復元（最大30件）。検索アシストビューまたは設定画面から一覧・改名・削除できます。
+
+- **Explainable AI Recommendations (AIレコメンド理由説明)**
+  - Every recommended card carries reason tags (matched tags, close to recently read, favorite trends, unread authors, similarity level). Tap the ⓘ badge for the full explanation.
+  - 推薦カードごとに理由タグ（タグN件一致／最近読んだ作品に近い／お気に入り傾向／未読の作者／類似度区分）を表示。右上のⓘで詳細説明を確認できます。
+
+- **Novel Series Tracking (小説シリーズ追跡)**
+  - Per-series progress (next unread episode, finished count, estimated time remaining) on the novel detail screen and the reader TOC drawer, with one-tap "read next episode" navigation.
+  - シリーズ単位で次の未読話・読了数・残り目安を小説詳細画面とリーダー目次Drawerに表示し、「次から読む」で1タップ進められます。
+
+- **Today's Rediscovery Cards (今日の再発見カード)**
+  - Up to 3 on-device rediscovery cards (dormant tags, series continuations, long-unseen authors, unread downloads) appear at the top of the search assist view — non-blocking and hidden when empty.
+  - 検索アシストビュー上部に「今日の再発見」カード（休眠タグ／シリーズ続き／長期未見作者／ダウンロード済み未読から最大3件・端末内計算・0件は非表示）を表示。タップで該当画面へ。
+
+- **Read-Later Organizing & Quick Foldering (あとで読む整理＋簡易フォルダ分け)**
+  - One-tap organizing proposals for the read-later list: semantic clustering when embedding coverage is 60% or more, otherwise a tag-frequency quick mode. Folders are created only for proposals you explicitly adopt — nothing moves automatically.
+  - あとで読む一覧の整理提案（埋め込みカバレッジ60%以上なら意味クラスタリング、それ以外はタグ頻度ベースの簡易モード）。フォルダ作成・追加は「採用」した提案のみ（自動移動なし）。
+
+- **Reading & Quote Notes (読書メモ・引用メモ)**
+  - Attach notes and quotes to the current page in the novel reader; list, edit, delete, and jump between them across pages. Included in Google Drive backups.
+  - 小説リーダーで現在ページをアンカーにメモ・引用を残せます。一覧・編集・削除・ページ間ジャンプに対応し、Google Drive バックアップ対象です。
+
+- **Unified Settings Hub (設定ハブ)**
+  - A single settings screen (Drawer → Settings) groups saved searches, AI recommendation entries, novel reader settings (same values as the in-reader HUD), library screens, and backup management.
+  - Drawer「設定」から1つの設定画面で、保存した検索・AIレコメンド入口・小説リーダー設定（リーダー内HUDと同一の値を共有）・ライブラリ画面・バックアップ管理をまとめて操作できます。
+
 - **Cloud Sync (クラウド同期)**
   - Automatic backup of your data to Google Drive.
   - データをGoogle Driveへ自動バックアップ。
+
+> **Privacy / プライバシー**
+> Search, recommendation, statistics, reading, organizing, and backup management all run on-device. Except for Pixiv API requests and Google Drive backup, personal data is never sent to external servers.
+> 検索・推薦・統計・読書・整理・バックアップ管理のすべての処理は端末内で行います。Pixiv API への要求と Google Drive バックアップを除き、個人データは外部サーバーへ送信されません。
 
 ---
 
