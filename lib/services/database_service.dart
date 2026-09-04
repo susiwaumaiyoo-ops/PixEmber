@@ -32,7 +32,7 @@ class DatabaseService {
     final path = join(dbPath, 'pixiv_viewer.db');
     return await openDatabase(
       path,
-      version: 23,
+      version: 24,
       onConfigure: (db) async {
         // 外部キー制約（ON DELETE CASCADE 等）を有効化。
         // SQLite はデフォルトで無効のため接続毎に設定が必要。
@@ -82,6 +82,8 @@ class DatabaseService {
     await _createImageFingerprints(db);
     // 小説の感情曲線キャッシュ（v23 追加）
     await _createEmotionCurves(db);
+    // 読書メモ（v24 追加）
+    await _createReadingNotes(db);
   }
 
   /// ダウンロードキューグループテーブルを作成する（_onCreate / v17 migration / onOpen 共用）。
@@ -225,6 +227,27 @@ class DatabaseService {
         updated_at TEXT NOT NULL
       )
     ''');
+  }
+
+  /// 読書メモテーブルを作成する（_onCreate / v24 migration / onOpen 共用）。
+  /// ユーザー生成データのため Google Drive バックアップ対象。
+  Future<void> _createReadingNotes(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS reading_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_id INTEGER NOT NULL,
+        work_type TEXT NOT NULL DEFAULT 'novel',
+        page_index INTEGER NOT NULL DEFAULT 0,
+        anchor_text TEXT,
+        note_text TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_reading_notes_work '
+      'ON reading_notes(work_id)',
+    );
   }
 
   /// 指定テーブルに指定カラムが無ければ ALTER TABLE ADD COLUMN する（冪等）。
@@ -691,6 +714,9 @@ class DatabaseService {
     // 小説の感情曲線キャッシュ（v23 追加）
     await _createEmotionCurves(db);
 
+    // 読書メモ（v24 追加）
+    await _createReadingNotes(db);
+
     await db.execute('CREATE INDEX idx_history_workid ON history(work_id)');
     await db.execute(
       'CREATE INDEX idx_folder_items_folderid ON folder_items(folder_id)',
@@ -861,6 +887,79 @@ class DatabaseService {
     );
     if (rows.isEmpty) return 0;
     return (rows.first['c'] as int?) ?? 0;
+  }
+
+  // ==========================================
+  // READING NOTES (読書メモ・引用メモ、Phase N6 / DB v24)
+  // ==========================================
+
+  /// 読書メモを追加する。空白のみの [noteText] は拒否して -1 を返す。
+  /// [anchorText] はメモ位置のページ先頭テキスト（引用表示用・任意）。
+  Future<int> addReadingNote({
+    required int workId,
+    required int pageIndex,
+    required String noteText,
+    String workType = 'novel',
+    String? anchorText,
+  }) async {
+    final text = noteText.trim();
+    if (text.isEmpty) return -1;
+    final db = await database;
+    final now = DateTime.now().toUtc().toIso8601String();
+    final anchor = (anchorText ?? '').trim();
+    return await db.insert('reading_notes', {
+      'work_id': workId,
+      'work_type': workType,
+      'page_index': pageIndex,
+      'anchor_text': anchor.isEmpty ? null : anchor,
+      'note_text': text,
+      'created_at': now,
+      'updated_at': now,
+    });
+  }
+
+  /// 読書メモの本文を更新する。空白のみは拒否して -1 を返す。
+  /// [anchorText] が指定された場合のみアンカーも更新する。
+  Future<int> updateReadingNote(
+    int id,
+    String noteText, {
+    String? anchorText,
+  }) async {
+    final text = noteText.trim();
+    if (text.isEmpty) return -1;
+    final db = await database;
+    final values = <String, dynamic>{
+      'note_text': text,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+    if (anchorText != null) values['anchor_text'] = anchorText;
+    return await db.update(
+      'reading_notes',
+      values,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// 読書メモを1件削除する。
+  Future<int> deleteReadingNote(int id) async {
+    final db = await database;
+    return await db.delete('reading_notes', where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// 読書メモの一覧を取得する（新しい順: created_at DESC, id DESC）。
+  /// [workId] が指定された場合はその作品のみのメモを返す。
+  Future<List<Map<String, dynamic>>> getReadingNotes({int? workId}) async {
+    final db = await database;
+    final rows = workId == null
+        ? await db.query('reading_notes', orderBy: 'created_at DESC, id DESC')
+        : await db.query(
+            'reading_notes',
+            where: 'work_id = ?',
+            whereArgs: [workId],
+            orderBy: 'created_at DESC, id DESC',
+          );
+    return List<Map<String, dynamic>>.from(rows);
   }
 
   /// 購読タグテーブルを作成する（_onCreate / v3 migration / onOpen 共用）。
@@ -1209,6 +1308,12 @@ class DatabaseService {
       // 本文から再生成可能なため Google Drive バックアップ対象外。
       await _createEmotionCurves(db);
       debugPrint('[Migration v22->v23] emotion_curves を追加');
+    }
+    if (oldVersion < 24) {
+      // 読書メモテーブルを追加（Phase N6・非破壊的増設）。
+      // ユーザー生成データのため Google Drive バックアップ対象。
+      await _createReadingNotes(db);
+      debugPrint('[Migration v23->v24] reading_notes を追加');
     }
   }
 
@@ -1918,6 +2023,7 @@ class DatabaseService {
       'subscribed_tags',
       'read_later',
       'search_history',
+      'reading_notes',
     ];
     final Map<String, dynamic> result = {};
     for (final table in tables) {
@@ -2663,6 +2769,16 @@ class DatabaseService {
         'added_at',
         'last_opened_at',
         'finished_at',
+      ],
+      'reading_notes': [
+        'id',
+        'work_id',
+        'work_type',
+        'page_index',
+        'anchor_text',
+        'note_text',
+        'created_at',
+        'updated_at',
       ],
     };
 

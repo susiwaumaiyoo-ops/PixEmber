@@ -12,6 +12,7 @@ import '../services/novel_document_text.dart';
 import '../services/novel_parser.dart';
 import '../services/pixiv_api_service.dart';
 import '../services/novel_tts_service.dart';
+import '../services/reading_notes_service.dart';
 import '../services/reading_speed_service.dart';
 import '../services/ruri_model_manager.dart';
 import '../services/series_progress_service.dart';
@@ -190,6 +191,37 @@ class _NovelReaderScreenState extends State<NovelReaderScreen>
     super.dispose();
   }
 
+  /// 読書メモシートを開く（Phase N6）。現在ページに引用アンカーを付与。
+  void _showNoteSheet(bool isDark) {
+    final pages = _textData?.novelPages ?? const <String>[];
+    final pageIndex = _currentPageNotifier.value.clamp(
+      0,
+      (pages.isEmpty ? 1 : pages.length) - 1,
+    );
+    String? anchor;
+    if (pages.isNotEmpty) {
+      anchor = extractAnchorText(pages[pageIndex]);
+    }
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark
+          ? const Color(0xFF1E1E1E)
+          : const Color(0xFFFAFAFA),
+      builder: (_) => _NoteComposerSheet(
+        workId: _currentNovel.id,
+        workTitle: _currentNovel.title,
+        pageIndex: pageIndex,
+        anchorText: anchor,
+        isDark: isDark,
+        onJumpToPage: (int page) {
+          Navigator.pop(context);
+          _pageController?.jumpToPage(page);
+          _currentPageNotifier.value = page;
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     debugPrint('📍 [DEBUG Reader] build 開始');
@@ -365,6 +397,17 @@ class _NovelReaderScreenState extends State<NovelReaderScreen>
                               tooltip: '本文目次',
                             );
                           },
+                        ),
+                        // 読書メモ（Phase N6）: 現在ページのメモ・引用
+                        IconButton(
+                          icon: Icon(
+                            Icons.sticky_note_2,
+                            color: isDarkTheme
+                                ? Colors.white70
+                                : Colors.black54,
+                          ),
+                          onPressed: () => _showNoteSheet(isDarkTheme),
+                          tooltip: 'このページのメモ',
                         ),
                         // シリーズ目次 Drawerを開く
                         if (_currentNovel.series != null)

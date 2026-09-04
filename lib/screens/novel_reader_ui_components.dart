@@ -1428,3 +1428,435 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
     );
   }
 }
+
+// ============================================================================
+// 読書メモ・引用メモコンポーザー（Phase N6）
+// ============================================================================
+
+/// 現在ページのメモ入力のほか、同じ作品の全メモを一覧表示する。
+/// 別ページのメモをタップするとシートを閉じて該当ページへジャンプする。
+class _NoteComposerSheet extends StatefulWidget {
+  final int workId;
+  final String workTitle;
+
+  /// メモを紐づけるページインデックス（0-based）。
+  final int pageIndex;
+
+  /// メモ位置の引用アンカー（ページ先頭テキスト）。
+  final String? anchorText;
+  final bool isDark;
+
+  /// 別ページのメモがタップされたとき（シートを閉じてページ移動）。
+  final ValueChanged<int> onJumpToPage;
+
+  const _NoteComposerSheet({
+    required this.workId,
+    required this.workTitle,
+    required this.pageIndex,
+    this.anchorText,
+    required this.isDark,
+    required this.onJumpToPage,
+  });
+
+  @override
+  State<_NoteComposerSheet> createState() => _NoteComposerSheetState();
+}
+
+class _NoteComposerSheetState extends State<_NoteComposerSheet> {
+  final DatabaseService _db = DatabaseService();
+  final TextEditingController _controller = TextEditingController();
+
+  List<Map<String, dynamic>> _notes = [];
+  bool _loading = true;
+  int? _editingId;
+  int? _editingPage;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final rows = await _db.getReadingNotes(workId: widget.workId);
+      if (!mounted) return;
+      setState(() {
+        _notes = rows;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  void _startEdit(Map<String, dynamic> note) {
+    setState(() {
+      _editingId = note['id'] as int?;
+      _editingPage = (note['page_index'] as int?) ?? 0;
+      _controller.text = (note['note_text'] as String?) ?? '';
+      _controller.selection = TextSelection.fromPosition(
+        TextPosition(offset: _controller.text.length),
+      );
+    });
+  }
+
+  void _cancelEdit() {
+    setState(() {
+      _editingId = null;
+      _editingPage = null;
+      _controller.clear();
+    });
+  }
+
+  Future<void> _save() async {
+    final text = _controller.text.trim();
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    if (text.isEmpty) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('メモを入力してください。'),
+          backgroundColor: Colors.pink.shade700,
+        ),
+      );
+      return;
+    }
+    final editingId = _editingId;
+    try {
+      if (editingId != null) {
+        await _db.updateReadingNote(editingId, text);
+      } else {
+        await _db.addReadingNote(
+          workId: widget.workId,
+          pageIndex: widget.pageIndex,
+          noteText: text,
+          anchorText: widget.anchorText,
+        );
+      }
+      if (!mounted) return;
+      messenger.showSnackBar(const SnackBar(content: Text('メモを保存しました。')));
+      navigator.pop();
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('メモの保存に失敗しました。'),
+          backgroundColor: Colors.pink.shade700,
+        ),
+      );
+    }
+  }
+
+  Future<void> _delete(Map<String, dynamic> note) async {
+    final id = note['id'] as int?;
+    if (id == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await _db.deleteReadingNote(id);
+      if (!mounted) return;
+      setState(() {
+        if (_editingId == id) {
+          _editingId = null;
+          _editingPage = null;
+          _controller.clear();
+        }
+        _notes.removeWhere((n) => n['id'] == id);
+      });
+      messenger.showSnackBar(const SnackBar(content: Text('メモを削除しました。')));
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('メモの削除に失敗しました。'),
+          backgroundColor: Colors.pink.shade700,
+        ),
+      );
+    }
+  }
+
+  void _onNoteTapped(Map<String, dynamic> note) {
+    final page = (note['page_index'] as int?) ?? 0;
+    if (page == widget.pageIndex) {
+      Navigator.pop(context);
+      return;
+    }
+    widget.onJumpToPage(page);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDark;
+    final titleColor = isDark ? Colors.white : Colors.black87;
+    final subColor = isDark ? Colors.white70 : Colors.black54;
+    final rowColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.04);
+    final anchor = (widget.anchorText ?? '').trim();
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.66,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.sticky_note_2,
+                    size: 20,
+                    color: Colors.pinkAccent,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'メモ（p.${widget.pageIndex + 1}）',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: titleColor,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close, color: subColor),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                widget.workTitle,
+                style: TextStyle(fontSize: 12, color: subColor),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (anchor.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: rowColor,
+                  border: Border(
+                    left: BorderSide(
+                      color: Colors.pinkAccent.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ),
+                child: Text(
+                  '「$anchor」',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontStyle: FontStyle.italic,
+                    color: subColor,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_editingId != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit, size: 14, color: subColor),
+                          const SizedBox(width: 4),
+                          Text(
+                            '編集モード（p.${(_editingPage ?? 0) + 1}）',
+                            style: TextStyle(fontSize: 12, color: subColor),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: _cancelEdit,
+                            child: const Text('キャンセル'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  TextField(
+                    controller: _controller,
+                    minLines: 2,
+                    maxLines: 3,
+                    onSubmitted: (_) => _save(),
+                    decoration: InputDecoration(
+                      hintText: 'メモを入力（p.${widget.pageIndex + 1} に紐づけ）',
+                      hintStyle: TextStyle(fontSize: 13, color: subColor),
+                      filled: true,
+                      fillColor: rowColor,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: _save,
+                        icon: const Icon(Icons.save, size: 18),
+                        label: Text(_editingId != null ? '更新する' : 'メモを保存'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.pink.shade700,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Text(
+                'この作品の全メモ（${_notes.length}件）',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: titleColor,
+                ),
+              ),
+            ),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _notes.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          'メモはまだありません。\n上の欄から追加できます。',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 13, color: subColor),
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      itemCount: _notes.length,
+                      itemBuilder: (context, i) => _buildNoteRow(
+                        _notes[i],
+                        titleColor: titleColor,
+                        subColor: subColor,
+                        rowColor: rowColor,
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoteRow(
+    Map<String, dynamic> note, {
+    required Color titleColor,
+    required Color subColor,
+    required Color rowColor,
+  }) {
+    final id = note['id'];
+    final page = (note['page_index'] as int?) ?? 0;
+    final anchor = (note['anchor_text'] as String?) ?? '';
+    final text = (note['note_text'] as String?) ?? '';
+    final isEditing = _editingId == id;
+    final shortAnchor = anchor.length > 24
+        ? '${anchor.substring(0, 24)}…'
+        : anchor;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => isEditing ? _cancelEdit() : _onNoteTapped(note),
+        onLongPress: () => _startEdit(note),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: rowColor,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isEditing ? Colors.pinkAccent : Colors.transparent,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    'p.${page + 1}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.pink.shade400,
+                    ),
+                  ),
+                  if (page != widget.pageIndex) ...[
+                    const SizedBox(width: 4),
+                    Icon(Icons.north_east, size: 12, color: subColor),
+                  ],
+                  const Spacer(),
+                  IconButton(
+                    iconSize: 16,
+                    icon: Icon(Icons.delete_outline, size: 16, color: subColor),
+                    onPressed: () => _delete(note),
+                    tooltip: '削除',
+                  ),
+                ],
+              ),
+              if (shortAnchor.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Text(
+                    '「$shortAnchor」',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontStyle: FontStyle.italic,
+                      color: subColor,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              Text(
+                text,
+                style: TextStyle(fontSize: 13, color: titleColor),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
