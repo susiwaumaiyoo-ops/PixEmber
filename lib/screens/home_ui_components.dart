@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'home_screen_state.dart';
 import '../services/pixiv_api_service.dart';
 import '../widgets/pixiv_image.dart';
@@ -526,137 +528,176 @@ class HomeUIComponents {
   // =========================================================================
   // 百科事典カード
   // =========================================================================
+  /// B2: 百科事典カードの上にある検索バー＋ソースチップの固定高さ（≒56+44）。
+  static const double _kEncyclopediaTopReserve = 100.0;
+
+  /// 百科事典カードの自然高さの最大値（要約3行＋リンク行の全表示時）。
+  static const double _kEncyclopediaCardMaxHeight = 180.0;
+
   Widget buildEncyclopediaCard(BuildContext context) {
     if (state.searchItem == null) return const SizedBox.shrink();
     final item = state.searchItem!;
     final String? iconUrl = item.iconUrl;
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    width: 50,
-                    height: 50,
-                    color: Colors.black,
-                    child: (iconUrl != null && iconUrl.isNotEmpty)
-                        ? PixivImage(
-                            url: iconUrl,
-                            fit: BoxFit.cover,
-                            isThumbnail: true,
-                            cacheWidth: 150,
-                            width: 50,
-                            height: 50,
-                            errorWidget: const Icon(
-                              Icons.bookmark_border,
-                              color: Colors.pinkAccent,
-                            ),
-                          )
-                        : const Icon(
+    final cardContent = Padding(
+      padding: const EdgeInsets.all(12.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: 50,
+                  height: 50,
+                  color: Colors.black,
+                  child: (iconUrl != null && iconUrl.isNotEmpty)
+                      ? PixivImage(
+                          url: iconUrl,
+                          fit: BoxFit.cover,
+                          isThumbnail: true,
+                          cacheWidth: 150,
+                          width: 50,
+                          height: 50,
+                          errorWidget: const Icon(
                             Icons.bookmark_border,
                             color: Colors.pinkAccent,
                           ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '#${item.name}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                        )
+                      : const Icon(
+                          Icons.bookmark_border,
                           color: Colors.pinkAccent,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '#${item.name}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: Colors.pinkAccent,
                       ),
-                      const SizedBox(height: 2),
-                      if (item.wordCount != null)
-                        Text(
-                          '作品数: ${item.wordCount}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
-                          ),
-                        )
-                      else
-                        const Text(
-                          '作品数: 取得できません',
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    if (item.wordCount != null)
+                      Text(
+                        '作品数: ${item.wordCount}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
                         ),
-                    ],
-                  ),
+                      )
+                    else
+                      const Text(
+                        '作品数: 取得できません',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                  ],
                 ),
-              ],
-            ),
-            if (item.summary.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text(
-                item.summary,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.white70,
-                  height: 1.4,
-                ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
               ),
             ],
-            if (item.dicUrl.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: InkWell(
-                  onTap: () async {
-                    final parsed = Uri.tryParse(item.dicUrl);
-                    final uri =
-                        (parsed != null &&
-                            (parsed.scheme == 'http' ||
-                                parsed.scheme == 'https'))
-                        ? parsed
-                        : Uri(
-                            scheme: 'https',
-                            host: 'dic.pixiv.net',
-                            pathSegments: ['a', item.name.trim()],
-                          );
-                    final launched = await launchUrl(
-                      uri,
-                      mode: LaunchMode.externalApplication,
+          ),
+          if (item.summary.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              item.summary,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Colors.white70,
+                height: 1.4,
+              ),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          if (item.dicUrl.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: InkWell(
+                onTap: () async {
+                  final parsed = Uri.tryParse(item.dicUrl);
+                  final uri =
+                      (parsed != null &&
+                          (parsed.scheme == 'http' || parsed.scheme == 'https'))
+                      ? parsed
+                      : Uri(
+                          scheme: 'https',
+                          host: 'dic.pixiv.net',
+                          pathSegments: ['a', item.name.trim()],
+                        );
+                  final launched = await launchUrl(
+                    uri,
+                    mode: LaunchMode.externalApplication,
+                  );
+                  if (!launched && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('百科事典を開けませんでした')),
                     );
-                    if (!launched && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('百科事典を開けませんでした')),
-                      );
-                    }
-                  },
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                    child: Text(
-                      'ピクシブ百科事典で見る ↗',
-                      style: TextStyle(
-                        color: Colors.blueAccent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
+                  }
+                },
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  child: Text(
+                    'ピクシブ百科事典で見る ↗',
+                    style: TextStyle(
+                      color: Colors.blueAccent,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
                     ),
                   ),
                 ),
               ),
-            ],
+            ),
           ],
-        ),
+        ],
+      ),
+    );
+
+    // B2: 百科事典カードは「検索実行の瞬間」に出現する。キーボード表示中は
+    // 本体(body)の高さが縮小し、カードの自然高さ(最大≒179px)が
+    // body高さ − 検索バー(≒56) − ソースチップ(44) を超えると、
+    // 画面下端で RenderFlex BOTTOM OVERFLOWED が発生した。
+    // カードの自然高さは有界な制約しか受け取れない Column 内の
+    // 非flex子で推定できないため、MediaQuery の viewInsets を使って
+    // 使用可能高さを算出し、収まらない場合は高さを上限切って
+    // カード内を縦スクロール可能にする。
+    final media = MediaQuery.of(context);
+    // body 高さ = 画面高さ − AppBar − NavigationBar − キーボード(viewInsets.bottom)
+    final available =
+        media.size.height -
+        media.padding.top -
+        56.0 // AppBar 標準高さ
+        -
+        80.0 // NavigationBar 標準高さ
+        -
+        media.viewInsets.bottom -
+        _kEncyclopediaTopReserve;
+    if (available >= _kEncyclopediaCardMaxHeight) {
+      // 通常: 従来通りのレイアウト。
+      return Card(
+        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 4,
+        child: cardContent,
+      );
+    }
+    return SizedBox(
+      height: math.max(0.0, available),
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 4,
+        clipBehavior: Clip.antiAlias,
+        child: SingleChildScrollView(child: cardContent),
       ),
     );
   }
