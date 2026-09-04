@@ -10,18 +10,37 @@ import 'screens/novel_detail_screen.dart';
 import 'screens/novel_series_episodes_screen.dart';
 import 'novel_model.dart';
 import 'services/download_service.dart';
+import 'services/model_download_coordinator.dart';
 import 'services/pixiv_api_service.dart';
 import 'services/usage_tracking_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 // ワークマネージャー（バックグラウンドダウンロード）のコールバックディスパッチャー。
 // Android のみ登録される（他OSはフォアグラウンド縮退）。
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
-    // アプリ終了後でも DB からキューを再開
+    if (task == ModelDownloadCoordinator.taskName) {
+      // B6: AI モデル DL バックグラウンドタスク（入力は sendable な modelId のみ）。
+      return ModelDownloadCoordinator.runModelDownloadOnce(inputData);
+    }
+    // 既存: イラスト/小説のバックグラウンド DL キュー
     await DownloadService().runBackgroundOnce(inputData);
     return true;
   });
+}
+
+/// Android 13(API 33) 以上で通知権限を要求する（拒否されてもクラッシュしない）。
+Future<void> _requestPostNotificationsIfNeeded() async {
+  if (!Platform.isAndroid) return;
+  try {
+    final status = await Permission.notification.status;
+    if (status.isDenied || status.isLimited) {
+      await Permission.notification.request();
+    }
+  } catch (e) {
+    debugPrint('[main] POST_NOTIFICATIONS 権限要求失敗(無視): $e');
+  }
 }
 
 // ディープリンク遷移用のグローバルナビゲーターキー
@@ -32,6 +51,12 @@ Future<void> main() async {
   // Android のみ workmanager を初期化（バックグラウンド継続ダウンロード）
   if (Platform.isAndroid) {
     await Workmanager().initialize(callbackDispatcher);
+    // B6: アプリ起動中のモデル DL 進捗を上位 isolate で受信（SharedPreferences へ反映）。
+    await Workmanager().setProgressListener((uniqueName, progress) async {
+      await ModelDownloadCoordinator().handleProgressUpdate(progress);
+    });
+    // 通知権限（Android 13+）を要求（拒否されても継続）。
+    await _requestPostNotificationsIfNeeded();
     // バックグラウンドタスクを1回登録（既存なら維持）
     await DownloadService().registerBackgroundTaskIfAndroid();
   }

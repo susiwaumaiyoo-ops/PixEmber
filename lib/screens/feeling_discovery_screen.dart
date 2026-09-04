@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+﻿import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import '../widgets/novel_list_card.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,9 +15,13 @@ import '../services/hybrid_search_service.dart';
 import '../config/feature_flags.dart';
 import '../services/feeling_search_query.dart';
 import '../services/ruri_model_manager.dart';
+import '../services/model_download_coordinator.dart';
 import '../services/pixiv_api_service.dart';
 import '../services/rerank_model_manager.dart';
 import '../utils/score_format.dart';
+
+/// B6: ダウンロードタスクの戻り値をunused warning回避。
+void ignoreTask(dynamic _) {}
 
 /// タブレット判定閾値: <700=1列, 700以上=2列
 /// （home_ui_components.dart の _kTabletBreakpoint は private かつ循環参照を
@@ -79,7 +84,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
   int _dlTotal = 0;
   String _dlLabel = '';
   String? _dlError;
-  ValueNotifier<bool>? _dlCancel;
+  Timer? _dlPollTimer;
   String? _error;
   String _lastQuery = '';
   List<Map<String, dynamic>> _results = [];
@@ -113,10 +118,77 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
     _scrollController.addListener(_onScroll);
     _loadSearchHistory();
 
+    // B6: 画面復帰時に永続された DL 状態を読み込む（バックグラウンド完了の検知用）。
+    _restoreDownloadState();
     // ONNXモデルをバックグラウンドで事前初期化（ウォームアップ）。
     // 未ダウンロードなら初期化せず、DL 導線を表示する。
     // ※ 診断は行わない（メンテ画面側の責務）。
     _initializeModel();
+  }
+
+  /// B6: 永続されたモデル DL 状態を画面に反映（バックグラウンド完了/進行中を検知）。
+  Future<void> _restoreDownloadState() async {
+    final activeId = await RuriModelManager().getActiveModelId();
+    final snap = await ModelDownloadCoordinator().loadPersisted(activeId);
+    if (!mounted || snap == null) return;
+    if (snap.state == ModelDownloadState.completed) {
+      setState(() {
+        _isModelDownloaded = true;
+        _dlReceived = snap.totalBytes;
+        _dlTotal = snap.totalBytes;
+        _dlLabel = snap.label;
+        _isDownloading = false;
+      });
+    } else if (snap.state == ModelDownloadState.downloading ||
+        snap.state == ModelDownloadState.queued) {
+      // 進行中ならポーリング再開
+      setState(() {
+        _isDownloading = true;
+        _dlReceived = snap.receivedBytes;
+        _dlTotal = snap.totalBytes;
+        _dlLabel = snap.label;
+      });
+      _startPoll(activeId);
+    } else if (snap.state == ModelDownloadState.failed) {
+      setState(() {
+        _isDownloading = false;
+        _dlError = snap.error;
+      });
+    }
+  }
+
+  /// ポーリング開始（復帰時・初期開始時共用）。
+  void _startPoll(String activeId) {
+    _dlPollTimer?.cancel();
+    _dlPollTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (!mounted) return;
+      final snap = ModelDownloadCoordinator().snapshotFor(activeId);
+      if (snap == null) return;
+      setState(() {
+        _dlReceived = snap.receivedBytes;
+        _dlTotal = snap.totalBytes;
+        _dlLabel = snap.label;
+        if (snap.state == ModelDownloadState.completed) {
+          _isDownloading = false;
+          _isModelDownloaded = true;
+        } else if (snap.state == ModelDownloadState.failed) {
+          _isDownloading = false;
+          _dlError = snap.error ?? '不明なエラー';
+        } else if (snap.state == ModelDownloadState.cancelled) {
+          _isDownloading = false;
+          _dlError = null;
+        }
+      });
+      if (snap.state == ModelDownloadState.completed ||
+          snap.state == ModelDownloadState.failed ||
+          snap.state == ModelDownloadState.cancelled) {
+        _dlPollTimer?.cancel();
+        // 完了時は初期化へ進める（初回ダウンロード後の自動 warmup）。
+        if (snap.state == ModelDownloadState.completed) {
+          _initializeModel();
+        }
+      }
+    });
   }
 
   Future<void> _initializeModel() async {
@@ -155,7 +227,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
 
   @override
   void dispose() {
-    _dlCancel?.dispose();
+    _dlPollTimer?.cancel();
     _queryController.dispose();
     _scrollController.dispose();
     _mustController.dispose();
@@ -170,11 +242,10 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
   }
 
   /// モデルをダウンロードし、完了後に初期化まで進める。
+  /// Coordinator 経由：画面 dispose 後もバックグラウンドで DL が継続する。
   Future<void> _startDownload() async {
     if (_isDownloading) return;
-    final cancel = ValueNotifier<bool>(false);
-    _dlCancel?.dispose();
-    _dlCancel = cancel;
+    final activeId = await RuriModelManager().getActiveModelId();
     setState(() {
       _isDownloading = true;
       _dlError = null;
@@ -182,35 +253,16 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
       _dlTotal = 0;
       _dlLabel = '';
     });
-    try {
-      await RuriModelManager().download(
-        cancel: cancel,
-        onProgress: (received, total, label) {
-          if (!mounted) return;
-          setState(() {
-            _dlReceived = received;
-            _dlTotal = total;
-            _dlLabel = label;
-          });
-        },
-      );
-      if (!mounted) return;
-      setState(() {
-        _isDownloading = false;
-        _isModelDownloaded = true;
-      });
-      await _initializeModel();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isDownloading = false;
-        _dlError = e.toString();
-      });
-    }
+    // Coordinator へ DL 開始（Android は FGS、非 Android はフォアグラウンド）。
+    await ModelDownloadCoordinator().start(activeId);
+    // ポーリング開始（_startPoll で統一）。
+    _startPoll(activeId);
   }
 
   void _cancelDownload() {
-    _dlCancel?.value = true;
+    RuriModelManager().getActiveModelId().then((id) {
+      ModelDownloadCoordinator().cancel(id);
+    });
   }
 
   String _formatBytes(int bytes) {

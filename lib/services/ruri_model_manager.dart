@@ -413,7 +413,19 @@ class RuriModelManager {
     }
 
     final part = File('${target.path}.part');
-    if (await part.exists()) await part.delete();
+    // 既存の .part があれば HTTP Range で再開（サーバーが 206 を返さなければ最初から）。
+    int resumeOffset = 0;
+    if (await part.exists()) {
+      final existing = await part.length();
+      if (existing > 0 && expectedSize > 0 && existing < expectedSize) {
+        resumeOffset = existing;
+      } else if (existing >= expectedSize) {
+        // 部分的に完成しているように見えるが未検証のため破棄
+        await part.delete();
+      } else {
+        await part.delete();
+      }
+    }
 
     const maxRetries = 3;
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
@@ -421,21 +433,33 @@ class RuriModelManager {
         final client = http.Client();
         try {
           final req = http.Request('GET', Uri.parse(url));
+          if (resumeOffset > 0) {
+            req.headers['Range'] = 'bytes=$resumeOffset-';
+          }
           final resp = await client.send(req);
-          if (resp.statusCode != 200) {
+          // 206 = 再開成功。200 = サーバーが範囲を無視して全体を返すため最初からやり直し。
+          if (resp.statusCode == 200) {
+            if (resumeOffset > 0) {
+              await part.delete();
+              resumeOffset = 0;
+            }
+          } else if (resp.statusCode != 206) {
             throw StateError('HTTP ${resp.statusCode} for $url');
           }
           // Content-Length 確認（サーバーが提供する場合のみ）
           if (resp.contentLength != null && expectedSize > 0) {
-            if (resp.contentLength != expectedSize) {
+            if (resp.contentLength != expectedSize - resumeOffset) {
               debugPrint(
-                '[warn] Content-Length(${resp.contentLength}) != expected($expectedSize) for $fileName',
+                '[warn] Content-Length(${resp.contentLength}) != expected($expectedSize - $resumeOffset) for $fileName',
               );
             }
           }
-          final total = resp.contentLength ?? expectedSize;
-          int received = 0;
-          final sink = part.openWrite();
+          final total = expectedSize > 0
+              ? expectedSize
+              : (resp.contentLength ?? 0) + resumeOffset;
+          int received = resumeOffset;
+          // 再開時は既存バイトを保持するため append モードで開く
+          final sink = part.openWrite(mode: FileMode.append);
           try {
             await for (final chunk in resp.stream) {
               if (cancel?.value == true) {
@@ -451,7 +475,7 @@ class RuriModelManager {
             await sink.close();
           }
 
-          // サイズ確認
+          // サイズ確認（.part 全体が expectedSize と一致するか）
           final actualSize = await part.length();
           if (expectedSize > 0 && actualSize != expectedSize) {
             throw StateError(
