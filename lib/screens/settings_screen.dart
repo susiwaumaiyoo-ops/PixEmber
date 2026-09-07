@@ -19,6 +19,7 @@ import 'backup_manager_screen.dart';
 import 'bookmark_list_screen.dart';
 import 'download_queue_screen.dart';
 import 'folder_list_screen.dart';
+import 'llm_model_library_screen.dart';
 import 'offline_bookshelf_screen.dart';
 import 'read_later_screen.dart';
 
@@ -294,6 +295,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: _llmSupported
                 ? _showLlmModelSheet
                 : _showLlmUnsupportedDialog,
+          ),
+          _tile(
+            icon: Icons.storage,
+            title: 'モデルライブラリ',
+            subtitle: '厳選モデル一覧・GGUFの管理（実験）',
+            onTap: () => _open(() => const LlmModelLibraryScreen()),
           ),
           _sectionHeader('ライセンス'),
           _licenseBlock(),
