@@ -26,6 +26,7 @@ import 'package:pixiv_viewer/novel_model.dart';
 import 'package:pixiv_viewer/screens/novel_detail_screen.dart';
 import 'package:pixiv_viewer/services/llm_summary_service.dart';
 import 'package:pixiv_viewer/services/local_llm_service.dart';
+import 'package:pixiv_viewer/widgets/llm_summary_sheet.dart';
 
 /// スクリプト済みのストリームを返す fake エンジン（ネイティブ非依存）。
 class _FakeEngine implements LlmInferenceEngine {
@@ -67,6 +68,33 @@ class _FakeEngine implements LlmInferenceEngine {
         ),
       ],
     );
+  }
+
+  @override
+  void dispose() {}
+}
+
+/// 呼び出しごとに異なるストリームを返す fake エンジン（再生成テスト用・M1）。
+class _MultiEngine implements LlmInferenceEngine {
+  _MultiEngine(this.responses);
+
+  final List<List<String>> responses;
+  int callCount = 0;
+
+  @override
+  Future<void> loadModel(String modelPath) async {}
+
+  @override
+  Stream<LlamaCompletionChunk> generate({
+    required List<LlamaChatMessage> messages,
+    required GenerationParams options,
+  }) async* {
+    final i = callCount < responses.length ? callCount : responses.length - 1;
+    callCount++;
+    for (final c in responses[i]) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+      yield _FakeEngine._chunk(c);
+    }
   }
 
   @override
@@ -186,80 +214,87 @@ void main() {
     });
   });
 
-  group('2000文字截断', () {
-    test('2000字未満: 変更なし', () {
-      final s = 'a' * 1999;
-      expect(LlmSummaryService.clampBody(s), s);
+  group('均衡本文抽出（M1）', () {
+    test('予算以内: 変更なし', () {
+      expect(LlmSummaryService.extractBalancedBody('本文'), '本文');
+      final s = 'a' * LlmSummaryService.maxBodyChars;
+      expect(LlmSummaryService.extractBalancedBody(s), s);
     });
 
-    test('ちょうど2000字: 変更なし', () {
-      final s = 'a' * 2000;
-      expect(LlmSummaryService.clampBody(s), s);
-      expect(LlmSummaryService.clampBody(s).length, 2000);
+    test('長い本文: 冒頭/中盤/終盤を予算内で抽出', () {
+      final body = 'A' * 1000 + 'M' * 5000 + 'Z' * 1000; // 7000文字
+      final out = LlmSummaryService.extractBalancedBody(body);
+      expect(out, startsWith('A' * 100), reason: '冒頭');
+      expect(out.contains('M' * 100), isTrue, reason: '中盤');
+      expect(out, endsWith('Z' * 100), reason: '終盤');
+      expect(
+        out.length,
+        lessThanOrEqualTo(LlmSummaryService.maxBodyChars + 30),
+      );
+      expect(out.contains('A${'M' * 100}'), isFalse, reason: '冒頭が中盤へ流れ込まない');
     });
 
-    test('2000字超過: ちょうど2000字に截断', () {
-      final s = 'a' * 2500;
-      final out = LlmSummaryService.clampBody(s);
-      expect(out.length, 2000);
-      expect(out, 'a' * 2000);
-    });
-
-    test('前後の空白は除去される', () {
+    test('clampBody は引き続き動作（後方互換）', () {
       expect(LlmSummaryService.clampBody('  本文  '), '本文');
-    });
-
-    test('空文字列: 空', () {
+      expect(
+        LlmSummaryService.clampBody('a' * 3500).length,
+        LlmSummaryService.maxBodyChars,
+      );
       expect(LlmSummaryService.clampBody(''), '');
-      expect(LlmSummaryService.clampBody('   '), '');
-    });
-
-    test('日本語文字も文字数で截断', () {
-      final s = 'あ' * 2100;
-      expect(LlmSummaryService.clampBody(s).length, 2000);
     });
   });
 
-  group('プロンプト構築', () {
-    test('タイトル・説明・タグを含む', () {
+  group('プロンプト構築（M1: 作者説明なし）', () {
+    test('タイトル・タグ・本文を含み、作者説明は含めない', () {
+      const authorDesc = '作者が書いた独自のあらすじ。プロンプトには出てこない。';
       final messages = LlmSummaryService.buildPrompt(
         title: 'テスト小説',
-        description: 'あらすじです',
         tags: ['魔法', '青春'],
         body: '本文の冒頭。',
       );
       expect(messages, hasLength(2));
       final user = messages[1].content;
       expect(user, contains('テスト小説'));
-      expect(user, contains('あらすじです'));
       expect(user, contains('魔法'));
       expect(user, contains('青春'));
       expect(user, contains('本文の冒頭。'));
+      expect(user, isNot(contains(authorDesc)), reason: 'M1: 作者説明を含まない');
+      expect(user, isNot(contains('あらすじ（作者書き）')));
     });
 
-    test('system が先頭メッセージ', () {
-      final messages = LlmSummaryService.buildPrompt(
-        title: 'T',
-        description: 'D',
-        body: 'B',
-      );
+    test('system が先頭メッセージ・作者説明に言及しない', () {
+      final messages = LlmSummaryService.buildPrompt(title: 'T', body: 'B');
       expect(messages.first.role, LlamaChatRole.system);
       expect(messages.last.role, LlamaChatRole.user);
       // 日本語の形式指示が含まれる
       expect(messages.first.content, contains('あらすじ'));
       expect(messages.first.content, contains('紹介'));
       expect(messages.first.content, contains('タグ'));
+      expect(messages.first.content, isNot(contains('あらすじ（作者書き）')));
     });
 
-    test('長い本文は2000字で截断される', () {
-      final messages = LlmSummaryService.buildPrompt(
-        title: 'T',
-        description: 'D',
-        body: 'x' * 2500,
-      );
+    test('長い本文は均衡抽出で予算内に収まる', () {
+      final body = 'A' * 1000 + 'M' * 5000 + 'Z' * 1000;
+      final messages = LlmSummaryService.buildPrompt(title: 'T', body: body);
       final user = messages[1].content;
-      expect(user.contains('x' * 2000), isTrue);
-      expect(user.contains('x' * 2001), isFalse);
+      expect(user.contains('A' * 100), isTrue);
+      expect(user.contains('M' * 100), isTrue);
+      expect(user.contains('Z' * 100), isTrue);
+      expect(user.contains('A${'M' * 100}'), isFalse);
+    });
+
+    test('emphasizeRephrase で言い換え指示が追加される', () {
+      final normal = LlmSummaryService.buildPrompt(
+        title: 'T',
+        body: 'B',
+      ).last.content;
+      final emph = LlmSummaryService.buildPrompt(
+        title: 'T',
+        body: 'B',
+        emphasizeRephrase: true,
+      ).last.content;
+      expect(emph, contains('自分の言葉で要約し直してください'));
+      expect(normal, isNot(contains('自分の言葉で要約し直してください')));
     });
   });
 
@@ -390,6 +425,215 @@ void main() {
           ),
         ),
       );
+    });
+  });
+
+  group('M1: オウム返し防止', () {
+    late Directory tmp;
+
+    setUp(() async {
+      tmp = await Directory.systemTemp.createTemp('llm_m1_');
+    });
+
+    tearDown(() {
+      if (tmp.existsSync()) tmp.deleteSync(recursive: true);
+    });
+
+    String writeModel() {
+      final f = File('${tmp.path}/model.gguf')..writeAsStringSync('gguf');
+      return f.path;
+    }
+
+    const desc =
+        'この物語は主人公が剣と魔法の世界に転生し、王軍に追われながら、'
+        '神秘の少女と出会い、冒険の旅に出る。'
+        'テーマは友情の成長と人間関係の絆。'
+        'ドキドキ感のある作品。';
+
+    const unrelatedText =
+        '海沿いの静かな村。'
+        '灯台守と猫の日常が、あたたかい筆致で描かれる。'
+        '季節の移ろいと心のおだやかな交わりを描く、ゆっくりとした作品。';
+
+    String parrotOutput() =>
+        '【あらすじ】\n'
+        'この物語は主人公が剣と魔法の世界に転生し、王軍に追われながら、神秘の少女と出会う。\n'
+        'テーマは友情の成長と人間関係の絆。\n'
+        'ドキドキ感のある作品。\n'
+        '【紹介】\n'
+        'この物語は主人公が剣と魔法の世界に転生し、王軍に追われながら、神秘の少女と出会い、冒険の旅に出る。\n'
+        '【タグ】\n転生, ファンタジー, 冒険, 少女, 友情';
+
+    test('空本文: フォールバック禁止メッセージを投げる', () async {
+      final service = LocalLlmService(
+        engineFactory: (p) => _FakeEngine([goodOutput]),
+      );
+      await service.loadModel(writeModel());
+      await expectLater(
+        LlmSummaryService.generate(
+          service: service,
+          title: 'T',
+          body: '   ',
+          description: desc,
+        ),
+        throwsA(
+          isA<LlmSummaryException>().having(
+            (e) => e.message,
+            'message',
+            '小説本文を取得できないため、AI要約を生成できません。',
+          ),
+        ),
+      );
+    });
+
+    test('本文タグの除去（挿絵・ルビ・制御タグ）', () {
+      const raw =
+          'かつて、[[rb:風 > かぜ]]が吹いた。\n\n'
+          '[pixivimage:12345]\n\n'
+          '物語はここから始まる。\n[uploadedimage:2]\n[newpage]';
+      final out = LlmSummaryService.normalizeNovelBody(raw);
+      expect(out, contains('風'));
+      expect(out, isNot(contains('かぜ')));
+      expect(out, isNot(contains('pixivimage')));
+      expect(out, isNot(contains('uploadedimage')));
+      expect(out, isNot(contains('newpage')));
+      expect(out, contains('物語はここから始まる。'));
+    });
+
+    test('コピー検出: 作者説明の丸写しは true / 無関係は false', () {
+      expect(
+        LlmSummaryService.isExcessiveCopy(
+          output: parrotOutput(),
+          body: 'まったく別の無関係な本文。説明とは共通点がない文。',
+          description: desc,
+        ),
+        isTrue,
+      );
+      expect(
+        LlmSummaryService.isExcessiveCopy(
+          output: unrelatedText,
+          body: 'まったく別の無関係な本文。説明とは共通点がない文。',
+          description: desc,
+        ),
+        isFalse,
+      );
+    });
+
+    test('n-gram重複率: 自己は高い / 無関係は低い / 短文は0', () {
+      expect(
+        LlmSummaryService.calculateNgramOverlap(output: desc, source: desc),
+        greaterThan(0.9),
+      );
+      expect(
+        LlmSummaryService.calculateNgramOverlap(
+          output: unrelatedText,
+          source: desc,
+        ),
+        lessThan(0.3),
+      );
+      expect(
+        LlmSummaryService.calculateNgramOverlap(output: 'short', source: desc),
+        0.0,
+      );
+    });
+
+    test('キャッシュなし: 本文取得を呼び出し + キャッシュ保存', () async {
+      var fetched = 0;
+      var saved = 0;
+      final text = await LlmSummaryService.resolveNovelBody(
+        workId: 7,
+        getCached: (_) async => null,
+        fetchText: (id) async {
+          fetched++;
+          expect(id, 7);
+          return NovelTextData(
+            id: 7,
+            novelText: '取得した本文。',
+            novelPages: const [],
+          );
+        },
+        saveToCache: (_) async => saved++,
+      );
+      expect(text, '取得した本文。');
+      expect(fetched, 1);
+      expect(saved, 1);
+    });
+
+    test('キャッシュあり: 取得を呼ばない', () async {
+      var fetched = 0;
+      final text = await LlmSummaryService.resolveNovelBody(
+        workId: 7,
+        getCached: (_) async => {'text': 'キャッシュ済み本文。'},
+        fetchText: (_) async {
+          fetched++;
+          throw StateError('呼ばれるべきでない');
+        },
+      );
+      expect(text, 'キャッシュ済み本文。');
+      expect(fetched, 0);
+    });
+
+    test('取得失敗: null（作者説明へのフォールバックなし）', () async {
+      final text = await LlmSummaryService.resolveNovelBody(
+        workId: 7,
+        getCached: (_) async => throw StateError('db down'),
+        fetchText: (_) async => throw Exception('network down'),
+      );
+      expect(text, isNull);
+    });
+
+    test('過度な重複: 1回だけ再生成（上限1回）-> 2回目は警告なし', () async {
+      final engine = _MultiEngine([
+        [parrotOutput()],
+        [goodOutput],
+      ]);
+      final service = LocalLlmService(engineFactory: (p) => engine);
+      await service.loadModel(writeModel());
+      final result = await LlmSummaryService.generate(
+        service: service,
+        title: 'T',
+        body: '本文は作者の紹介とは無関係です。' * 5,
+        description: desc,
+      );
+      expect(engine.callCount, 2, reason: '過度な重複で1回だけ再生成');
+      expect(result.copyWarning, isFalse);
+      expect(result.bodySourceNote, contains('生成元: 小説本文'));
+    });
+
+    test('2回目も過度: copyWarning付きで表示（無限再生成しない）', () async {
+      final engine = _MultiEngine([
+        [parrotOutput()],
+        [parrotOutput()],
+      ]);
+      final service = LocalLlmService(engineFactory: (p) => engine);
+      await service.loadModel(writeModel());
+      final result = await LlmSummaryService.generate(
+        service: service,
+        title: 'T',
+        body: '本文は作者の紹介とは無関係です。' * 5,
+        description: desc,
+      );
+      expect(engine.callCount, 2, reason: '無限再生成禁止');
+      expect(result.copyWarning, isTrue);
+    });
+
+    testWidgets('本文取得失敗: 作者説明を使わずエラー表示', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LlmSummarySheet(
+              modelPath: 'unused.gguf',
+              title: 'T',
+              description: '作者が書いたあらすじ。',
+              resolveBody: () async => null,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.text('小説本文を取得できないため、AI要約を生成できません。'), findsOneWidget);
+      expect(find.text('作者が書いたあらすじ。'), findsNothing);
     });
   });
 

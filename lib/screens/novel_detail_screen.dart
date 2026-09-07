@@ -9,6 +9,7 @@ import 'read_later_screen.dart';
 import '../services/database_service.dart';
 import '../services/embedding_service.dart';
 import '../services/emotion_curve_service.dart';
+import '../services/llm_summary_service.dart';
 import '../services/local_llm_service.dart';
 import '../services/novel_document_text.dart';
 import '../services/pixiv_api_service.dart';
@@ -87,18 +88,14 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     }
   }
 
-  /// AI要約ボトムシートを開く（本文はキャッシュ済みのみ・未キャッシュは空でOK）。
+  /// AI要約ボトムシートを開く。
+  ///
+  /// M1: 本文は [_resolveLlmBody]（キャッシュ → 取得 + 保存）で解決。
+  /// 取得失敗時はシート内で「小説本文を取得できないため、AI要約を生成できません。」
+  /// を表示する（作者説明へのフォールバックはしない）。
   Future<void> _showLlmSummarySheet() async {
     final modelPath = await LlmModelPaths.resolveModelPath();
     if (!mounted || modelPath == null) return;
-    String body = '';
-    try {
-      final row = await DatabaseService().getNovelText(widget.novel.id);
-      body = (row?['text'] as String?) ?? '';
-    } catch (_) {
-      // 本文キャッシュなし・DBエラーは空本文で続行（タイトル/説明/タグだけでも要約可能）
-    }
-    if (!mounted) return;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -108,7 +105,26 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
         title: widget.novel.title,
         description: widget.novel.caption,
         tags: widget.novel.tags,
-        body: body,
+        resolveBody: _resolveLlmBody,
+      ),
+    );
+  }
+
+  /// 小説本文を解決する（M1: キャッシュ → 取得 + 保存 → null）。
+  ///
+  /// 取得失敗・空本文は null を返す（シート側でエラー表示）。
+  Future<String?> _resolveLlmBody() {
+    final novel = widget.novel;
+    return LlmSummaryService.resolveNovelBody(
+      workId: novel.id,
+      getCached: DatabaseService().getNovelText,
+      fetchText: PixivApiService().getNovelText,
+      saveToCache: (data) => DatabaseService().saveNovelText(
+        workId: data.id,
+        title: novel.title,
+        authorName: novel.author.name,
+        text: data.novelText,
+        pagesJson: jsonEncode(data.novelPages),
       ),
     );
   }

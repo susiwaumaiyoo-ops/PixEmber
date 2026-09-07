@@ -8,6 +8,10 @@ import '../services/llm_summary_service.dart';
 /// 開いた時点で生成を開始する。ストリーミング中のテキストをリアルタイム表示し、
 /// 完了後に3セクション（あらすじ / 紹介 / タグ候補）として整形表示する。
 /// キャンセル・リトライに対応。シート閉じ（dispose）時にサービスも破棄する。
+///
+/// M1: 生成元は小説本文のみ（[resolveBody] で解決）。
+/// 本文取得失敗時は作者説明へのフォールバックなしでエラー表示する。
+/// 作者説明は「作者による紹介」として別途表示し、プロンプトには含めない。
 class LlmSummarySheet extends StatefulWidget {
   const LlmSummarySheet({
     super.key,
@@ -15,16 +19,23 @@ class LlmSummarySheet extends StatefulWidget {
     required this.title,
     required this.description,
     this.tags = const [],
-    required this.body,
+    required this.resolveBody,
   });
 
   /// 使用する GGUF モデルの絶対パス。
   final String modelPath;
 
   final String title;
+
+  /// 作者の説明（表示・コピー検出専用 — AI生成プロンプトには含めない）。
   final String description;
   final List<String> tags;
-  final String body;
+
+  /// 小説本文を解決する（キャッシュ → 取得 + 保存）。
+  ///
+  /// null / 空を返すと「小説本文を取得できないため、AI要約を生成できません。」
+  /// を表示する（作者説明へのフォールバックはしない）。
+  final Future<String?> Function() resolveBody;
 
   @override
   State<LlmSummarySheet> createState() => _LlmSummarySheetState();
@@ -59,6 +70,17 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
       _noteCancelled = false;
     });
     try {
+      // M1: まず小説本文を解決（キャッシュ → 取得 + 保存）。
+      // 取得失敗時は作者説明へのフォールバックなしでエラーにする。
+      final body = (await widget.resolveBody()) ?? '';
+      if (!mounted) return;
+      if (body.trim().isEmpty) {
+        setState(() {
+          _phase = _SheetPhase.error;
+          _errorMessage = '小説本文を取得できないため、AI要約を生成できません。';
+        });
+        return;
+      }
       final ok = await _service.loadModel(widget.modelPath);
       if (!mounted) return;
       if (!ok) {
@@ -71,9 +93,9 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
       final result = await LlmSummaryService.generate(
         service: _service,
         title: widget.title,
-        description: widget.description,
+        body: body,
         tags: widget.tags,
-        body: widget.body,
+        description: widget.description, // コピー検出のみ（プロンプトには含めない）
         onToken: (piece) {
           if (!mounted) return;
           setState(() {
@@ -292,6 +314,53 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (result.bodySourceNote != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              children: [
+                const Icon(Icons.article, size: 14, color: Colors.white54),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    result.bodySourceNote!,
+                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (result.copyWarning)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
+            ),
+            child: const Row(
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 16,
+                  color: Colors.orange,
+                ),
+                SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '作者紹介文・本文との重複の多い出力です（参考までに表示）。',
+                    style: TextStyle(
+                      color: Colors.orange,
+                      fontSize: 11,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         _SectionLabel(label: 'あらすじ'),
         Text(
           result.synopsis,
@@ -341,6 +410,19 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
               ),
           ],
         ),
+        if (widget.description.trim().isNotEmpty) ...[
+          const SizedBox(height: 14),
+          _SectionLabel(label: '作者による紹介（AI生成に使用せず）'),
+          const SizedBox(height: 6),
+          Text(
+            widget.description.trim(),
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              height: 1.5,
+            ),
+          ),
+        ],
         const SizedBox(height: 14),
         Text(
           '※ 実験機能です。内容の正確性は保証されません。',
