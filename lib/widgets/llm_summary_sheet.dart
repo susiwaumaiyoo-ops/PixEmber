@@ -68,6 +68,18 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
   bool _noteCancelled = false;
   bool _busy = false;
 
+  /// B: 本文解決の所要時間（ミリ秒）。「本文を処理中」表示とメタ計測用。
+  int? _bodyMs;
+
+  /// B: キャッシュヒットの有無（メタ計測用）。
+  bool _cacheHit = false;
+
+  /// B: 自動再生成（コピー検知リトライ）の回数。
+  int _regenerations = 0;
+
+  /// B: loading 中に表示する進行ステージ（本文処理 / モデル準備）。
+  String _stageText = 'モデルを準備中…（初回は数秒〜数十秒かかることがあります）';
+
   /// 現在選択中のモデルパス（M5）。「別モデルで再生成」で更新される。
   String _activeModelPath = '';
 
@@ -87,7 +99,13 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
       _result = null;
       _errorMessage = null;
       _noteCancelled = false;
+      _bodyMs = null;
+      _cacheHit = false;
+      _regenerations = 0;
+      _stageText = '本文を処理中…';
     });
+    // B: 本文解決の計測開始。
+    final bodyWatch = Stopwatch()..start();
     // 切替のたびに新しいサービスを作り、旧エンジンを解放する
     // （同時にロードするモデルは常に1つ・M5）。
     final svc =
@@ -100,6 +118,11 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
       // 取得失敗時は作者説明へのフォールバックなしでエラーにする。
       final body = (await widget.resolveBody()) ?? '';
       if (!mounted) return;
+      bodyWatch.stop();
+      setState(() {
+        _bodyMs = bodyWatch.elapsedMilliseconds;
+        _stageText = 'モデルを準備中…（初回は数秒〜数十秒かかることがあります）';
+      });
       if (body.trim().isEmpty) {
         setState(() {
           _phase = _SheetPhase.error;
@@ -131,6 +154,7 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
         );
         if (cached != null) {
           if (!mounted) return;
+          _cacheHit = true;
           setState(() {
             _phase = _SheetPhase.done;
             _result = cached;
@@ -145,6 +169,7 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
         tags: widget.tags,
         description: widget.description, // コピー検出のみ（プロンプトには含めない）
         modelLabel: _activeModelLabel,
+        onRegeneration: () => _regenerations++,
         onToken: (piece) {
           if (!mounted) return;
           setState(() {
@@ -391,10 +416,17 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
               child: CircularProgressIndicator(color: Colors.pinkAccent),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'モデルを準備中…（初回は数秒〜数十秒かかることがあります）',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
+            Text(
+              _stageText,
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
             ),
+            if (_bodyMs != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                '本文の処理（${(_bodyMs! / 1000).toStringAsFixed(1)} 秒）',
+                style: const TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+            ],
           ],
         );
       case _SheetPhase.generating:
@@ -601,11 +633,24 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
         ? null
         : (result.generationMs! / 1000).toStringAsFixed(1);
     final tps = result.tokensPerSecond;
+    final stats = _service?.lastGenerationStats;
+    final ttft = (stats?.timeToFirstTokenMs ?? result.timeToFirstTokenMs);
+    final loadMs = stats?.loadMs;
     final rows = <(String, String)>[
       ('モデル', label),
       if (when != null) ('生成日時', when),
       if (secs != null) ('処理時間', '$secs 秒'),
+      if (ttft != null) ('最初の出力まで', '${(ttft / 1000).toStringAsFixed(1)} 秒'),
+      if (loadMs != null)
+        (
+          'モデルロード',
+          loadMs == 0 ? '再利用（0 秒）' : '${(loadMs / 1000).toStringAsFixed(1)} 秒',
+        ),
+      if (result.inputTokens != null) ('入力トークン', '${result.inputTokens}'),
       if (tps != null) ('速度', '${tps.toStringAsFixed(1)} トークン/秒'),
+      if (stats?.backend != null) ('backend', stats!.backend!),
+      ('キャッシュ', _cacheHit ? 'ヒット' : 'なし'),
+      if (_regenerations > 0) ('自動再生成', '$_regenerations 回'),
     ];
     return Container(
       width: double.infinity,

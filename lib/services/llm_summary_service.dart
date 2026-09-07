@@ -38,6 +38,12 @@ class LlmSummaryResult {
   /// 生成完了日時（M5・ローカル時刻）。不明なら null。
   final DateTime? generatedAt;
 
+  /// 生成開始 → 最初の表示用 content までの実測ミリ秒（B）。不明なら null。
+  final int? timeToFirstTokenMs;
+
+  /// プロンプト入力のトークン数（B）。トークナイザで実測できた場合のみ設定。
+  final int? inputTokens;
+
   const LlmSummaryResult({
     required this.synopsis,
     required this.intro,
@@ -48,6 +54,8 @@ class LlmSummaryResult {
     this.generationMs,
     this.tokensPerSecond,
     this.generatedAt,
+    this.timeToFirstTokenMs,
+    this.inputTokens,
   });
 }
 
@@ -439,6 +447,7 @@ class LlmSummaryService {
     String? description,
     void Function(String piece)? onToken,
     String? modelLabel,
+    void Function()? onRegeneration,
   }) async {
     final normalized = normalizeNovelBody(body);
     if (normalized.isEmpty) {
@@ -451,6 +460,8 @@ class LlmSummaryService {
 
     LlmSummaryResult? result;
     var copyWarning = false;
+    // B: 最終 attempt のプロンプトを保持し、生成後にトークン数を実測する。
+    var lastMessages = const <LlamaChatMessage>[];
     for (var attempt = 0; attempt < 2; attempt++) {
       final messages = buildPrompt(
         title: title,
@@ -458,6 +469,7 @@ class LlmSummaryService {
         body: body,
         emphasizeRephrase: attempt == 1,
       );
+      lastMessages = messages;
       final raw = await service.generate(
         messages,
         onToken: onToken,
@@ -480,6 +492,7 @@ class LlmSummaryService {
         description: description,
       );
       if (attempt == 0 && excessive) {
+        onRegeneration?.call();
         continue; // 言い換え強化プロンプトで1回だけ再生成（上限1回）。
       }
       copyWarning = excessive;
@@ -487,6 +500,9 @@ class LlmSummaryService {
     }
     final r = result!;
     final stats = service.lastGenerationStats;
+    // B: 入力トークン数。モデルのトークナイザで実測できる場合のみ設定する
+    // （実測不可なら null のまま = 「個別取得不可」として扱う。推定値は報告しない）。
+    final inputTokens = await service.promptTokenCount(lastMessages);
     return LlmSummaryResult(
       synopsis: r.synopsis,
       intro: r.intro,
@@ -497,6 +513,8 @@ class LlmSummaryService {
       generationMs: stats?.elapsed.inMilliseconds,
       tokensPerSecond: stats?.tokensPerSecond,
       generatedAt: DateTime.now(),
+      timeToFirstTokenMs: stats?.timeToFirstTokenMs,
+      inputTokens: inputTokens,
     );
   }
 

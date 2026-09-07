@@ -34,11 +34,15 @@ enum LlmState {
   error,
 }
 
-/// 直近1回の生成メトリクス（M5）。
+/// 直近1回の生成メトリクス（M5 + B: 待ち時間内訳）。
 class LlmGenerationStats {
   const LlmGenerationStats({
     required this.generatedTokens,
     required this.elapsed,
+    this.timeToFirstTokenMs,
+    this.loadMs,
+    this.backend,
+    this.thinkingEnabled,
   });
 
   /// 生成したトークン数（非空チャンク数の近似）。
@@ -46,6 +50,18 @@ class LlmGenerationStats {
 
   /// 生成に要した実時間。
   final Duration elapsed;
+
+  /// 生成開始 → 最初の表示用 content までの実測ミリ秒（B）。不明なら null。
+  final int? timeToFirstTokenMs;
+
+  /// 直近のモデルロードに要した実測ミリ秒（B・再ロード skip 時は 0）。不明なら null。
+  final int? loadMs;
+
+  /// 実際に使用した backend ラベル（llama_cpp 等）。
+  final String? backend;
+
+  /// engine 呼び出しに渡した thinking 設定（false = thinking 無効を明示）。
+  final bool? thinkingEnabled;
 
   /// 1秒あたりの生成トークン数（計測不能なら 0.0）。
   double get tokensPerSecond {
@@ -85,6 +101,9 @@ class LlamaDartEngine implements LlmInferenceEngine {
   LlamaDartEngine({this._contextSize = 8192, this._gpuLayers = 0})
     : _engine = LlamaEngine(LlamaBackend());
 
+  /// 実際に使用した backend のラベル（メトリクス表示用）。
+  static const String backendLabel = 'llama_cpp';
+
   final int _contextSize;
   final int _gpuLayers;
   final LlamaEngine _engine;
@@ -115,7 +134,18 @@ class LlamaDartEngine implements LlmInferenceEngine {
     if (_disposed) {
       throw StateError('LlamaDartEngine is already disposed.');
     }
-    return _engine.create(messages, params: options);
+    // B: thinking を無効化して engine 呼び出しに明示的に届かせる
+    // （要約は 3 セクション形式出力のみを必要とし、推論チャネルは不要）。
+    return _engine.create(messages, params: options, enableThinking: false);
+  }
+
+  /// プロンプトのトークン数を実測する（B）。llamadart の [LlamaEngine.tokenize]
+  /// （ネイティブのトークナイザ）を利用する。未ロード時は例外を投げるため
+  /// 呼び出し側で握り潰す前提。
+  Future<int> promptTokenCount(List<LlamaChatMessage> messages) async {
+    final prompt = messages.map((m) => m.content).join('\n');
+    final tokens = await _engine.tokenize(prompt);
+    return tokens.length;
   }
 
   @override
@@ -199,6 +229,25 @@ class LocalLlmService {
   /// 直近の生成メトリクス（M5）。生成成功時に更新、generate 開始時にクリア。
   LlmGenerationStats? get lastGenerationStats => _lastGenerationStats;
 
+  /// 直近のモデルロード所要時間（ミリ秒・B）。同一モデル再利用時は 0。
+  int? _lastLoadMs;
+  int? get lastLoadMs => _lastLoadMs;
+
+  /// プロンプトのトークン数を実測する（B）。
+  ///
+  /// llamadart の tokenize API（ネイティブトークナイザ）が利用できる場合は
+  /// 実測値を返す。テストの fake エンジンやネイティブ未ロードなどで
+  /// 実測できない場合は null（= 「個別取得不可」。推定値は返さない）。
+  Future<int?> promptTokenCount(List<LlamaChatMessage> messages) async {
+    final engine = _engine;
+    if (engine is! LlamaDartEngine) return null;
+    try {
+      return await engine.promptTokenCount(messages);
+    } catch (_) {
+      return null;
+    }
+  }
+
   void _transition(LlmState next, {String? error}) {
     if (_disposed) return;
     _state = next;
@@ -236,8 +285,15 @@ class LocalLlmService {
   /// 成功: true（state -> idle）。ファイル不在・ロード失敗: false（state -> error）。
   Future<bool> loadModel(String modelPath) async {
     if (_disposed || _busy) return false;
+    // B: 同一モデルがロード済みなら再ロードしない（シート再表示・再試行の
+    // ボトルネック排除。重みはそのまま再利用する）。
+    if (_engine != null && _currentModelPath == modelPath && !_cancelled) {
+      _lastLoadMs = 0;
+      return true;
+    }
     _busy = true;
     _transition(LlmState.loading);
+    final loadWatch = Stopwatch()..start();
     try {
       // 同期 stat（1ファイルの stat は軽量。非同期I/Oは FakeAsync テスト
       // （モデル切替シート等）で完了しないため同期で検証する）。
@@ -247,6 +303,8 @@ class LocalLlmService {
       _engine?.dispose();
       final engine = _engineFactory(modelPath);
       await engine.loadModel(modelPath);
+      loadWatch.stop();
+      _lastLoadMs = loadWatch.elapsedMilliseconds;
       _engine = engine;
       _currentModelPath = modelPath;
       _transition(LlmState.idle);
@@ -285,6 +343,7 @@ class LocalLlmService {
     _transition(LlmState.generating);
     final buffer = StringBuffer();
     var generatedTokens = 0;
+    int? ttftMs;
     final stopwatch = Stopwatch()..start();
     try {
       final stream = engine.generate(
@@ -304,6 +363,7 @@ class LocalLlmService {
         final piece = _chunkText(chunk);
         if (piece.isEmpty) continue;
         generatedTokens++;
+        ttftMs ??= stopwatch.elapsedMilliseconds;
         buffer.write(piece);
         onToken?.call(piece);
       }
@@ -311,9 +371,16 @@ class LocalLlmService {
         throw const LlmCancelledException();
       }
       stopwatch.stop();
+      // B: backend/thinking は実エンジンで確定した値のみ報告する
+      // （fake エンジンでは「実測不能」として null を返す）。
+      final isNative = engine is LlamaDartEngine;
       _lastGenerationStats = LlmGenerationStats(
         generatedTokens: generatedTokens,
         elapsed: stopwatch.elapsed,
+        timeToFirstTokenMs: ttftMs,
+        loadMs: _lastLoadMs,
+        backend: isNative ? LlamaDartEngine.backendLabel : null,
+        thinkingEnabled: isNative ? false : null,
       );
       _transition(LlmState.done);
       return buffer.toString();

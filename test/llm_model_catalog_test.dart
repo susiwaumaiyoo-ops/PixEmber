@@ -137,14 +137,36 @@ void main() {
   });
 
   group('バンドル assets/llm_models.json', () {
-    test('Qwen 3.5 abliterated 3 点が pin 済みで検証通過', () async {
+    test('Qwen 3.5 3 点 + Gemma 4 2 点が pin 済みで検証通過', () async {
       // rootBundle にはテストバインディング初期化が必要。
       TestWidgetsFlutterBinding.ensureInitialized();
       final catalog = await LlmModelCatalogService().load();
 
       expect(catalog.catalogVersion, 1);
-      expect(catalog.entries.length, 3);
-      expect(catalog.downloadable.length, 3, reason: '全 3 点が検証済みのはず');
+      expect(catalog.entries.length, 5);
+      expect(catalog.downloadable.length, 5, reason: '全 5 点が検証済みのはず');
+      final gemma = catalog.entries
+          .where((e) => e.family.startsWith('Gemma'))
+          .toList(growable: false);
+      expect(gemma.map((e) => e.id), [
+        'gemma4-e2b-it-abliterated-q4km',
+        'gemma4-e4b-it-abliterated-q4km',
+      ]);
+      // Gemma 4 の GGUF architecture が llama.cpp 対応である前提の確認:
+      // chat template は Qwen 用 ChatML を強制しない（カタログはプリセットのみ持つ）。
+      for (final e in gemma) {
+        expect(e.isVerified, isTrue, reason: '${e.id} は pin 済み');
+        expect(e.isRecommended, isFalse, reason: '${e.id} は実験・実機未検証');
+        expect(e.supportsMultimodal, isFalse, reason: 'mmproj 非対応（テキスト要約専用）');
+        expect(e.preferredBackend, 'llama_cpp');
+      }
+      // E4B は高 RAM 向けの実験候補（高RAM警告を表示する）。
+      expect(
+        catalog.entries
+            .firstWhere((e) => e.id == 'gemma4-e4b-it-abliterated-q4km')
+            .highRamWarning,
+        isTrue,
+      );
 
       // 2B = 推奨モデル
       final rec = catalog.recommended;
