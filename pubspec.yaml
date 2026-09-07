@@ -41,7 +41,8 @@ dependencies:
   url_launcher: ^6.1.14
 
 # うごイラのZIP解凍用パッケージ
-  archive: ^3.3.7
+  # （llamadart 0.6+ が archive ^4.0.7 以上を要求するため制約更新。コード上のimportは現状なし）
+  archive: ^4.0.7
 
   # ダウンロード・保存機能（iOS）
   # ドミナントカラー（イラスト主調色）抽出パッケージ
@@ -92,6 +93,13 @@ dependencies:
   # オンデバイス画像処理（視覚類似検索の特徴量抽出・重複検出のdHash計算用）
   # 純Dartパッケージのためネイティブビルド設定への影響なし
   image: ^4.0.0
+  # ローカルLLM推論（小説AI要約 PoC）。native assets 方式でランタイム自動バンドル。
+  # GGUF は llama.cpp、.litertlm は LiteRT-LM へルーティング。
+  llamadart: ^0.8.22
+  # ローカルAI（小説AI要約）: SAF ピッカーで端末内の GGUF を選択し、
+  # アプリ内部ストレージへ取り込む（Scoped Storage では外部パスを
+  # llama.cpp が直接読めないため実コピー必須）。
+  file_picker: 8.1.2
 
 dev_dependencies:
   flutter_test:

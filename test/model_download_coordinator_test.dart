@@ -74,8 +74,10 @@ void main() {
 
       await coordinator.start('model-s', foreground: true);
       // start 直後は queued または downloading。
-      expect(coordinator.stateFor('model-s'),
-          anyOf(ModelDownloadState.queued, ModelDownloadState.downloading));
+      expect(
+        coordinator.stateFor('model-s'),
+        anyOf(ModelDownloadState.queued, ModelDownloadState.downloading),
+      );
 
       // 完了まで待つ（ポーリング）。
       await Future<void>.delayed(const Duration(milliseconds: 500));

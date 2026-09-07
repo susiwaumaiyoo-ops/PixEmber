@@ -9,12 +9,14 @@ import 'read_later_screen.dart';
 import '../services/database_service.dart';
 import '../services/embedding_service.dart';
 import '../services/emotion_curve_service.dart';
+import '../services/local_llm_service.dart';
 import '../services/novel_document_text.dart';
 import '../services/pixiv_api_service.dart';
 import '../services/reading_speed_service.dart';
 import '../services/ruri_model_manager.dart';
 import '../services/series_progress_service.dart';
 import '../services/similar_works_service.dart';
+import '../widgets/llm_summary_sheet.dart';
 import '../widgets/pixiv_image.dart';
 
 class NovelDetailScreen extends StatefulWidget {
@@ -54,6 +56,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   String? _similarNote;
   // シリーズ進捗（Phase N3）
   SeriesProgress? _seriesProgress;
+  // AI要約（実験）: プラットフォーム対応 + モデル配置済みなら true
+  bool _llmSummaryAvailable = false;
 
   @override
   void initState() {
@@ -66,8 +70,47 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     _loadSeriesProgress();
     _loadEmotionCurveState();
     _loadSimilarWorks();
+    _loadLlmSummaryAvailability();
     _recordHistory();
     debugPrint('📍 [DEBUG Detail] initState 終了');
+  }
+
+  /// AI要約（実験）の可用性を確認（Android かつ GGUF 配置済みのときのみ有効）。
+  Future<void> _loadLlmSummaryAvailability() async {
+    if (!LlmModelPaths.isSupportedPlatform()) return;
+    try {
+      final path = await LlmModelPaths.resolveModelPath();
+      if (!mounted) return;
+      setState(() => _llmSummaryAvailable = path != null);
+    } catch (e) {
+      debugPrint('AI要約状態の読み込みに失敗（無視）: $e');
+    }
+  }
+
+  /// AI要約ボトムシートを開く（本文はキャッシュ済みのみ・未キャッシュは空でOK）。
+  Future<void> _showLlmSummarySheet() async {
+    final modelPath = await LlmModelPaths.resolveModelPath();
+    if (!mounted || modelPath == null) return;
+    String body = '';
+    try {
+      final row = await DatabaseService().getNovelText(widget.novel.id);
+      body = (row?['text'] as String?) ?? '';
+    } catch (_) {
+      // 本文キャッシュなし・DBエラーは空本文で続行（タイトル/説明/タグだけでも要約可能）
+    }
+    if (!mounted) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => LlmSummarySheet(
+        modelPath: modelPath,
+        title: widget.novel.title,
+        description: widget.novel.caption,
+        tags: widget.novel.tags,
+        body: body,
+      ),
+    );
   }
 
   Future<void> _loadReadLaterState() async {
@@ -212,12 +255,14 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
         }
       });
     } catch (e) {
+      // エラー時は「似た作品」セクションを静かに非表示にするだけ。
+      // 画面全体には一切影響を与えない（エラー表示も出さない）。
       if (!mounted) return;
       setState(() {
         _similarLoading = false;
-        _similarNote = '似た作品の読み込みに失敗しました';
+        _similarNote = null;
       });
-      debugPrint('似た作品読み込みに失敗（無視）: $e');
+      debugPrint('似た作品読み込みに失敗（無視・セクション非表示）: $e');
     }
   }
 
@@ -1213,6 +1258,26 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             ),
                           ),
                         ),
+                        // AI要約（実験）: 対応プラットフォーム + GGUF配置済みのみ表示
+                        if (_llmSummaryAvailable) ...[
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                            onPressed: _showLlmSummarySheet,
+                            icon: const Icon(Icons.auto_awesome, size: 16),
+                            label: const Text('AI要約（実験）'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.pinkAccent,
+                              side: const BorderSide(color: Colors.pinkAccent),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                            ),
+                          ),
+                        ],
                         // シリーズ進捗カード（Phase N3）
                         if (_seriesProgress != null) ...[
                           const SizedBox(height: 12),

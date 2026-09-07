@@ -67,7 +67,7 @@ class UgoiraFrameService {
       for (final f in archive) {
         if (!f.isFile) continue;
         fileNames.add(f.name);
-        bytesByName[f.name] = f.content as Uint8List;
+        bytesByName[f.name] = f.content;
       }
       final picked = pickRepresentativeFrameFile(frames, fileNames);
       if (picked == null) return null;

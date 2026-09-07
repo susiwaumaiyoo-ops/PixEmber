@@ -6,7 +6,9 @@ plugins {
 
 android {
     namespace = "com.example.pixiv_viewer"
-    compileSdk = flutter.compileSdkVersion
+    // flutter_plugin_android_lifecycle 2.0.35（file_picker 8.1.2 の依存）が
+    // compileSdk 36 以上を要求するため固定（flutter.compileSdkVersion は 35）。
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

@@ -40,6 +40,14 @@ add_definitions(-DUNICODE -D_UNICODE)
 function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_features(${TARGET} PUBLIC cxx_std_17)
   target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100")
+  # VS 18 (MSVC 14.51) 対応:
+  # - /utf-8: サードパーティプラグイン（flutter_onnxruntime 等）のソースで
+  #   生じる C4819（コードページ 932）を解消し、/WX 由来の C2220 を防止。
+  # - _SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS:
+  #   permission_handler_windows の /await + <experimental/coroutine> に対する
+  #   新 MSVC の C2338 static assertion（STL1011）を抑制。
+  target_compile_options(${TARGET} PRIVATE /utf-8)
+  target_compile_definitions(${TARGET} PRIVATE "_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS")
   target_compile_options(${TARGET} PRIVATE /EHsc)
   target_compile_definitions(${TARGET} PRIVATE "_HAS_EXCEPTIONS=0")
   target_compile_definitions(${TARGET} PRIVATE "$<$<CONFIG:Debug>:_DEBUG>")

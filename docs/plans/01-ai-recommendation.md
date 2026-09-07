@@ -310,3 +310,24 @@ class RecommendFeedResult {
 | `lib/screens/home_screen_state.dart` | `recommendIndex=3` 追加 + NavigationDestination 拡張 |
 | `lib/config/feature_flags.dart` または prefs ヘルパー | 設定キー追加 |
 | `test/recommendation_math_test.dart` | 新規: 単体テスト |
+
+---
+
+## 12. 変更履歴
+
+- **モデル未導入時の詳細画面クラッシュ修正**（本フェーズ関連サービス）:
+  Ruri 埋め込みモデル未導入状態で小説詳細画面を開くと、
+  `EmbeddingService.initialize()` の `completeError` が未ハンドルの
+  StateError として SimilarWorksService → UI まで伝播しネイティブクラッシュ
+  （tombstoned）していた。対策として 3 層の防御を追加:
+  1. `embedding_service.dart`: 初期化失敗時は `completer.complete()`
+     （`completeError` にしない）。`isInitialized == false` を保持し
+     リトライ用に `_initCompleter` をクリア。
+  2. `similar_works_service.dart`: `_build` を try-catch で包み、例外時は
+     空結果（`modelReady: false, semanticAvailable: false`）を返す。
+     `_isModelPresentQuietly()` でモデル不在を検知し意味軸を省略。
+  3. `emotion_curve_service.dart` / `novel_detail_screen.dart`:
+     例外時は辞書フォールバック、またはセクションを静かに非表示
+     （エラー表示なし）。
+  テスト: `test/model_not_installed_safety_test.dart`（10 件）を追加。
+  `database_service.dart` に `@visibleForTesting clearTestDatabase()` を追加。

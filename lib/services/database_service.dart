@@ -27,6 +27,13 @@ class DatabaseService {
     _database = db;
   }
 
+  /// テスト用: 注入した DB インスタンスを解除する。
+  /// 解除後の `database` getter は通常の初期化フローに戻る。
+  @visibleForTesting
+  void clearTestDatabase() {
+    _database = null;
+  }
+
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'pixiv_viewer.db');

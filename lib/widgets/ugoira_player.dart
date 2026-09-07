@@ -91,7 +91,7 @@ class _UgoiraPlayerState extends State<UgoiraPlayer> {
 
       for (final ArchiveFile file in archive) {
         if (file.isFile) {
-          tempImages[file.name] = file.content as Uint8List;
+          tempImages[file.name] = file.content;
         }
       }
 

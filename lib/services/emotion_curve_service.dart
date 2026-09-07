@@ -774,7 +774,9 @@ class EmotionCurveService {
   /// 感情曲線を計算する（モデル経路はキャッシュ保存も行う）。
   ///
   /// 本文が空などチャンクが取れない場合は null。
-  /// キャンセル時は [StateError] を投げる。
+  /// キャンセル時は [StateError] を投げる（呼び出し側でハンドルされる契約）。
+  /// モデル未導入・モデル経路の実行時エラーは例外にせず、
+  /// 感情辞書による簡易モードへ静かにフォールバックする。
   Future<EmotionCurveResult?> compute({
     required int workId,
     required String text,
@@ -787,17 +789,49 @@ class EmotionCurveService {
 
     if (!await isModelAvailable()) {
       // 簡易モード: 感情辞書（モデル未導入のフォールバック）。
-      final raw = computeDictionaryScores(chunks);
-      final z = zNormalizeScores(raw);
-      return EmotionCurveResult(
-        chunks: chunks,
-        zScores: z,
-        storyColor: summarizeStoryColor(z),
-        isSimpleMode: true,
-        modelId: kDictionaryModelId,
-      );
+      return _computeDictionaryFallback(chunks);
     }
 
+    // モデル経路の万一の例外（EmbeddingService 未初期化、ORT セッション破損、
+    // DB キャッシュ保存失敗など）は UI を落とさないよう握りつぶし、
+    // 簡易モードへフォールバックする。キャンセル（StateError）のみ再スロー。
+    try {
+      return await _computeWithModel(
+        workId: workId,
+        chunks: chunks,
+        onProgress: onProgress,
+      );
+    } on StateError catch (e) {
+      // キャンセルは呼び出し側の UI 状態更新（「キャンセルしました」表示）に
+      // 必要なのでそのまま伝播させる。それ以外の StateError はフォールバック。
+      if (e.message.contains('キャンセル')) rethrow;
+      debugPrint('感情曲線のモデル経路に失敗（簡易モードへフォールバック）: $e');
+      return _computeDictionaryFallback(chunks);
+    } catch (e, st) {
+      debugPrint('感情曲線のモデル経路に失敗（簡易モードへフォールバック）: $e');
+      debugPrint(st.toString());
+      return _computeDictionaryFallback(chunks);
+    }
+  }
+
+  /// 感情辞書による簡易モードの計算。
+  EmotionCurveResult _computeDictionaryFallback(List<EmotionChunk> chunks) {
+    final raw = computeDictionaryScores(chunks);
+    final z = zNormalizeScores(raw);
+    return EmotionCurveResult(
+      chunks: chunks,
+      zScores: z,
+      storyColor: summarizeStoryColor(z),
+      isSimpleMode: true,
+      modelId: kDictionaryModelId,
+    );
+  }
+
+  Future<EmotionCurveResult> _computeWithModel({
+    required int workId,
+    required List<EmotionChunk> chunks,
+    void Function(int done, int total)? onProgress,
+  }) async {
     final encodeDoc = testEncodeDocument ?? _encodeDocumentReal;
     final encodeQuery = testEncodeQuery ?? _encodeQueryReal;
 

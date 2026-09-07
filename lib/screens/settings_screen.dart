@@ -7,8 +7,11 @@
 // - 導線先はすべて既存画面をそのまま push する。
 // - 検索UX（3タブ・アシストビュー）には一切変更を入れない。
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/local_llm_service.dart';
+import '../services/llm_model_import_service.dart';
 import '../services/search_preset_service.dart';
 import 'ai_index_maintenance_screen.dart';
 import 'ai_recommend_feed_screen.dart';
@@ -42,10 +45,74 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // 保存した検索プリセット
   List<SearchPreset> _presets = const [];
 
+  // ローカルAI（実験）: 小説AI要約のモデル状態
+  bool _llmSupported = false;
+  bool _llmLoading = false;
+  String? _llmSelectedPath;
+
   @override
   void initState() {
     super.initState();
     _loadAll();
+    _loadLlmModel();
+  }
+
+  /// ローカルAI（実験）のモデル状態を読み込む。
+  Future<void> _loadLlmModel() async {
+    if (!LlmModelPaths.isSupportedPlatform()) {
+      if (mounted) setState(() => _llmSupported = false);
+      return;
+    }
+    if (mounted) setState(() => _llmLoading = true);
+    try {
+      final selected = await LlmModelPaths.resolveModelPath();
+      if (!mounted) return;
+      setState(() {
+        _llmSupported = true;
+        _llmSelectedPath = selected;
+        _llmLoading = false;
+      });
+    } catch (e) {
+      debugPrint('ローカルAIモデルの読み込みに失敗しました: $e');
+      if (mounted) setState(() => _llmLoading = false);
+    }
+  }
+
+  /// モデル選択シートを開き、保存があれば状態を更新する。
+  Future<void> _showLlmModelSheet() async {
+    final changed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const _LlmModelSheet(),
+    );
+    if (changed == true) {
+      await _loadLlmModel();
+    }
+  }
+
+  /// 非 Android 向けの案内ダイアログ。
+  void _showLlmUnsupportedDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1C),
+        title: const Text(
+          'AI要約（実験）',
+          style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
+        content: const Text(
+          'この機能は実験中です。現時点では Android のみ利用できます。',
+          style: TextStyle(color: Colors.white70, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK', style: TextStyle(color: Colors.pinkAccent)),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadAll() async {
@@ -212,6 +279,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'ダウンロード管理',
             subtitle: 'ダウンロードキューの管理',
             onTap: () => _open(() => const DownloadQueueScreen()),
+          ),
+          _sectionHeader('ローカルAI（実験）'),
+          _tile(
+            icon: Icons.auto_awesome,
+            title: '小説AI要約（実験）',
+            subtitle: _llmSupported
+                ? (_llmSelectedPath != null
+                      ? 'モデル準備完了'
+                      : _llmLoading
+                      ? '読み込み中…'
+                      : 'GGUFファイル未配置')
+                : '実験中（Androidのみ）',
+            onTap: _llmSupported
+                ? _showLlmModelSheet
+                : _showLlmUnsupportedDialog,
           ),
           _sectionHeader('ライセンス'),
           _licenseBlock(),
@@ -715,6 +797,433 @@ class _PresetManagerSheetState extends State<_PresetManagerSheet> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// ローカルAI（実験）: GGUF モデル選択シート。
+class _LlmModelSheet extends StatefulWidget {
+  const _LlmModelSheet();
+
+  @override
+  State<_LlmModelSheet> createState() => _LlmModelSheetState();
+}
+
+class _LlmModelSheetState extends State<_LlmModelSheet> {
+  final TextEditingController _manualPathController = TextEditingController();
+  bool _loading = true;
+  bool _saving = false;
+  List<String> _models = const [];
+
+  /// null = 自動（設定なし）。それ以外 = 選択済み GGUF の絶対パス。
+  String? _selected;
+  String? _defaultDirPath;
+  String? _error;
+
+  // モデルインポート（SAF ピッカー → アプリ内部コピー）の状態。
+  final LlmModelImportService _importer = LlmModelImportService();
+  bool _importing = false;
+  bool _importCancelRequested = false;
+  int _importCopied = 0;
+  int _importTotal = 0;
+  String? _importSuccess;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _manualPathController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final dir = await LlmModelPaths.defaultDir();
+      final models = await LlmModelPaths.discover();
+      final prefs = await SharedPreferences.getInstance();
+      final configured = prefs.getString(LlmModelPaths.prefsKey)?.trim() ?? '';
+      if (!mounted) return;
+      setState(() {
+        _defaultDirPath = dir.path;
+        _models = models;
+        _selected = (configured.isNotEmpty && models.contains(configured))
+            ? configured
+            : null;
+        _loading = false;
+      });
+    } catch (e) {
+      debugPrint('GGUF 一覧の取得に失敗しました: $e');
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  /// SAF ピッカーで GGUF を選択し、アプリ内部ストレージへ取り込む。
+  ///
+  /// コピー中はスピナーと進捗バーを表示する（数GBで数十秒かかるため）。
+  /// 成功したら一覧を更新し、取り込んだモデルを自動選択して保存する。
+  Future<void> _startImport() async {
+    if (_saving || _importing) return;
+    if (!mounted) return;
+    setState(() {
+      _importing = true;
+      _importCancelRequested = false;
+      _importSuccess = null;
+      _error = null;
+      _importCopied = 0;
+      _importTotal = 0;
+    });
+    try {
+      final result = await _importer.importFromPicker(
+        onProgress: (copied, total) {
+          if (!mounted) return;
+          setState(() {
+            _importCopied = copied;
+            _importTotal = total;
+          });
+        },
+        isCancelled: () => _importCancelRequested,
+      );
+      if (!mounted) return;
+      if (result == null) {
+        // ピッカーがキャンセルされた場合は何もせずシートに戻る。
+        setState(() => _importing = false);
+        return;
+      }
+      await LlmModelPaths.setModelPath(result.path);
+      final models = await LlmModelPaths.discover();
+      if (!mounted) return;
+      setState(() {
+        _importing = false;
+        _importSuccess = '${result.fileName} を取り込みました';
+        _selected = result.path;
+        if (!_models.contains(result.path)) {
+          _models = [...models, if (!models.contains(result.path)) result.path]
+            ..sort((a, b) => a.compareTo(b));
+        }
+      });
+    } on LlmModelImportCancelledException {
+      debugPrint('モデルの取り込みをキャンセルしました');
+      if (!mounted) return;
+      setState(() => _importing = false);
+    } on LlmModelImportException catch (e) {
+      debugPrint('モデルの取り込みに失敗しました: ${e.message}');
+      if (!mounted) return;
+      setState(() {
+        _importing = false;
+        _error = e.message;
+      });
+    } catch (e) {
+      debugPrint('モデルの取り込みに失敗しました: $e');
+      if (!mounted) return;
+      setState(() {
+        _importing = false;
+        _error = '取り込みに失敗しました。もう一度お試しください。';
+      });
+    }
+  }
+
+  /// 進行中のコピーのキャンセルを要求する。
+  void _cancelImport() {
+    if (!_importing) return;
+    setState(() => _importCancelRequested = true);
+  }
+
+  Future<void> _save(String? path) async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (path == null) {
+        await prefs.remove(LlmModelPaths.prefsKey);
+      } else {
+        await LlmModelPaths.setModelPath(path);
+      }
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      debugPrint('モデル設定の保存に失敗しました: $e');
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = '保存に失敗しました。もう一度お試しください。';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.8,
+      ),
+      decoration: const BoxDecoration(
+        color: Color(0xFF1C1C1C),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+            child: Row(
+              children: [
+                const Text(
+                  'ローカルAIモデル（実験）',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white70),
+                  tooltip: '閉じる',
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: Colors.white12),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: _loading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: Colors.pinkAccent,
+                      ),
+                    )
+                  : _buildBody(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_importing) ...[
+          const Text(
+            'モデルを取り込んでいます…',
+            style: TextStyle(color: Colors.white, fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(
+            value: _importTotal > 0 ? _importCopied / _importTotal : null,
+            backgroundColor: Colors.white12,
+            color: Colors.pinkAccent,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _importTotal > 0
+                ? '${(_importCopied / (1024 * 1024)).toStringAsFixed(0)} MB / '
+                      '${(_importTotal / (1024 * 1024)).toStringAsFixed(0)} MB'
+                : 'ファイルを確認中…',
+            style: const TextStyle(color: Colors.white54, fontSize: 11),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _cancelImport,
+              child: const Text(
+                'キャンセル',
+                style: TextStyle(color: Colors.redAccent, fontSize: 12),
+              ),
+            ),
+          ),
+          const Divider(height: 24, color: Colors.white12),
+        ],
+        if (_importSuccess != null) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.green.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.green.withValues(alpha: 0.4)),
+            ),
+            child: Text(
+              _importSuccess!,
+              style: const TextStyle(color: Colors.greenAccent, fontSize: 12),
+            ),
+          ),
+        ],
+        Text(
+          _models.isEmpty
+              ? '端末内の .gguf ファイルを選択して取り込むか、'
+                    '下記ディレクトリに手動で配置してください。'
+              : '端末内の .gguf ファイルを追加で取り込めます。',
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _saving ? null : _startImport,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.pinkAccent,
+              side: const BorderSide(color: Colors.pinkAccent),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+            icon: const Icon(Icons.file_open, size: 20),
+            label: const Text('モデルをインポート', style: TextStyle(fontSize: 13)),
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          '手動配置用ディレクトリ',
+          style: TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.black54,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: SelectableText(
+            _defaultDirPath ?? '',
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+        ),
+        const SizedBox(height: 16),
+        RadioGroup<String?>(
+          groupValue: _selected,
+          onChanged: (v) {
+            if (!_saving) _save(v);
+          },
+          child: Column(
+            children: [
+              RadioListTile<String?>(
+                title: const Text(
+                  '自動（既定ディレクトリの唯一のモデルを使用）',
+                  style: TextStyle(color: Colors.white, fontSize: 13),
+                ),
+                secondary: const Icon(
+                  Icons.auto_fix_high,
+                  color: Colors.pinkAccent,
+                  size: 20,
+                ),
+                value: null,
+                activeColor: Colors.pinkAccent,
+                dense: true,
+              ),
+              for (final m in _models)
+                RadioListTile<String?>(
+                  title: Text(
+                    p.basename(m),
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    m,
+                    style: TextStyle(color: Colors.white38, fontSize: 10),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  value: m,
+                  activeColor: Colors.pinkAccent,
+                  dense: true,
+                ),
+            ],
+          ),
+        ),
+        if (_models.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(top: 4),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+            ),
+            child: const Text(
+              'GGUFファイルが未配置です。'
+              '「モデルをインポート」から端末内の .gguf を取り込むか、'
+              '下記ディレクトリに手動で配置して再読み込みしてください。',
+              style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
+            ),
+          ),
+        const SizedBox(height: 16),
+        const Text(
+          '手動でパスを指定',
+          style: TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _manualPathController,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+                decoration: InputDecoration(
+                  hintText: 'ファイル名または絶対パス',
+                  hintStyle: const TextStyle(color: Colors.white38),
+                  isDense: true,
+                  filled: true,
+                  fillColor: Colors.black54,
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Colors.white12),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Colors.pinkAccent),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: _saving
+                  ? null
+                  : () {
+                      final v = _manualPathController.text.trim();
+                      if (v.isNotEmpty) _save(v);
+                    },
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.pinkAccent,
+                side: const BorderSide(color: Colors.pinkAccent),
+              ),
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _error!,
+            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+          ),
+        ],
+        const SizedBox(height: 8),
+        TextButton(
+          onPressed: _loading || _saving ? null : _load,
+          child: const Text(
+            '再読み込み',
+            style: TextStyle(color: Colors.pinkAccent, fontSize: 12),
+          ),
+        ),
+      ],
     );
   }
 }

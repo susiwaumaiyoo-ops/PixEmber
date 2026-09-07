@@ -27,6 +27,7 @@ import 'embedding_service.dart';
 import 'illust_document_text.dart';
 import 'novel_document_text.dart';
 import 'pixiv_api_service.dart';
+import 'ruri_model_manager.dart';
 import 'recommendation_math.dart';
 import 'visual_search_service.dart' as visual;
 
@@ -271,6 +272,49 @@ class SimilarWorksService {
     required bool excludeMuted,
     Illust? illust,
   }) async {
+    // Failsafe: any unexpected exception (DB not ready, corrupted model,
+    // plugin missing on some platform, ...) must never crash the UI.
+    // Return an empty tag-based fallback result and log instead.
+    try {
+      return await _buildInternal(
+        workId: workId,
+        type: type,
+        tags: tags,
+        authorId: authorId,
+        seriesId: seriesId,
+        semanticDocText: semanticDocText,
+        weights: weights,
+        limit: limit,
+        excludeRead: excludeRead,
+        excludeMuted: excludeMuted,
+        illust: illust,
+      );
+    } catch (e, st) {
+      debugPrint('[SimilarWorks] build failed (fallback to tag-only): $e');
+      debugPrint(st.toString());
+      return SimilarWorksResult(
+        works: const [],
+        sameAuthor: const [],
+        sameSeries: const [],
+        modelReady: false,
+        semanticAvailable: false,
+      );
+    }
+  }
+
+  Future<SimilarWorksResult> _buildInternal({
+    required int workId,
+    required String type,
+    required List<String> tags,
+    required int authorId,
+    required int seriesId,
+    required String semanticDocText,
+    required SimilarWeights weights,
+    required int limit,
+    required bool excludeRead,
+    required bool excludeMuted,
+    Illust? illust,
+  }) async {
     final db = await DatabaseService().database;
 
     // ---- 除外集合 ----
@@ -283,8 +327,14 @@ class SimilarWorksService {
     Float32List? queryVec;
     bool modelReady = false;
     if (weights.semantic > 0) {
-      queryVec = await _getQueryEmbedding(type, workId, semanticDocText);
-      modelReady = queryVec != null;
+      // Skip the semantic axis entirely when the embedding model is not
+      // installed: initializing EmbeddingService would fail anyway, so
+      // never let that failure surface as an exception to the UI.
+      final present = await _isModelPresentQuietly();
+      if (present) {
+        queryVec = await _getQueryEmbedding(type, workId, semanticDocText);
+        modelReady = queryVec != null;
+      }
     }
 
     // ---- ローカル候補（意味 + タグ + 視覚） ----
@@ -543,6 +593,16 @@ class SimilarWorksService {
     } catch (e) {
       debugPrint('[SimilarWorks] query embedding unavailable: $e');
       return null;
+    }
+  }
+
+  /// Model presence check that never throws (quietly degrades to false).
+  Future<bool> _isModelPresentQuietly() async {
+    try {
+      return await RuriModelManager().isModelPresent();
+    } catch (e) {
+      debugPrint('[SimilarWorks] model presence check failed (ignored): $e');
+      return false;
     }
   }
 

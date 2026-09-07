@@ -66,10 +66,14 @@ class EmbeddingService {
       // クリアしないと以降の initialize() が「既存の未完了 completer」を
       // 共有して即座に失敗し、embedding 生成が永久に止まる。
       _initCompleter = null;
-      debugPrint('[EmbeddingService] 初期化失敗: $e');
+      debugPrint('[EmbeddingService] 初期化失敗（未初期化のまま継続）: $e');
       debugPrint(st.toString());
-      if (!completer.isCompleted) completer.completeError(e, st);
-      // 呼び出し側の既存挙動を壊さないため rethrow しない。
+      // 例外を ready / initialize() の待ち手に伝播させない。
+      // completeError すると待ち手（またはリスナ不在時の Zone）に未ハンドル
+      // 例外が飛び、モデル未導入端末で小説詳細画面を開いた際のクラッシュ原因になる。
+      // ここでは正常完了させ、状態は isInitialized == false を維持する。
+      // 呼び出し側は isInitialized / initError で分岐すること。
+      if (!completer.isCompleted) completer.complete();
     }
   }
 

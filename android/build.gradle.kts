@@ -19,6 +19,12 @@ subprojects {
         extensions.findByName("android")?.let { ext ->
             try {
                 val base = ext as com.android.build.gradle.BaseExtension
+                // flutter_plugin_android_lifecycle 2.0.35（file_picker 8.1.2 の依存）は
+                // compileSdk 36 以上を要求するが、file_picker 8.1.2 自体は 34 で
+                // ビルドされるため AAR メタデータ検査に失敗する。
+                // 全プラグインの compileSdk を 36 に引き上げて統一する
+                // （android-36 はローカル SDK にインストール済み）。
+                base.compileSdkVersion(36)
                 base.compileOptions.sourceCompatibility = JavaVersion.VERSION_21
                 base.compileOptions.targetCompatibility = JavaVersion.VERSION_21
                 if (base.namespace == null) {
