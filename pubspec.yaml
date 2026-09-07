@@ -115,6 +115,15 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
 
+# hooks.user_defines は native assets ビルドフック（llamadart 0.8+）の設定。
+# PixEmber は GGUF（llama.cpp）のみ使用し .litertlm（LiteRT-LM）は使わないため、
+# 同梱ランタイムを llama_cpp に限定して APK/実行ファイルサイズを削減する
+# （M7・llamadart 公式仕様: user_defines.llamadart.llamadart_native_runtimes）。
+hooks:
+  user_defines:
+    llamadart:
+      llamadart_native_runtimes: [llama_cpp]
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
