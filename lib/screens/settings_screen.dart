@@ -51,11 +51,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _llmLoading = false;
   String? _llmSelectedPath;
 
+  // ローカルAI（実験）: 実行設定（A/B: CPUスレッド・Vulkan）
+  LlmRuntimeSettings _llmRuntime = const LlmRuntimeSettings();
+
   @override
   void initState() {
     super.initState();
     _loadAll();
     _loadLlmModel();
+    _loadLlmRuntime();
+  }
+
+  /// ローカルAI（実験）の実行設定を読み込む。
+  Future<void> _loadLlmRuntime() async {
+    final s = await LlmRuntimeSettings.load();
+    if (mounted) setState(() => _llmRuntime = s);
+  }
+
+  /// CPU スレッド要求を変更して保存する。
+  Future<void> _setLlmCpuThreads(int threads) async {
+    final next = _llmRuntime.copyWith(cpuThreads: threads);
+    if (mounted) setState(() => _llmRuntime = next);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(LlmRuntimeSettings.prefKeyCpuThreads, next.cpuThreads);
+    } catch (e) {
+      debugPrint('スレッド設定の保存に失敗しました: $e');
+    }
+  }
+
+  /// Vulkan（GPU・実験）を切り替えて保存する。
+  Future<void> _setLlmUseVulkan(bool value) async {
+    final next = _llmRuntime.copyWith(useVulkan: value);
+    if (mounted) setState(() => _llmRuntime = next);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(LlmRuntimeSettings.prefKeyUseVulkan, next.useVulkan);
+    } catch (e) {
+      debugPrint('バックエンド設定の保存に失敗しました: $e');
+    }
   }
 
   /// ローカルAI（実験）のモデル状態を読み込む。
@@ -302,9 +336,98 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: '厳選モデル一覧・GGUFの管理（実験）',
             onTap: () => _open(() => const LlmModelLibraryScreen()),
           ),
+          _llmRuntimeCard(),
           _sectionHeader('ライセンス'),
           _licenseBlock(),
         ],
+      ),
+    );
+  }
+
+  /// ローカルAI（実験）の実行設定（A: CPUスレッド比較候補、B: Vulkan切替）。
+  ///
+  /// 変更は SharedPreferences に保存され、次回のモデルロードから反映される
+  /// （ロード済みエンジンの再利用条件に設定一致が含まれるため、
+  /// 設定変更後は古いエンジンが再利用されない）。
+  Widget _llmRuntimeCard() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      width: double.infinity,
+      child: Material(
+        color: const Color(0xFF242424),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '推論バックエンド',
+                style: TextStyle(color: Colors.white, fontSize: 14),
+              ),
+              const SizedBox(height: 2),
+              const Text(
+                'Vulkan（実験）は GPU での実行を要求します。'
+                '非対応端末では CPU に自動で戻ります。',
+                style: TextStyle(color: Colors.white54, fontSize: 11),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                // ignore: deprecated_member_use
+                activeColor: Colors.pinkAccent,
+                title: const Text(
+                  'Vulkan（実験）',
+                  style: TextStyle(color: Colors.white, fontSize: 13),
+                ),
+                subtitle: Text(
+                  _llmRuntime.useVulkan ? 'GPU オフロードを要求（全層）' : 'CPU で実行',
+                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                ),
+                value: _llmRuntime.useVulkan,
+                onChanged: _setLlmUseVulkan,
+              ),
+              const Divider(color: Colors.white12, height: 16),
+              const Text(
+                'CPU スレッド数（要求値）',
+                style: TextStyle(color: Colors.white, fontSize: 14),
+              ),
+              const SizedBox(height: 2),
+              const Text(
+                '比較用の候補です（自動 = 現状の基準・1/2 は診断用）。'
+                '実効値は取得できないため要求値のみ表示します。',
+                style: TextStyle(color: Colors.white54, fontSize: 11),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final t in LlmRuntimeSettings.cpuThreadChoices)
+                    ChoiceChip(
+                      label: Text(
+                        t == 0 ? '自動' : '$t',
+                        style: TextStyle(
+                          color: _llmRuntime.cpuThreads == t
+                              ? Colors.white
+                              : Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                      selected: _llmRuntime.cpuThreads == t,
+                      selectedColor: Colors.pinkAccent,
+                      backgroundColor: Colors.white12,
+                      onSelected: (_) => _setLlmCpuThreads(t),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '次回のモデルロードから反映（要約シート再表示で再ロードされます）。',
+                style: TextStyle(color: Colors.grey[500], fontSize: 10.5),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

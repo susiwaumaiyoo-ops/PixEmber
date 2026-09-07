@@ -108,10 +108,9 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
     final bodyWatch = Stopwatch()..start();
     // 切替のたびに新しいサービスを作り、旧エンジンを解放する
     // （同時にロードするモデルは常に1つ・M5）。
-    final svc =
-        widget.serviceFactory?.call() ?? LocalLlmService(preset: _activePreset);
+    // 実行設定は本文解決後に読む（エラー経路では不要なプラグイン I/O を避ける）。
     final old = _service;
-    _service = svc;
+    _service = null;
     old?.dispose();
     try {
       // M1: まず小説本文を解決（キャッシュ → 取得 + 保存）。
@@ -130,6 +129,11 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
         });
         return;
       }
+      final settings = await LlmRuntimeSettings.load();
+      final svc =
+          widget.serviceFactory?.call() ??
+          LocalLlmService(preset: _activePreset, runtimeSettings: settings);
+      _service = svc;
       final ok = await svc.loadModel(_activeModelPath);
       if (!mounted) return;
       if (!ok) {
@@ -636,6 +640,9 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
     final stats = _service?.lastGenerationStats;
     final ttft = (stats?.timeToFirstTokenMs ?? result.timeToFirstTokenMs);
     final loadMs = stats?.loadMs;
+    final nativeTps = stats?.nativeTokensPerSecond;
+    final prefillMs = stats?.nativePromptEvalMs;
+    final prefillTokens = stats?.nativePromptEvalTokens;
     final rows = <(String, String)>[
       ('モデル', label),
       if (when != null) ('生成日時', when),
@@ -649,6 +656,28 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
       if (result.inputTokens != null) ('入力トークン', '${result.inputTokens}'),
       if (tps != null) ('速度', '${tps.toStringAsFixed(1)} トークン/秒'),
       if (stats?.backend != null) ('backend', stats!.backend!),
+      if (stats?.usedCpuFallback ?? false) ('フォールバック', 'Vulkan失敗→CPUで実行'),
+      if (stats?.requestedThreads != null)
+        (
+          'スレッド要求',
+          't=${_threadLabel(stats!.requestedThreads)} / '
+              'b=${_threadLabel(stats.requestedThreadsBatch)}',
+        ),
+      if (stats?.resolvedGpuLayers != null)
+        ('GPU層', '${stats!.resolvedGpuLayers}'),
+      if (stats?.backendName != null) ('native backend', stats!.backendName!),
+      // 入力処理（prefill）はネイティブ計測が取れた場合のみ表示する。
+      // 「TTFT − ロード時間」を prefill と呼ばない（未取得は明示）。
+      if (prefillMs != null)
+        (
+          '入力処理',
+          '${prefillMs.toStringAsFixed(0)} ms（${prefillTokens ?? '-'} トークン）',
+        ),
+      if (prefillMs == null) ('入力処理', '未取得'),
+      if (nativeTps != null)
+        ('ネイティブ速度', '${nativeTps.toStringAsFixed(1)} トークン/秒'),
+      if (stats?.nativeEvalMs != null && (stats!.nativeEvalMs ?? 0) <= 0)
+        ('ネイティブ速度', '未取得'),
       ('キャッシュ', _cacheHit ? 'ヒット' : 'なし'),
       if (_regenerations > 0) ('自動再生成', '$_regenerations 回'),
     ];
@@ -695,6 +724,9 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
       ),
     );
   }
+
+  /// スレッド要求値の表示（0 = 自動・推測で確定しない）。
+  static String _threadLabel(int? t) => (t == null || t == 0) ? '自動' : '$t';
 
   static String _two(int n) => n.toString().padLeft(2, '0');
 }

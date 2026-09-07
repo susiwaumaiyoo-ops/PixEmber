@@ -8,6 +8,7 @@ import 'package:llamadart/llamadart.dart'
         LlamaBackend,
         LlamaChatMessage,
         LlamaCompletionChunk,
+        GpuBackend,
         LlamaEngine,
         ModelParams;
 import 'package:path/path.dart' as p;
@@ -43,6 +44,15 @@ class LlmGenerationStats {
     this.loadMs,
     this.backend,
     this.thinkingEnabled,
+    this.requestedThreads,
+    this.requestedThreadsBatch,
+    this.resolvedGpuLayers,
+    this.backendName,
+    this.usedCpuFallback,
+    this.nativePromptEvalMs,
+    this.nativePromptEvalTokens,
+    this.nativeEvalMs,
+    this.nativeEvalTokens,
   });
 
   /// 生成したトークン数（非空チャンク数の近似）。
@@ -63,12 +73,125 @@ class LlmGenerationStats {
   /// engine 呼び出しに渡した thinking 設定（false = thinking 無効を明示）。
   final bool? thinkingEnabled;
 
-  /// 1秒あたりの生成トークン数（計測不能なら 0.0）。
-  double get tokensPerSecond {
-    final ms = elapsed.inMilliseconds;
-    if (ms <= 0 || generatedTokens == 0) return 0.0;
-    return generatedTokens * 1000 / ms;
+  /// 要求した推論スレッド数（numberOfThreads。0 = 自動）。
+  final int? requestedThreads;
+
+  /// 要求したバッチ用スレッド数（numberOfThreadsBatch。0 = 自動）。
+  final int? requestedThreadsBatch;
+
+  /// ネイティブが解決した GPU オフロード層数（取得できない場合は null）。
+  final int? resolvedGpuLayers;
+
+  /// ネイティブ backend 名（取得できない場合は null）。
+  final String? backendName;
+
+  /// Vulkan ロード失敗により CPU へフォールバックしたか。
+  final bool? usedCpuFallback;
+
+  /// ネイティブ計測: プロンプト評価時間(ms)（取得できない場合は null）。
+  final double? nativePromptEvalMs;
+
+  /// ネイティブ計測: プロンプト評価トークン数。
+  final int? nativePromptEvalTokens;
+
+  /// ネイティブ計測: 生成評価時間(ms)（取得できない場合は null）。
+  final double? nativeEvalMs;
+
+  /// ネイティブ計測: 生成評価トークン数。
+  final int? nativeEvalTokens;
+
+  /// ネイティブ計測に基づく生成速度（取得できない場合は null）。
+  double? get nativeTokensPerSecond {
+    final ms = nativeEvalMs;
+    final n = nativeEvalTokens;
+    if (ms == null || ms <= 0 || n == null || n <= 0) return null;
+    return n * 1000 / ms;
   }
+
+  /// 1秒あたりの生成トークン数（計測不能なら 0.0）。
+  ///
+  /// 修正前は elapsed（TTFT を含む全体時間）が分母で、prefill が長い
+  /// 実機で過小評価されていた。TTFT が取れる場合は「最初の出力以降の
+  /// 経過時間」をデコード時間の近似として使う。ネイティブ計測
+  /// （[nativeTokensPerSecond]）が取れる場合は UI はそちらを優先表示する。
+  double get tokensPerSecond {
+    if (generatedTokens == 0) return 0.0;
+    final ms = elapsed.inMilliseconds;
+    if (ms <= 0) return 0.0;
+    final ttft = timeToFirstTokenMs;
+    final decodeMs = (ttft == null || ttft <= 0 || ttft >= ms) ? ms : ms - ttft;
+    return generatedTokens * 1000 / decodeMs;
+  }
+}
+
+/// llamadart ネイティブ（llama.cpp）から取得した 1 生成分の計測値。
+///
+/// llama.cpp は生成開始時に perf カウンタをリセットする
+/// （llamadart 0.8.22 llama_cpp_service.dart の generate 前リセットを確認）
+/// ため 1 生成分の値。取得できない項目は null（推定値は報告しない）。
+class LlmNativePerf {
+  const LlmNativePerf({
+    this.promptEvalMs,
+    this.promptEvalTokens,
+    this.evalMs,
+    this.evalTokens,
+  });
+
+  final double? promptEvalMs;
+  final int? promptEvalTokens;
+  final double? evalMs;
+  final int? evalTokens;
+}
+
+/// ローカルLLMの実行設定（A/B: CPUスレッド数・推論バックエンド）。
+class LlmRuntimeSettings {
+  const LlmRuntimeSettings({this.cpuThreads = 0, this.useVulkan = false});
+
+  /// SharedPreferences キー。
+  static const String prefKeyCpuThreads = 'llm_pref_cpu_threads';
+  static const String prefKeyUseVulkan = 'llm_pref_use_vulkan';
+
+  /// スレッド数の選択肢（0 = 自動・現状の基準。1 は診断用）。
+  static const List<int> cpuThreadChoices = <int>[0, 1, 2, 4];
+
+  /// 要求する推論スレッド数（0 = llama.cpp の自動）。numberOfThreads と
+  /// numberOfThreadsBatch の両方に同じ要求値を渡す（実効値は取得不能なため
+  /// UI には「要求値」として表示する）。
+  final int cpuThreads;
+
+  /// Vulkan（GPU）を要求するか。未対応端末ではロード失敗時に CPU へ
+  /// 1 回だけフォールバックする（ユーザーの明示操作でのみ有効）。
+  final bool useVulkan;
+
+  LlmRuntimeSettings copyWith({int? cpuThreads, bool? useVulkan}) =>
+      LlmRuntimeSettings(
+        cpuThreads: cpuThreads ?? this.cpuThreads,
+        useVulkan: useVulkan ?? this.useVulkan,
+      );
+
+  /// 保存された設定を読む（不正値は既定に戻す）。
+  static Future<LlmRuntimeSettings> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final t = prefs.getInt(prefKeyCpuThreads) ?? 0;
+      final vulkan = prefs.getBool(prefKeyUseVulkan) ?? false;
+      return LlmRuntimeSettings(
+        cpuThreads: cpuThreadChoices.contains(t) ? t : 0,
+        useVulkan: vulkan,
+      );
+    } catch (_) {
+      return const LlmRuntimeSettings();
+    }
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is LlmRuntimeSettings &&
+      other.cpuThreads == cpuThreads &&
+      other.useVulkan == useVulkan;
+
+  @override
+  int get hashCode => Object.hash(cpuThreads, useVulkan);
 }
 
 /// 生成キャンセルを示す例外（UIはエラー表示にしない）。
@@ -98,17 +221,56 @@ abstract class LlmInferenceEngine {
 
 /// llamadart による本番実装。
 class LlamaDartEngine implements LlmInferenceEngine {
-  LlamaDartEngine({this._contextSize = 8192, this._gpuLayers = 0})
-    : _engine = LlamaEngine(LlamaBackend());
+  LlamaDartEngine({
+    int contextSize = 8192,
+    int gpuLayers = 0,
+    int cpuThreads = 0,
+    bool useVulkan = false,
+  }) : _contextSize = contextSize,
+       _gpuLayers = gpuLayers,
+       _cpuThreads = cpuThreads,
+       _useVulkan = useVulkan,
+       _engine = LlamaEngine(LlamaBackend());
 
   /// 実際に使用した backend のラベル（メトリクス表示用）。
   static const String backendLabel = 'llama_cpp';
 
   final int _contextSize;
   final int _gpuLayers;
+  final int _cpuThreads;
+  final bool _useVulkan;
   final LlamaEngine _engine;
   bool _loaded = false;
   bool _disposed = false;
+  int? _resolvedGpuLayers;
+  String? _backendName;
+
+  /// 要求したスレッド数（実効値は取得不能なため要求値を表示する）。
+  int get requestedCpuThreads => _cpuThreads;
+
+  /// ネイティブが解決した GPU 層数（取得失敗時は null）。
+  int? get resolvedGpuLayers => _resolvedGpuLayers;
+
+  /// ネイティブ backend 名（取得失敗時は null）。
+  String? get backendName => _backendName;
+
+  /// ネイティブ（llama.cpp）の 1 生成分 perf 計測を取得する。
+  /// 取得できない場合は null（推定しない）。
+  Future<LlmNativePerf?> readNativePerf() async {
+    if (!_loaded || _disposed) return null;
+    try {
+      final perf = await _engine.getPerformanceContext();
+      if (perf == null) return null;
+      return LlmNativePerf(
+        promptEvalMs: perf.promptEvalMs,
+        promptEvalTokens: perf.promptEvalTokens,
+        evalMs: perf.evalMs,
+        evalTokens: perf.evalTokens,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   Future<void> loadModel(String modelPath) async {
@@ -116,14 +278,33 @@ class LlamaDartEngine implements LlmInferenceEngine {
       throw StateError('LlamaDartEngine is already disposed.');
     }
     if (_loaded) return;
+    // B: Vulkan 要求時は全層オフロード（ModelParams.maxGpuLayers = 999、
+    // 存在確認済み定数）と preferredBackend: vulkan を明示する。
+    // llamadart 側の Android 向け保守設定・Qwen3.5 例外は変更しない。
+    // Vulkan 非要求時は CPU 強制（Android の auto は llamadart が CPU に
+    // 解決するため、挙動を明示的に固定する）。
     await _engine.loadModel(
       modelPath,
       modelParams: ModelParams(
         contextSize: _contextSize,
-        gpuLayers: _gpuLayers,
+        gpuLayers: _useVulkan ? ModelParams.maxGpuLayers : _gpuLayers,
+        preferredBackend: _useVulkan ? GpuBackend.vulkan : GpuBackend.cpu,
+        numberOfThreads: _cpuThreads,
+        numberOfThreadsBatch: _cpuThreads,
       ),
     );
     _loaded = true;
+    // ロード後の診断値（表示専用。失敗は握り潰す）。
+    try {
+      _resolvedGpuLayers = await _engine.getResolvedGpuLayers();
+    } catch (_) {
+      _resolvedGpuLayers = null;
+    }
+    try {
+      _backendName = await _engine.getBackendName();
+    } catch (_) {
+      _backendName = null;
+    }
   }
 
   @override
@@ -175,13 +356,10 @@ class LocalLlmService {
   LocalLlmService({
     LlmInferenceEngine Function(String modelPath)? engineFactory,
     LlmInferencePreset preset = LlmInferencePreset.defaults,
+    LlmRuntimeSettings runtimeSettings = const LlmRuntimeSettings(),
   }) : _preset = preset,
-       _engineFactory =
-           engineFactory ??
-           ((modelPath) => LlamaDartEngine(
-             contextSize: preset.contextSize,
-             gpuLayers: preset.gpuLayers,
-           ));
+       runtimeSettings = runtimeSettings,
+       _customEngineFactory = engineFactory;
 
   /// 要約生成向けコンテキストサイズ（本文2000字+プロンプト+出力に余力）。
   static const int defaultContextSize = 8192;
@@ -193,8 +371,15 @@ class LocalLlmService {
     maxTokens: 1024,
   );
 
-  final LlmInferenceEngine Function(String modelPath) _engineFactory;
+  final LlmInferenceEngine Function(String modelPath)? _customEngineFactory;
   final LlmInferencePreset _preset;
+
+  /// 現在要求されている実行設定（A/B）。
+  LlmRuntimeSettings runtimeSettings;
+
+  /// 直近のロードで実際に適用した設定（再利用判定に使用）。
+  LlmRuntimeSettings _currentSettings = const LlmRuntimeSettings();
+  bool _lastLoadUsedCpuFallback = false;
 
   LlmState _state = LlmState.idle;
   String? _errorMessage;
@@ -216,6 +401,22 @@ class LocalLlmService {
 
   /// コンストラクタで渡された推論プリセット（M5）。
   LlmInferencePreset get preset => _preset;
+
+  /// 直近のロードが Vulkan 失敗 → CPU フォールバックだったか。
+  bool get lastLoadUsedCpuFallback => _lastLoadUsedCpuFallback;
+
+  /// エンジンを生成する（カスタムファクトリ（テスト）優先。
+  /// 実機は [LlmRuntimeSettings] を ModelParams へ反映する）。
+  LlmInferenceEngine _newEngine(String modelPath, LlmRuntimeSettings s) {
+    final custom = _customEngineFactory;
+    if (custom != null) return custom(modelPath);
+    return LlamaDartEngine(
+      contextSize: _preset.contextSize,
+      gpuLayers: _preset.gpuLayers,
+      cpuThreads: s.cpuThreads,
+      useVulkan: s.useVulkan,
+    );
+  }
 
   /// プリセットに基づく生成オプション（M5）。
   ///
@@ -287,7 +488,13 @@ class LocalLlmService {
     if (_disposed || _busy) return false;
     // B: 同一モデルがロード済みなら再ロードしない（シート再表示・再試行の
     // ボトルネック排除。重みはそのまま再利用する）。
-    if (_engine != null && _currentModelPath == modelPath && !_cancelled) {
+    // 再利用条件: モデルパスに加え、ロード時に適用する実行設定
+    // （スレッド数・バックエンド・gpuLayers 等）が完全一致する場合のみ。
+    // 設定が変わった場合は古いエンジンを再利用しない。
+    if (_engine != null &&
+        _currentModelPath == modelPath &&
+        _currentSettings == runtimeSettings &&
+        !_cancelled) {
       _lastLoadMs = 0;
       return true;
     }
@@ -301,15 +508,48 @@ class LocalLlmService {
         throw StateError('Model file not found: $modelPath');
       }
       _engine?.dispose();
-      final engine = _engineFactory(modelPath);
-      await engine.loadModel(modelPath);
+      LlmInferenceEngine? engine;
+      try {
+        engine = _newEngine(modelPath, runtimeSettings);
+        await engine.loadModel(modelPath);
+      } catch (_) {
+        // 失敗したエンジンは確実に解放する（同時にロードするのは常時1つ）。
+        try {
+          engine?.dispose();
+        } catch (_) {}
+        rethrow;
+      }
       loadWatch.stop();
       _lastLoadMs = loadWatch.elapsedMilliseconds;
+      _lastLoadUsedCpuFallback = false;
       _engine = engine;
       _currentModelPath = modelPath;
+      _currentSettings = runtimeSettings;
       _transition(LlmState.idle);
       return true;
     } catch (e) {
+      // B: Vulkan 要求でのロード失敗は、失敗したエンジンを解放して
+      // CPU 設定で 1 回だけ再試行する（未対応端末でのクラッシュ防止）。
+      if (runtimeSettings.useVulkan && !_lastLoadUsedCpuFallback) {
+        try {
+          final cpuSettings = runtimeSettings.copyWith(useVulkan: false);
+          final cpuEngine = _newEngine(modelPath, cpuSettings);
+          await cpuEngine.loadModel(modelPath);
+          loadWatch.stop();
+          _lastLoadMs = loadWatch.elapsedMilliseconds;
+          _lastLoadUsedCpuFallback = true;
+          _engine = cpuEngine;
+          _currentModelPath = modelPath;
+          _currentSettings = cpuSettings;
+          // 以後のロード要求が実際に動作している CPU 設定と比較されるよう、
+          // 実行要求値を実値へ同期する（再利用判定の一致）。
+          runtimeSettings = cpuSettings;
+          _transition(LlmState.idle);
+          return true;
+        } catch (_) {
+          // CPU 再試行も失敗 → 元のエラーとして扱う。
+        }
+      }
       _transition(LlmState.error, error: _friendlyError(e));
       return false;
     } finally {
@@ -373,14 +613,31 @@ class LocalLlmService {
       stopwatch.stop();
       // B: backend/thinking は実エンジンで確定した値のみ報告する
       // （fake エンジンでは「実測不能」として null を返す）。
-      final isNative = engine is LlamaDartEngine;
+      final native = engine is LlamaDartEngine ? engine : null;
+      LlmNativePerf? nativePerf;
+      if (native != null) {
+        try {
+          nativePerf = await native.readNativePerf();
+        } catch (_) {
+          nativePerf = null;
+        }
+      }
       _lastGenerationStats = LlmGenerationStats(
         generatedTokens: generatedTokens,
         elapsed: stopwatch.elapsed,
         timeToFirstTokenMs: ttftMs,
         loadMs: _lastLoadMs,
-        backend: isNative ? LlamaDartEngine.backendLabel : null,
-        thinkingEnabled: isNative ? false : null,
+        backend: native != null ? LlamaDartEngine.backendLabel : null,
+        thinkingEnabled: native != null ? false : null,
+        requestedThreads: native?.requestedCpuThreads,
+        requestedThreadsBatch: native?.requestedCpuThreads,
+        resolvedGpuLayers: native?.resolvedGpuLayers,
+        backendName: native?.backendName,
+        usedCpuFallback: native != null ? _lastLoadUsedCpuFallback : null,
+        nativePromptEvalMs: nativePerf?.promptEvalMs,
+        nativePromptEvalTokens: nativePerf?.promptEvalTokens,
+        nativeEvalMs: nativePerf?.evalMs,
+        nativeEvalTokens: nativePerf?.evalTokens,
       );
       _transition(LlmState.done);
       return buffer.toString();
