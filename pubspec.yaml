@@ -125,6 +125,12 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  # LLM モデルカタログ（M2）: pin revision/サイズ/SHA-256 を持つ
+  # 厳選 GGUF モデルのメタデータ一覧（バイナリは含めない）。
+  assets:
+    - assets/llm_models.json
+
   # Assets are bundled via download at runtime (Ruri model + tokenizer).
   # No app-bundled model assets.
 
