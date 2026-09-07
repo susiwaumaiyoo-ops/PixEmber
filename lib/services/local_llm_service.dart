@@ -14,6 +14,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'llm_model_preset.dart';
+
 /// ローカルLLM（llama.cpp）のサービス状態。
 enum LlmState {
   /// 初期状態・モデル未ロード、または生成が完了・キャンセルされた後。
@@ -30,6 +32,27 @@ enum LlmState {
 
   /// 直近の操作が失敗した（[LocalLlmService.errorMessage] 参照）。
   error,
+}
+
+/// 直近1回の生成メトリクス（M5）。
+class LlmGenerationStats {
+  const LlmGenerationStats({
+    required this.generatedTokens,
+    required this.elapsed,
+  });
+
+  /// 生成したトークン数（非空チャンク数の近似）。
+  final int generatedTokens;
+
+  /// 生成に要した実時間。
+  final Duration elapsed;
+
+  /// 1秒あたりの生成トークン数（計測不能なら 0.0）。
+  double get tokensPerSecond {
+    final ms = elapsed.inMilliseconds;
+    if (ms <= 0 || generatedTokens == 0) return 0.0;
+    return generatedTokens * 1000 / ms;
+  }
 }
 
 /// 生成キャンセルを示す例外（UIはエラー表示にしない）。
@@ -115,13 +138,20 @@ class LlamaDartEngine implements LlmInferenceEngine {
 ///   次のトークン境界でデコードを停止する（実キャンセル）。
 class LocalLlmService {
   /// [engineFactory] 未指定時は llama.cpp 実装（[LlamaDartEngine]）を使う。
+  ///
+  /// [preset] は [engineFactory] 未指定時にエンジンへ渡される推論プリセット。
+  /// 通常はカタログ fileName で解決した値
+  /// （[LlmInferencePreset.resolveForFileName]）を渡す。
   LocalLlmService({
     LlmInferenceEngine Function(String modelPath)? engineFactory,
-  }) : _engineFactory = engineFactory ?? _defaultEngine;
-
-  static LlmInferenceEngine _defaultEngine(String modelPath) {
-    return LlamaDartEngine(contextSize: defaultContextSize);
-  }
+    LlmInferencePreset preset = LlmInferencePreset.defaults,
+  }) : _preset = preset,
+       _engineFactory =
+           engineFactory ??
+           ((modelPath) => LlamaDartEngine(
+             contextSize: preset.contextSize,
+             gpuLayers: preset.gpuLayers,
+           ));
 
   /// 要約生成向けコンテキストサイズ（本文2000字+プロンプト+出力に余力）。
   static const int defaultContextSize = 8192;
@@ -134,6 +164,7 @@ class LocalLlmService {
   );
 
   final LlmInferenceEngine Function(String modelPath) _engineFactory;
+  final LlmInferencePreset _preset;
 
   LlmState _state = LlmState.idle;
   String? _errorMessage;
@@ -141,12 +172,8 @@ class LocalLlmService {
   bool _busy = false;
   bool _cancelled = false;
   LlmInferenceEngine? _engine;
-  StreamSubscription<LlamaCompletionChunk>? _subscription;
   String? _currentModelPath;
-  bool _generationDone = false;
-  Object? _generationError;
-
-  static const Duration _tick = Duration(milliseconds: 5);
+  LlmGenerationStats? _lastGenerationStats;
 
   /// 状態遷移通知。[dispose] 以降は呼ばれない。
   void Function(LlmState state, String? error)? onStateChange;
@@ -156,6 +183,21 @@ class LocalLlmService {
   bool get isDisposed => _disposed;
   bool get isBusy => _busy;
   String? get modelPath => _currentModelPath;
+
+  /// コンストラクタで渡された推論プリセット（M5）。
+  LlmInferencePreset get preset => _preset;
+
+  /// プリセットに基づく生成オプション（M5）。
+  ///
+  /// maxTokens はプリセットの maxOutputTokens（温度等は従来値を維持）。
+  GenerationParams get generationOptions => GenerationParams(
+    temp: 0.2,
+    topP: 0.9,
+    maxTokens: _preset.maxOutputTokens,
+  );
+
+  /// 直近の生成メトリクス（M5）。生成成功時に更新、generate 開始時にクリア。
+  LlmGenerationStats? get lastGenerationStats => _lastGenerationStats;
 
   void _transition(LlmState next, {String? error}) {
     if (_disposed) return;
@@ -175,6 +217,17 @@ class LocalLlmService {
     }
   }
 
+  /// [isModelFileReady] の同期版（loadModel 内部検証用）。
+  static bool _isModelFileSyncReady(String path) {
+    try {
+      final file = File(path);
+      if (!file.existsSync()) return false;
+      return file.lengthSync() > 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// モデルを読み込む（ファイル検証 + エンジン生成 + 実際のロード）。
   ///
   /// 実際のロードは llamadart の worker isolate 内で実行され、
@@ -186,7 +239,9 @@ class LocalLlmService {
     _busy = true;
     _transition(LlmState.loading);
     try {
-      if (!await isModelFileReady(modelPath)) {
+      // 同期 stat（1ファイルの stat は軽量。非同期I/Oは FakeAsync テスト
+      // （モデル切替シート等）で完了しないため同期で検証する）。
+      if (!_isModelFileSyncReady(modelPath)) {
         throw StateError('Model file not found: $modelPath');
       }
       _engine?.dispose();
@@ -226,45 +281,40 @@ class LocalLlmService {
     }
     _busy = true;
     _cancelled = false;
-    _generationDone = false;
-    _generationError = null;
+    _lastGenerationStats = null;
     _transition(LlmState.generating);
     final buffer = StringBuffer();
+    var generatedTokens = 0;
+    final stopwatch = Stopwatch()..start();
     try {
       final stream = engine.generate(
         messages: messages,
         options: options ?? defaultGenerationOptions,
       );
-      final subscription = stream.listen(
-        (chunk) {
-          if (_cancelled) return;
-          final piece = _chunkText(chunk);
-          if (piece.isEmpty) return;
-          buffer.write(piece);
-          onToken?.call(piece);
-        },
-        onError: (Object e) {
-          if (_cancelled) return;
-          _generationError = e;
-        },
-        onDone: () {
-          _generationDone = true;
-        },
-        cancelOnError: false,
-      );
-      _subscription = subscription;
-      // onDone/onError を待って終了を判定する（ポーリングで橋渡し）。
-      while (!_generationDone && _generationError == null) {
-        await Future<void>.delayed(_tick);
+      // await for でストリームを最後まで消費する。ジェネレータの完了と
+      // ループ終了が完全同期するため、FakeAsync の widget テスト
+      // （モデル切替シート等）でも確実に完了する。
+      // キャンセルは cancel() でフラグを立て、次のトークンで
+      // LlmCancelledException を投げてループを抜ける
+      // （await for が自動的に購読を破棄する）。
+      await for (final chunk in stream) {
         if (_cancelled) {
-          await subscription.cancel();
           throw const LlmCancelledException();
         }
+        final piece = _chunkText(chunk);
+        if (piece.isEmpty) continue;
+        generatedTokens++;
+        buffer.write(piece);
+        onToken?.call(piece);
       }
-      await subscription.cancel();
-      if (_generationError != null) {
-        throw _generationError!;
+      if (_cancelled) {
+        throw const LlmCancelledException();
       }
+      stopwatch.stop();
+      _lastGenerationStats = LlmGenerationStats(
+        generatedTokens: generatedTokens,
+        elapsed: stopwatch.elapsed,
+      );
       _transition(LlmState.done);
       return buffer.toString();
     } catch (e) {
@@ -275,21 +325,17 @@ class LocalLlmService {
       _transition(LlmState.error, error: _friendlyError(e));
       rethrow;
     } finally {
-      _generationDone = false;
-      _generationError = null;
-      _subscription = null;
       _busy = false;
     }
   }
 
   /// 生成中であることをキャンセルする（state -> idle）。
   ///
-  /// 購読破棄は llamadart の cancel token に伝播し、
-  /// worker isolate が次のトークン境界でデコードを停止する。
+  /// 次のトークンで生成ループを中断する（await for が購読を破棄する。
+  /// llamadart でもトークン境界でデコードが停止する）。
   void cancel() {
     if (!_busy) return;
     _cancelled = true;
-    _subscription?.cancel();
   }
 
   /// サービスを終了する。以降は [onStateChange] は呼ばれない。
@@ -297,7 +343,6 @@ class LocalLlmService {
     if (_disposed) return;
     _disposed = true;
     _cancelled = true;
-    _subscription?.cancel();
     _engine?.dispose();
     _engine = null;
     _currentModelPath = null;
@@ -439,6 +484,13 @@ class LlmModelPaths {
       if (configured.isNotEmpty) {
         final f = File(configured);
         if (await f.exists() && await f.length() > 0) return f.path;
+        // M5: 選択済みファイルが消失していたら設定をクリアする
+        // （キャッシュ消去・手動削除対策。以降は再検索へ進む）。
+        try {
+          await prefs.remove(prefsKey);
+        } catch (_) {
+          // クリア失敗は解決の継続を妨げない。
+        }
       }
       final found = await discover();
       if (found.length == 1) return found.single;

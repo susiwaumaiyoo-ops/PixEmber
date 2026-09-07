@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../services/local_llm_service.dart';
+import '../services/llm_model_preset.dart'
+    show LlmInferencePreset, LlmModelChoice;
 import '../services/llm_summary_service.dart';
 
 /// 小説のAI要約を表示するボトムシート（実験機能）。
@@ -20,10 +23,18 @@ class LlmSummarySheet extends StatefulWidget {
     required this.description,
     this.tags = const [],
     required this.resolveBody,
+    this.availableModels = const <LlmModelChoice>[],
+    this.serviceFactory,
   });
 
-  /// 使用する GGUF モデルの絶対パス。
+  /// 使用する GGUF モデルの絶対パス（初期値。「別モデルで再生成」で更新）。
   final String modelPath;
+
+  /// 切替候補モデル一覧（M5）。空なら「別モデルで再生成」を表示しない。
+  final List<LlmModelChoice> availableModels;
+
+  /// サービス生成ファクトリ（テストで fake エンジン注入に使用）。
+  final LocalLlmService Function()? serviceFactory;
 
   final String title;
 
@@ -44,7 +55,7 @@ class LlmSummarySheet extends StatefulWidget {
 enum _SheetPhase { loading, generating, done, error }
 
 class _LlmSummarySheetState extends State<LlmSummarySheet> {
-  final LocalLlmService _service = LocalLlmService();
+  LocalLlmService? _service;
   _SheetPhase _phase = _SheetPhase.loading;
   String _streamText = '';
   LlmSummaryResult? _result;
@@ -52,10 +63,13 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
   bool _noteCancelled = false;
   bool _busy = false;
 
+  /// 現在選択中のモデルパス（M5）。「別モデルで再生成」で更新される。
+  String _activeModelPath = '';
+
   @override
   void dispose() {
     // 生成中・読み込み中でも確実に破棄（dispose 後の setState は起きない）。
-    _service.dispose();
+    _service?.dispose();
     super.dispose();
   }
 
@@ -69,6 +83,13 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
       _errorMessage = null;
       _noteCancelled = false;
     });
+    // 切替のたびに新しいサービスを作り、旧エンジンを解放する
+    // （同時にロードするモデルは常に1つ・M5）。
+    final svc =
+        widget.serviceFactory?.call() ?? LocalLlmService(preset: _activePreset);
+    final old = _service;
+    _service = svc;
+    old?.dispose();
     try {
       // M1: まず小説本文を解決（キャッシュ → 取得 + 保存）。
       // 取得失敗時は作者説明へのフォールバックなしでエラーにする。
@@ -81,21 +102,22 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
         });
         return;
       }
-      final ok = await _service.loadModel(widget.modelPath);
+      final ok = await svc.loadModel(_activeModelPath);
       if (!mounted) return;
       if (!ok) {
         setState(() {
           _phase = _SheetPhase.error;
-          _errorMessage = _service.errorMessage ?? 'モデルを読み込めませんでした。';
+          _errorMessage = svc.errorMessage ?? 'モデルを読み込めませんでした。';
         });
         return;
       }
       final result = await LlmSummaryService.generate(
-        service: _service,
+        service: svc,
         title: widget.title,
         body: body,
         tags: widget.tags,
         description: widget.description, // コピー検出のみ（プロンプトには含めない）
+        modelLabel: _activeModelLabel,
         onToken: (piece) {
           if (!mounted) return;
           setState(() {
@@ -137,12 +159,81 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
   }
 
   void _cancel() {
-    _service.cancel();
+    _service?.cancel();
+  }
+
+  /// M5: モデルを切り替えて再生成する。
+  void _useModel(LlmModelChoice choice) {
+    if (_busy) return;
+    setState(() => _activeModelPath = choice.path);
+    _start();
+  }
+
+  /// M5: 現在のモデルの推論プリセット（候補一致。未登録なら既定値）。
+  LlmInferencePreset get _activePreset {
+    for (final m in widget.availableModels) {
+      if (m.path == _activeModelPath) return m.preset;
+    }
+    return LlmInferencePreset.defaults;
+  }
+
+  /// M5: 現在のモデルの表示ラベル（候補一覧から解決。未登録なら空）。
+  String get _activeModelLabel {
+    for (final m in widget.availableModels) {
+      if (m.path == _activeModelPath) return m.label;
+    }
+    return '';
+  }
+
+  /// M5: 別モデル選択シート → 選択で再生成。
+  Future<void> _showModelPicker() async {
+    final picked = await showModalBottomSheet<LlmModelChoice>(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1C),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                '別のモデルで再生成',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            for (final m in widget.availableModels)
+              ListTile(
+                title: Text(
+                  m.label,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                ),
+                subtitle: Text(
+                  p.basename(m.path),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+                trailing: m.path == _activeModelPath
+                    ? const Icon(Icons.check, color: Colors.pinkAccent)
+                    : null,
+                onTap: () => Navigator.of(context).pop(m),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || picked.path == _activeModelPath) return;
+    _useModel(picked);
   }
 
   @override
   void initState() {
     super.initState();
+    _activeModelPath = widget.modelPath;
     _start();
   }
 
@@ -190,8 +281,10 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 if (_phase == _SheetPhase.loading ||
                     _phase == _SheetPhase.generating)
@@ -213,6 +306,27 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
                       side: const BorderSide(color: Colors.pinkAccent),
                     ),
                   ),
+                if (_phase == _SheetPhase.done) ...[
+                  if (widget.availableModels.length > 1)
+                    OutlinedButton.icon(
+                      onPressed: _showModelPicker,
+                      icon: const Icon(Icons.swap_horiz, size: 16),
+                      label: const Text('別モデルで再生成'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                        side: const BorderSide(color: Colors.white24),
+                      ),
+                    ),
+                  OutlinedButton.icon(
+                    onPressed: _start,
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('このモデルで再生成'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.pinkAccent,
+                      side: const BorderSide(color: Colors.pinkAccent),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -314,6 +428,7 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _buildModelMeta(result),
         if (result.bodySourceNote != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
@@ -431,6 +546,72 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
       ],
     );
   }
+
+  /// M5: 生成メタ情報（モデル名・日時・所要時間・速度）。
+  Widget _buildModelMeta(LlmSummaryResult result) {
+    final label = (result.modelLabel?.isNotEmpty ?? false)
+        ? result.modelLabel!
+        : p.basename(_activeModelPath);
+    final dt = result.generatedAt;
+    final when = dt == null
+        ? null
+        : '${dt.year}/${_two(dt.month)}/${_two(dt.day)} '
+              '${_two(dt.hour)}:${_two(dt.minute)}';
+    final secs = result.generationMs == null
+        ? null
+        : (result.generationMs! / 1000).toStringAsFixed(1);
+    final tps = result.tokensPerSecond;
+    final rows = <(String, String)>[
+      ('モデル', label),
+      if (when != null) ('生成日時', when),
+      if (secs != null) ('処理時間', '$secs 秒'),
+      if (tps != null) ('速度', '${tps.toStringAsFixed(1)} トークン/秒'),
+    ];
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final (k, v) in rows)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 64,
+                    child: Text(
+                      k,
+                      style: const TextStyle(
+                        color: Colors.white38,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      v,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  static String _two(int n) => n.toString().padLeft(2, '0');
 }
 
 /// セクション見出し。

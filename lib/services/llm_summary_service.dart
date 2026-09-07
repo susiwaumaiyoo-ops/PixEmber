@@ -23,12 +23,28 @@ class LlmSummaryResult {
   /// 生成元メモ（例: 「生成元: 小説本文（…文字）」）。
   final String? bodySourceNote;
 
+  /// 使用モデルの表示ラベル（M5）。不明なら null。
+  final String? modelLabel;
+
+  /// 生成に要した時間（ミリ秒・M5）。不明なら null。
+  final int? generationMs;
+
+  /// 1秒あたりの生成トークン数（M5）。不明なら null。
+  final double? tokensPerSecond;
+
+  /// 生成完了日時（M5・ローカル時刻）。不明なら null。
+  final DateTime? generatedAt;
+
   const LlmSummaryResult({
     required this.synopsis,
     required this.intro,
     required this.tagSuggestions,
     this.copyWarning = false,
     this.bodySourceNote,
+    this.modelLabel,
+    this.generationMs,
+    this.tokensPerSecond,
+    this.generatedAt,
   });
 }
 
@@ -400,6 +416,7 @@ class LlmSummaryService {
     List<String> tags = const [],
     String? description,
     void Function(String piece)? onToken,
+    String? modelLabel,
   }) async {
     final normalized = normalizeNovelBody(body);
     if (normalized.isEmpty) {
@@ -419,7 +436,11 @@ class LlmSummaryService {
         body: body,
         emphasizeRephrase: attempt == 1,
       );
-      final raw = await service.generate(messages, onToken: onToken);
+      final raw = await service.generate(
+        messages,
+        onToken: onToken,
+        options: service.generationOptions,
+      );
       final parsed = parseOutput(raw);
       if (parsed == null) {
         if (looksRefused(raw)) {
@@ -443,12 +464,17 @@ class LlmSummaryService {
       break;
     }
     final r = result!;
+    final stats = service.lastGenerationStats;
     return LlmSummaryResult(
       synopsis: r.synopsis,
       intro: r.intro,
       tagSuggestions: r.tagSuggestions,
       copyWarning: copyWarning,
       bodySourceNote: sourceNote,
+      modelLabel: modelLabel,
+      generationMs: stats?.elapsed.inMilliseconds,
+      tokensPerSecond: stats?.tokensPerSecond,
+      generatedAt: DateTime.now(),
     );
   }
 

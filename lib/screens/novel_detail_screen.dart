@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../novel_model.dart';
 import 'author_profile_screen.dart';
@@ -9,6 +10,10 @@ import 'read_later_screen.dart';
 import '../services/database_service.dart';
 import '../services/embedding_service.dart';
 import '../services/emotion_curve_service.dart';
+import '../models/llm_model_catalog_entry.dart';
+import '../services/llm_model_catalog_service.dart';
+import '../services/llm_model_preset.dart'
+    show LlmInferencePreset, LlmModelChoice;
 import '../services/llm_summary_service.dart';
 import '../services/local_llm_service.dart';
 import '../services/novel_document_text.dart';
@@ -96,6 +101,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   Future<void> _showLlmSummarySheet() async {
     final modelPath = await LlmModelPaths.resolveModelPath();
     if (!mounted || modelPath == null) return;
+    final choices = await _collectLlmModelChoices();
+    if (!mounted) return;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -106,8 +113,42 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
         description: widget.novel.caption,
         tags: widget.novel.tags,
         resolveBody: _resolveLlmBody,
+        availableModels: choices,
       ),
     );
+  }
+
+  /// M5: 切替候補モデル一覧（発見済み GGUF + カタログ表示名 + 推論プリセット）。
+  ///
+  /// カタログ読み込みに失敗してもファイル名ラベル・既定プリセットで続行する
+  /// （空にはしない）。
+  Future<List<LlmModelChoice>> _collectLlmModelChoices() async {
+    final paths = await LlmModelPaths.discover();
+    if (paths.isEmpty) return const [];
+    LlmModelCatalog? catalog;
+    try {
+      catalog = await LlmModelCatalogService().load();
+    } catch (_) {
+      // カタログ未読はファイル名ラベル・既定プリセットで続行。
+    }
+    final entries = catalog?.entries ?? const <LlmModelCatalogEntry>[];
+    return [
+      for (final path in paths)
+        LlmModelChoice(
+          path: path,
+          label: () {
+            for (final e in entries) {
+              if (e.fileName.toLowerCase() == p.basename(path).toLowerCase()) {
+                return e.displayName.isNotEmpty
+                    ? e.displayName
+                    : p.basename(path);
+              }
+            }
+            return p.basename(path);
+          }(),
+          preset: LlmInferencePreset.resolveForFileName(path, entries),
+        ),
+    ];
   }
 
   /// 小説本文を解決する（M1: キャッシュ → 取得 + 保存 → null）。
