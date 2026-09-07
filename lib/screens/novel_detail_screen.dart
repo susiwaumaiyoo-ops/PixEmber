@@ -113,6 +113,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
         description: widget.novel.caption,
         tags: widget.novel.tags,
         resolveBody: _resolveLlmBody,
+        workId: widget.novel.id,
         availableModels: choices,
       ),
     );

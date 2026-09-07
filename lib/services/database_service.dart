@@ -39,7 +39,7 @@ class DatabaseService {
     final path = join(dbPath, 'pixiv_viewer.db');
     return await openDatabase(
       path,
-      version: 24,
+      version: 25,
       onConfigure: (db) async {
         // 外部キー制約（ON DELETE CASCADE 等）を有効化。
         // SQLite はデフォルトで無効のため接続毎に設定が必要。
@@ -91,6 +91,8 @@ class DatabaseService {
     await _createEmotionCurves(db);
     // 読書メモ（v24 追加）
     await _createReadingNotes(db);
+    // LLM要約キャッシュ（v25 追加）
+    await _createLlmSummaries(db);
   }
 
   /// ダウンロードキューグループテーブルを作成する（_onCreate / v17 migration / onOpen 共用）。
@@ -254,6 +256,33 @@ class DatabaseService {
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_reading_notes_work '
       'ON reading_notes(work_id)',
+    );
+  }
+
+  /// LLM要約キャッシュテーブルを作成する（_onCreate / v25 migration / onOpen 共用）。
+  /// 本文とモデルから再生成可能なため Google Drive バックアップ対象外。
+  /// 同一作品×モデル×プロンプト版×入力フィンガープリントで1行（UNIQUE）。
+  Future<void> _createLlmSummaries(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS llm_summaries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_id INTEGER NOT NULL,
+        model_id TEXT NOT NULL,
+        model_file_hash TEXT NOT NULL,
+        prompt_version INTEGER NOT NULL,
+        source_fingerprint TEXT NOT NULL,
+        synopsis TEXT NOT NULL,
+        spoiler_free_intro TEXT NOT NULL,
+        suggested_tags_json TEXT NOT NULL,
+        copy_warning INTEGER NOT NULL DEFAULT 0,
+        generation_ms INTEGER,
+        generated_at TEXT NOT NULL,
+        UNIQUE(work_id, model_id, prompt_version, source_fingerprint)
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_llm_summaries_work '
+      'ON llm_summaries(work_id)',
     );
   }
 
@@ -723,6 +752,9 @@ class DatabaseService {
 
     // 読書メモ（v24 追加）
     await _createReadingNotes(db);
+
+    // LLM要約キャッシュ（v25 追加）
+    await _createLlmSummaries(db);
 
     await db.execute('CREATE INDEX idx_history_workid ON history(work_id)');
     await db.execute(
@@ -1321,6 +1353,12 @@ class DatabaseService {
       // ユーザー生成データのため Google Drive バックアップ対象。
       await _createReadingNotes(db);
       debugPrint('[Migration v23->v24] reading_notes を追加');
+    }
+    if (oldVersion < 25) {
+      // LLM要約キャッシュ（本文・モデルから再生成可能なため
+      // Google Drive バックアップ対象外）。
+      await _createLlmSummaries(db);
+      debugPrint('[Migration v24->v25] llm_summaries を追加');
     }
   }
 

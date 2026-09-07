@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:llamadart/llamadart.dart' show LlamaChatMessage, LlamaChatRole;
 
 import '../novel_model.dart' show NovelTextData;
@@ -395,6 +398,25 @@ class LlmSummaryService {
     } catch (_) {
       return null;
     }
+  }
+
+  /// キャッシュ照会用の入力フィンガープリント（M6）。
+  ///
+  /// プロンプト入力（タイトル + タグ + 正規化本文の均衡抜粋）の SHA-256。
+  /// 本文・タイトル・タグのいずれかが変わればキャッシュミスになる。
+  static String computeSourceFingerprint({
+    required String title,
+    List<String> tags = const [],
+    required String body,
+  }) {
+    final excerpt = extractBalancedBody(normalizeNovelBody(body));
+    final tagLine = tags
+        .map((t) => t.trim())
+        .where((t) => t.isNotEmpty)
+        .join(',');
+    return sha256
+        .convert(utf8.encode('v2|$title|$tagLine|$excerpt'))
+        .toString();
   }
 
   /// 要約生成を一通り実行する（本文正規化 → プロンプト構築 → 生成 → 解析 → コピー検出）。

@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import '../services/local_llm_service.dart';
 import '../services/llm_model_preset.dart'
     show LlmInferencePreset, LlmModelChoice;
+import '../services/llm_summary_cache_service.dart';
 import '../services/llm_summary_service.dart';
 
 /// 小説のAI要約を表示するボトムシート（実験機能）。
@@ -23,6 +24,7 @@ class LlmSummarySheet extends StatefulWidget {
     required this.description,
     this.tags = const [],
     required this.resolveBody,
+    this.workId,
     this.availableModels = const <LlmModelChoice>[],
     this.serviceFactory,
   });
@@ -47,6 +49,9 @@ class LlmSummarySheet extends StatefulWidget {
   /// null / 空を返すと「小説本文を取得できないため、AI要約を生成できません。」
   /// を表示する（作者説明へのフォールバックはしない）。
   final Future<String?> Function() resolveBody;
+
+  /// 作品ID（M6・要約キャッシュ用）。null ならキャッシュしない。
+  final int? workId;
 
   @override
   State<LlmSummarySheet> createState() => _LlmSummarySheetState();
@@ -111,6 +116,28 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
         });
         return;
       }
+      // M6: キャッシュ照会（モデルIDはモデルパスのファイル名）。
+      final fingerprint = LlmSummaryService.computeSourceFingerprint(
+        title: widget.title,
+        tags: widget.tags,
+        body: body,
+      );
+      final modelId = p.basename(_activeModelPath);
+      if (widget.workId != null) {
+        final cached = await LlmSummaryCacheService().get(
+          workId: widget.workId!,
+          modelId: modelId,
+          sourceFingerprint: fingerprint,
+        );
+        if (cached != null) {
+          if (!mounted) return;
+          setState(() {
+            _phase = _SheetPhase.done;
+            _result = cached;
+          });
+          return;
+        }
+      }
       final result = await LlmSummaryService.generate(
         service: svc,
         title: widget.title,
@@ -133,6 +160,19 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
         _phase = _SheetPhase.done;
         _result = result;
       });
+      // M6: 生成結果をキャッシュに保存（失敗は無視・表示を妨げない）。
+      if (widget.workId != null) {
+        final modelFileHash = await LlmSummaryCacheService.computeModelFileHash(
+          _activeModelPath,
+        );
+        await LlmSummaryCacheService().save(
+          workId: widget.workId!,
+          modelId: modelId,
+          modelFileHash: modelFileHash,
+          sourceFingerprint: fingerprint,
+          result: result,
+        );
+      }
     } on LlmCancelledException {
       if (!mounted) return;
       setState(() {
