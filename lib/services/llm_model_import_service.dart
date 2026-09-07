@@ -224,8 +224,11 @@ class LlmModelImportService {
       total = await src.length();
     }
 
-    // 4. アプリ内部ディレクトリ（models/llm/）へ逐次コピー。
-    final dir = await (destDirResolver?.call() ?? LlmModelPaths.defaultDir());
+    // 4. アプリ内部ディレクトリ（models/llm/imported/）へ逐次コピー。
+    //    アプリ内ダウンロード（M4）は models/llm/managed/ に置くため、
+    //    ピッカー取り込みは imported サブディレクトリへ分離する。
+    //    （既定ディレクトリ直下の旧ファイルも discover 継続して検出される）
+    final dir = await (destDirResolver?.call() ?? LlmModelPaths.importedDir());
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }

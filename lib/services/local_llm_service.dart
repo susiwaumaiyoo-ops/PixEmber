@@ -327,7 +327,11 @@ class LocalLlmService {
   }
 }
 
-/// モデルファイルの配置・解決（手動配置前提: 自動ダウンロードはしない）。
+/// モデルファイルの配置・解決（M4 以降はアプリ内ダウンロードに対応）。
+///
+/// - 既定ディレクトリ: `documents/models/llm`（既存ファイル・非再帰）
+/// - 取り込み（カスタム）: `documents/models/llm/imported`
+/// - アプリ内ダウンロード（管理）: `cache/models/llm/managed`
 class LlmModelPaths {
   LlmModelPaths._();
 
@@ -351,19 +355,72 @@ class LlmModelPaths {
     return dir;
   }
 
-  /// [dirPath]（既定は既定ディレクトリ）配下の *.gguf ファイルパス一覧（ソート済み）。
+  /// アプリ内ダウンロード（M4）の管理ディレクトリ:
+  /// `getApplicationCacheDirectory()/models/llm/managed`。
+  /// 存在しなければ作成する。
+  ///
+  /// 注意: Android ではキャッシュディレクトリは OS により消去され得る
+  /// （再ダウンロードで復旧する）。
+  static Future<Directory> managedDir() async {
+    final cache = await getApplicationCacheDirectory();
+    final dir = Directory(p.join(cache.path, 'models', 'llm', 'managed'));
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
+  }
+
+  /// ピッカー取り込み（カスタム）モデルのディレクトリ:
+  /// `defaultDir()/imported`（= `documents/models/llm/imported`）。
+  /// 存在しなければ作成する。
+  static Future<Directory> importedDir() async {
+    final base = await defaultDir();
+    final dir = Directory(p.join(base.path, 'imported'));
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
+  }
+
+  /// GGUF ファイルパス一覧（ソート済み・重複排除）。
+  ///
+  /// [dirPath] 指定時はその 1 ディレクトリ配下（非再帰）をスキャンする
+  /// （既存挙動）。未指定時は 既定ディレクトリ（再帰: imported/ 含む）と
+  /// 管理ディレクトリ（再帰） をスキャンする。
   /// 読み取り失敗時は空リストを返す（例外は出さない）。
   static Future<List<String>> discover({String? dirPath}) async {
     try {
-      final dir = dirPath != null ? Directory(dirPath) : await defaultDir();
-      if (!await dir.exists()) return const [];
-      final entities = await dir.list().toList();
-      final files = entities.whereType<File>().toList()
-        ..sort((a, b) => a.path.compareTo(b.path));
-      return files
-          .where((f) => f.path.toLowerCase().endsWith('.gguf'))
-          .map((f) => f.path)
-          .toList();
+      if (dirPath != null) {
+        final dir = Directory(dirPath);
+        if (!await dir.exists()) return const [];
+        final files =
+            dir
+                .listSync(followLinks: false)
+                .whereType<File>()
+                .where((f) => f.path.toLowerCase().endsWith('.gguf'))
+                .map((f) => f.path)
+                .toList()
+              ..sort((a, b) => a.compareTo(b));
+        return files;
+      }
+      final found = <String>{};
+      void scan(Directory dir) {
+        if (!dir.existsSync()) return;
+        try {
+          for (final e in dir.listSync(recursive: true, followLinks: false)) {
+            if (e is File && e.path.toLowerCase().endsWith('.gguf')) {
+              found.add(e.path);
+            }
+          }
+        } catch (_) {
+          // 読み取りできないディレクトリはスキップ。
+        }
+      }
+
+      // 既定ディレクトリの再帰スキャンで直下（既存）+ imported/ を網羅。
+      scan(await defaultDir());
+      scan(await managedDir());
+      return found.toList()..sort((a, b) => a.compareTo(b));
     } catch (_) {
       return const [];
     }

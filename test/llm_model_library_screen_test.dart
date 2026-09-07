@@ -9,8 +9,16 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llamadart/llamadart.dart'
+    show
+        ModelCacheEntry,
+        ModelDownloadManager,
+        ModelDownloadProgress,
+        ModelLoadOptions,
+        ModelSource;
 import 'package:pixiv_viewer/screens/llm_model_library_screen.dart';
 import 'package:pixiv_viewer/services/llm_model_catalog_service.dart';
+import 'package:pixiv_viewer/services/llm_model_download_service.dart';
 import 'package:pixiv_viewer/services/local_llm_service.dart';
 import 'package:pixiv_viewer/widgets/llm_model_card.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -82,16 +90,111 @@ const String fakeCatalogJson = r'''
 }
 ''';
 
+// E2E 専用カタログ: 0.8B 単一エントリ（サイズ 100B = fake の書き込み量）。
+const String tinyCatalogJson = r'''
+{
+  "catalog_version": 1,
+  "models": [
+    {
+      "id": "qwen35-0-8b-abliterated-q4km",
+      "displayName": "Qwen 3.5 0.8B Abliterated (Q4_K_M)",
+      "family": "Qwen 3.5",
+      "parameterCount": "0.8B",
+      "quantization": "Q4_K_M",
+      "repositoryId": "mradermacher/Huihui-Qwen3.5-0.8B-abliterated-GGUF",
+      "revision": "2fabc82874616f44cdc494ec8ddc0e8ee10654b3",
+      "fileName": "Huihui-Qwen3.5-0.8B-abliterated.Q4_K_M.gguf",
+      "expectedSizeBytes": 100,
+      "sha256": "411e0f945a5d57c63f33bcb5bfa4d5c2711d1ce28cb7635201ac0c311a7dfdf0",
+      "licenseId": "apache-2.0",
+      "description": "軽量モデル（E2E fake）",
+      "attribution": "Huihui / mradermacher",
+      "reducedSafetyAlignment": true,
+      "platforms": ["android"],
+      "isRecommended": false,
+      "highRamWarning": false
+    }
+  ]
+}
+''';
+
+/// ModelDownloadManager fake（ウィジェットテスト用）。
+///
+/// managedDir/sub-{n}/{fileName} に 100B を同期書き込みし entry を返す
+/// （ネットワーク不使用。FakeAsync ゾーンでも pump されない実 I/O なし）。
+class _FakeDlManager implements ModelDownloadManager {
+  _FakeDlManager(this.managedDir);
+
+  final Directory managedDir;
+  int ensureCalls = 0;
+
+  @override
+  Future<ModelCacheEntry> ensureModel(
+    ModelSource source, {
+    ModelLoadOptions options = ModelLoadOptions.defaults,
+    void Function(ModelDownloadProgress)? onProgress,
+  }) async {
+    ensureCalls++;
+    final dir = Directory('${managedDir.path}/sub-$ensureCalls');
+    dir.createSync(recursive: true);
+    final file = File('${dir.path}/${source.fileName}');
+    file.writeAsBytesSync(List.filled(100, 0x42));
+    onProgress?.call(
+      const ModelDownloadProgress(receivedBytes: 50, totalBytes: 100),
+    );
+    onProgress?.call(
+      const ModelDownloadProgress(receivedBytes: 100, totalBytes: 100),
+    );
+    return ModelCacheEntry(
+      sourceCanonicalKey: source.canonicalKey,
+      cacheKey: source.cacheKey,
+      fileName: source.fileName,
+      filePath: file.path,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      bytes: 100,
+      sha256: options.sha256,
+    );
+  }
+
+  @override
+  Future<ModelCacheEntry?> get(
+    String cacheKey, {
+    String? cacheDirectory,
+  }) async => null;
+
+  @override
+  Future<List<ModelCacheEntry>> list({String? cacheDirectory}) async =>
+      const [];
+
+  @override
+  Future<void> remove(String cacheKey, {String? cacheDirectory}) async {}
+
+  @override
+  Future<void> clear({String? cacheDirectory}) async {}
+
+  @override
+  Future<List<ModelCacheEntry>> prune({
+    Duration? maxAge,
+    int? maxBytes,
+    String? cacheDirectory,
+  }) async => const [];
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory tmp;
   late Directory modelDir;
+  late Directory managedDir;
 
   setUp(() async {
     tmp = await Directory.systemTemp.createTemp('llm_lib_test_');
     modelDir = Directory('${tmp.path}/models/llm');
     await modelDir.create(recursive: true);
+    // M4 アプリ内ダウンロードの保存先（fake）。
+    managedDir = Directory('${tmp.path}/cache/models/llm/managed');
+    await managedDir.create(recursive: true);
     // カタログの 2B ファイル（ダウンロード済みの判定）。
     await File(
       '${modelDir.path}/Huihui-Qwen3.5-2B-abliterated.Q4_K_M.gguf',
@@ -120,6 +223,23 @@ void main() {
           jsonReader: () async => fakeCatalogJson,
         ),
         modelDirProvider: () async => modelDir,
+        // FakeAsync ゾーンでは未 mock の path_provider チャネルは
+        // 完了せず pumpAndSettle が永久待機するため注入する。
+        managedDirProvider: () async => modelDir,
+      ),
+    );
+  }
+
+  /// M4 ダウンロード E2E 用: ダウンロードサービス + 管理ディレクトリを注入。
+  Widget appForDownload(LlmModelDownloadService svc) {
+    return MaterialApp(
+      home: LlmModelLibraryScreen(
+        catalogService: LlmModelCatalogService(
+          jsonReader: () async => tinyCatalogJson,
+        ),
+        modelDirProvider: () async => modelDir,
+        managedDirProvider: () async => managedDir,
+        downloadService: svc,
       ),
     );
   }
@@ -241,5 +361,62 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('ライセンス: apache-2.0'), findsOneWidget);
+  });
+
+  testWidgets('ダウンロードE2E: 確認→DL→ready→ダウンロード済みへ移動', (tester) async {
+    SharedPreferences.setMockInitialValues({kLlmAbliteratedConsentKey: true});
+    final mgr = _FakeDlManager(managedDir);
+    final svc = LlmModelDownloadService(
+      manager: mgr,
+      managedDirProvider: () async => managedDir,
+    );
+
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    await tester.pumpWidget(appForDownload(svc));
+    await tester.pumpAndSettle();
+
+    // 0.8B カード（未ダウンロード）→ ダウンロードボタン。
+    final card = find.ancestor(
+      of: find.text('Qwen 3.5 0.8B Abliterated (Q4_K_M)'),
+      matching: find.byType(LlmModelCard),
+    );
+    await tester.tap(find.descendant(of: card, matching: find.text('ダウンロード')));
+    await tester.pumpAndSettle();
+
+    // 確認ダイアログ → ダウンロード開始。
+    expect(find.text('ダウンロードを確認'), findsOneWidget);
+    await tester.tap(find.text('ダウンロードする'));
+    await tester.pumpAndSettle();
+
+    // fake は同期完了 → ready → ダウンロード済みセクションへ移動。
+    expect(mgr.ensureCalls, 1);
+    final downloadedCard = find.ancestor(
+      of: find.text('Qwen 3.5 0.8B Abliterated (Q4_K_M)'),
+      matching: find.byType(LlmModelCard),
+    );
+    expect(
+      find.descendant(of: downloadedCard, matching: find.text('ダウンロード済み')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: downloadedCard, matching: find.text('モデルとして選択')),
+      findsOneWidget,
+    );
+
+    // モデルとして選択 → prefs に managed 実パスが保存される。
+    await tester.tap(
+      find.descendant(of: downloadedCard, matching: find.text('モデルとして選択')),
+    );
+    await tester.pumpAndSettle();
+
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(LlmModelPaths.prefsKey);
+    expect(saved, isNotNull);
+    expect(
+      saved!.endsWith('Huihui-Qwen3.5-0.8B-abliterated.Q4_K_M.gguf'),
+      isTrue,
+    );
+    expect(saved.contains('cache'), isTrue);
   });
 }

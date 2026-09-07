@@ -7,8 +7,10 @@
 //
 // 初回表示時に abliterated（安全アライメント軽減）モデルの同意ダイアログ
 // を表示し、SharedPreferences に永続化する（同意なしでは画面を閉じる）。
-// ダウンロード本体は M4 で実装。本画面の「ダウンロード」は案内のみ。
+// ダウンロードは LlmModelDownloadService（M4・llamadart 再利用）が担当し、
+// 本画面は「確認ダイアログ→キュー投入→進捗/キャンセル/再試行表示」を行う。
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -17,6 +19,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/llm_model_catalog_entry.dart';
 import '../services/llm_model_catalog_service.dart';
+import '../services/llm_model_download_service.dart';
 import '../services/local_llm_service.dart';
 import '../widgets/llm_model_card.dart';
 
@@ -36,14 +39,25 @@ class LlmModelLibraryScreen extends StatefulWidget {
     super.key,
     this.catalogService,
     this.modelDirProvider,
+    this.managedDirProvider,
+    this.downloadService,
   });
 
   /// テスト注入（既定: assets/llm_models.json を読み込む実サービス）。
   final LlmModelCatalogService? catalogService;
 
-  /// テスト注入: モデルファイルのディレクトリ
+  /// テスト注入: 既定モデルディレクトリの提供
   /// （既定: LlmModelPaths.defaultDir() = .../models/llm）。
   final Future<Directory> Function()? modelDirProvider;
+
+  /// テスト注入: 管理ダウンロードディレクトリの提供
+  /// （既定: LlmModelPaths.managedDir() = app cache /models/llm/managed）。
+  /// プラグイン未登録（テスト等）で取得に失敗した場合はスキップする。
+  final Future<Directory> Function()? managedDirProvider;
+
+  /// テスト注入: ダウンロードサービス
+  /// （既定: LlmModelDownloadService.instance）。
+  final LlmModelDownloadService? downloadService;
 
   @override
   State<LlmModelLibraryScreen> createState() => _LlmModelLibraryScreenState();
@@ -51,12 +65,16 @@ class LlmModelLibraryScreen extends StatefulWidget {
 
 class _LlmModelLibraryScreenState extends State<LlmModelLibraryScreen> {
   LlmModelCatalog? _catalog;
-  String? _modelDir;
   List<String> _localFiles = const [];
   String? _selectedPath;
   bool _consentGiven = false;
   bool _loading = true;
   String? _loadError;
+
+  StreamSubscription<LlmModelDownloadTask>? _taskSub;
+
+  LlmModelDownloadService get _dlService =>
+      widget.downloadService ?? LlmModelDownloadService.instance;
 
   @override
   void initState() {
@@ -64,23 +82,44 @@ class _LlmModelLibraryScreenState extends State<LlmModelLibraryScreen> {
     _load();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _taskSub?.cancel();
+    _taskSub = _dlService.tasks.listen((task) {
+      if (!mounted) return;
+      setState(() {});
+      // 完了したらファイルを再収集し「ダウンロード済み」へ移動させる。
+      if (task.stage == LlmModelDownloadStage.ready) {
+        _load();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _taskSub?.cancel();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final dir = await (widget.modelDirProvider ?? LlmModelPaths.defaultDir)();
+      final baseDir =
+          await (widget.modelDirProvider ?? LlmModelPaths.defaultDir)();
+      final managedDir = await _safeDir(
+        widget.managedDirProvider ?? LlmModelPaths.managedDir,
+      );
       final catalog = await (widget.catalogService ?? LlmModelCatalogService())
           .load();
       // 同期 I/O を使う: testWidgets の FakeAsync ゾーンでは非同期ファイル I/O
       // は pump されず pumpAndSettle が永遠に待機する。
-      final files = <String>[
-        if (dir.existsSync())
-          for (final e in dir.listSync())
-            if (e is File && e.path.toLowerCase().endsWith('.gguf')) e.path,
-      ]..sort((a, b) => a.compareTo(b));
+      // 既定ディレクトリ（imported/ サブディレクトリ含む）と管理ディレクトリ
+      // を再帰収集し重複排除する。
+      final files = _collectFiles([baseDir, ?managedDir]);
       if (!mounted) return;
       setState(() {
         _catalog = catalog;
-        _modelDir = dir.path;
         _localFiles = files;
         _selectedPath = prefs.getString(LlmModelPaths.prefsKey);
         _consentGiven = prefs.getBool(kLlmAbliteratedConsentKey) ?? false;
@@ -97,6 +136,34 @@ class _LlmModelLibraryScreenState extends State<LlmModelLibraryScreen> {
         _loadError = 'モデル一覧の読み込みに失敗しました: $e';
       });
     }
+  }
+
+  /// ディレクトリ取得に失敗した場合は null（プラグイン未登録のテスト等）。
+  Future<Directory?> _safeDir(Future<Directory> Function() provider) async {
+    try {
+      return await provider();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 複数ディレクトリの *.gguf を同期 I/O で再帰収集する
+  /// （重複排除・ソート済み）。
+  List<String> _collectFiles(List<Directory> dirs) {
+    final found = <String>{};
+    for (final dir in dirs) {
+      if (!dir.existsSync()) continue;
+      try {
+        for (final e in dir.listSync(recursive: true, followLinks: false)) {
+          if (e is File && e.path.toLowerCase().endsWith('.gguf')) {
+            found.add(e.path);
+          }
+        }
+      } catch (_) {
+        // 読み取りできないディレクトリはスキップ。
+      }
+    }
+    return found.toList()..sort((a, b) => a.compareTo(b));
   }
 
   /// abliterated（安全アライメント軽減）モデルの初回同意。
@@ -166,17 +233,19 @@ class _LlmModelLibraryScreenState extends State<LlmModelLibraryScreen> {
         .toList(growable: false);
   }
 
-  /// ダウンロード済み（カタログ）モデル。
+  /// ファイル名 → 実ファイルパス（ローカルコレクション）。
+  Map<String, String> get _pathByBasename => {
+    for (final f in _localFiles) p.basename(f): f,
+  };
+
+  /// ダウンロード済み（カタログ）モデル（実ファイルパスで表示）。
   List<_CatalogModelOnDisk> get _downloadedCatalog {
     final catalog = _catalog;
-    final dir = _modelDir;
-    if (catalog == null || dir == null) return const [];
-    final names = _localFiles.map(p.basename).toSet();
+    if (catalog == null) return const [];
+    final byName = _pathByBasename;
     return catalog.downloadable
-        .where((e) => names.contains(e.fileName))
-        .map(
-          (e) => _CatalogModelOnDisk(entry: e, path: p.join(dir, e.fileName)),
-        )
+        .where((e) => byName.containsKey(e.fileName))
+        .map((e) => _CatalogModelOnDisk(entry: e, path: byName[e.fileName]!))
         .toList(growable: false);
   }
 
@@ -204,16 +273,106 @@ class _LlmModelLibraryScreenState extends State<LlmModelLibraryScreen> {
     }
   }
 
-  /// ダウンロード（M3 では案内のみ。実装は M4）。
-  void _onDownload(LlmModelCatalogEntry e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '「${e.displayName}」のアプリ内ダウンロードは今後の更新で利用できます。'
-          '現在は「小説AI要約（実験）」のモデル選択シートからGGUFを取り込めます。',
+  /// 推奨（未ダウンロード）モデルのカード（ダウンロード状態を反映）。
+  Widget _pendingCard(LlmModelCatalogEntry e) {
+    final t = _dlService.taskFor(e.id);
+    final inFlight = t != null && (t.isQueued || t.isRunning);
+    final retryable =
+        t != null &&
+        (t.stage == LlmModelDownloadStage.failed ||
+            t.stage == LlmModelDownloadStage.cancelled);
+    return LlmModelCard(
+      title: e.displayName,
+      subtitle:
+          '${e.quantization}・${LlmModelCatalogService.formatBytes(e.expectedSizeBytes)}・${e.licenseId}',
+      description: e.description,
+      badge: e.isRecommended ? '推奨' : null,
+      warning: e.highRamWarning ? 'RAM使用量が大きいです（3GB以上推奨）' : null,
+      progress: inFlight ? t.progress : null,
+      progressLabel: inFlight || retryable ? _taskProgressLabel(t) : null,
+      error: t?.stage == LlmModelDownloadStage.failed ? t?.errorMessage : null,
+      onDownload: (inFlight || retryable) ? null : () => _onDownload(e),
+      onRetry: retryable ? () => _dlService.retry(e.id) : null,
+      onCancel: inFlight ? () => _dlService.cancel(e.id) : null,
+      onDetails: () => _showEntryDetails(e),
+    );
+  }
+
+  /// タスク状態の進捗ラベルテキスト。
+  String? _taskProgressLabel(LlmModelDownloadTask? t) {
+    if (t == null) return null;
+    switch (t.stage) {
+      case LlmModelDownloadStage.queued:
+        return '待機中…';
+      case LlmModelDownloadStage.resolving:
+        return 'モデル情報を解析中…';
+      case LlmModelDownloadStage.checkingCache:
+        return 'キャッシュを確認中…';
+      case LlmModelDownloadStage.downloading:
+        final pct = (t.progress ?? 0.0) * 100;
+        final total = t.totalBytes;
+        final suffix = (total != null && total > 0)
+            ? '（${LlmModelCatalogService.formatBytes(t.receivedBytes ?? 0)} / '
+                  '${LlmModelCatalogService.formatBytes(total)}）'
+            : '';
+        return 'ダウンロード中 ${pct.toStringAsFixed(0)}%$suffix';
+      case LlmModelDownloadStage.verifying:
+        return 'SHA-256・サイズ検証中…';
+      case LlmModelDownloadStage.failed:
+        return null;
+      case LlmModelDownloadStage.cancelled:
+        return 'キャンセルしました。再試行できます。';
+      case LlmModelDownloadStage.idle:
+      case LlmModelDownloadStage.ready:
+        return null;
+    }
+  }
+
+  /// ダウンロード確認ダイアログ → キュー投入（M4）。
+  Future<void> _onDownload(LlmModelCatalogEntry e) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1C),
+        title: const Text(
+          'ダウンロードを確認',
+          style: TextStyle(color: Colors.white, fontSize: 16),
         ),
+        content: SizedBox(
+          width: 300,
+          child: Text(
+            '「${e.displayName}」を端末にダウンロードします。\n\n'
+            'ダウンロードサイズ: ${LlmModelCatalogService.formatBytes(e.expectedSizeBytes)}\n'
+            'RAM目安: ${LlmModelCatalogService.formatBytes(e.estimatedRamBytes)}\n\n'
+            '・SHA-256 とサイズを検証して安全に保存します\n'
+            '・中断しても再開できます（1件ずつ FIFO）\n'
+            '・すべての処理は端末内で完結します',
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              height: 1.5,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('キャンセル', style: TextStyle(color: Colors.white70)),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.pinkAccent,
+              foregroundColor: Colors.black,
+            ),
+            child: const Text('ダウンロードする'),
+          ),
+        ],
       ),
     );
+    if (confirmed == true && mounted) {
+      _dlService.enqueue(e);
+    }
   }
 
   void _showEntryDetails(LlmModelCatalogEntry e) {
@@ -390,19 +549,7 @@ class _LlmModelLibraryScreenState extends State<LlmModelLibraryScreen> {
                 if (_pendingCatalog.isEmpty)
                   _emptyText()
                 else
-                  for (final e in _pendingCatalog)
-                    LlmModelCard(
-                      title: e.displayName,
-                      subtitle:
-                          '${e.quantization}・${LlmModelCatalogService.formatBytes(e.expectedSizeBytes)}・${e.licenseId}',
-                      description: e.description,
-                      badge: e.isRecommended ? '推奨' : null,
-                      warning: e.highRamWarning
-                          ? 'RAM使用量が大きいです（3GB以上推奨）'
-                          : null,
-                      onDownload: () => _onDownload(e),
-                      onDetails: () => _showEntryDetails(e),
-                    ),
+                  for (final e in _pendingCatalog) _pendingCard(e),
                 _sectionHeader('ダウンロード済み'),
                 if (_downloadedCatalog.isEmpty)
                   _emptyText()

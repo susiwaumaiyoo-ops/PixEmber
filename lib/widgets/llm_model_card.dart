@@ -1,8 +1,9 @@
-// モデルライブラリカード（M3）。
+// モデルライブラリカード（M3 / M4 でダウンロード進捗表示を追加）。
 //
 // 純粋表示ウィジェット。データのマッピングは画面側（llm_model_library_screen）
 // が行う。3 形態（推奨: 未ダウンロード / ダウンロード済み / カスタム: 取り込み）
-// をサポートする。
+// をサポートし、ダウンロード中は進捗バーとキャンセルボタン、
+// 失敗・キャンセル後は再試行ボタンを表示する。
 
 import 'package:flutter/material.dart';
 
@@ -14,8 +15,13 @@ class LlmModelCard extends StatelessWidget {
     this.description,
     this.badge,
     this.warning,
+    this.error,
+    this.progress,
+    this.progressLabel,
     this.isSelected = false,
     this.onDownload,
+    this.onRetry,
+    this.onCancel,
     this.onSelect,
     this.onDetails,
   });
@@ -30,8 +36,24 @@ class LlmModelCard extends StatelessWidget {
   /// 警告テキスト（高 RAM 要件など）。
   final String? warning;
 
+  /// エラーテキスト（ダウンロード失敗など）。
+  final String? error;
+
+  /// 進捗（0.0-1.0）。null の場合は進捗バーを表示しない。
+  final double? progress;
+
+  /// 進捗ラベル（例: 'ダウンロード中 42%（…）'）。
+  final String? progressLabel;
+
   final bool isSelected;
   final VoidCallback? onDownload;
+
+  /// 再試行（failed / cancelled 時）。
+  final VoidCallback? onRetry;
+
+  /// キャンセル（待機中・実行中）。
+  final VoidCallback? onCancel;
+
   final VoidCallback? onSelect;
   final VoidCallback? onDetails;
 
@@ -127,6 +149,48 @@ class LlmModelCard extends StatelessWidget {
               ),
             ),
           ],
+          if (progress != null) ...[
+            const SizedBox(height: 10),
+            ClipRect(
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 6,
+                backgroundColor: const Color(0xFF333333),
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  Colors.pinkAccent,
+                ),
+              ),
+            ),
+            if (progressLabel != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                progressLabel!,
+                style: const TextStyle(color: Colors.white54, fontSize: 11.5),
+              ),
+            ],
+          ],
+          if (error != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  size: 14,
+                  color: Colors.redAccent,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    error!,
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
@@ -145,6 +209,20 @@ class LlmModelCard extends StatelessWidget {
                   ),
                   icon: const Icon(Icons.download, size: 18),
                   label: const Text('ダウンロード', style: TextStyle(fontSize: 13)),
+                ),
+              if (onRetry != null)
+                FilledButton.icon(
+                  onPressed: onRetry,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.pinkAccent,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                  ),
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('再試行', style: TextStyle(fontSize: 13)),
                 ),
               if (onSelect != null)
                 OutlinedButton(
@@ -165,6 +243,19 @@ class LlmModelCard extends StatelessWidget {
                     isSelected ? '現在のモデル' : 'モデルとして選択',
                     style: const TextStyle(fontSize: 13),
                   ),
+                ),
+              if (onCancel != null)
+                OutlinedButton(
+                  onPressed: onCancel,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.orangeAccent,
+                    side: const BorderSide(color: Colors.orangeAccent),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                  ),
+                  child: const Text('キャンセル', style: TextStyle(fontSize: 13)),
                 ),
               if (onDetails != null)
                 TextButton(
