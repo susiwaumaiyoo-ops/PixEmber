@@ -1,3 +1,7 @@
+> ⚠️ 陳腐化注記（2026-09-11）: 本ドキュメントは llamadart 0.8.22 への移行計画を記録した**歴史文書**です。
+> 現行のローカルLLM推論は llamadart を用いず、`libnative_llm.so`（llama.cpp C API ラッパ）を Dart FFI 経由で呼ぶ設計です。
+> 最新の実装構成は [`docs/ARCHITECTURE_LLM.md`](../ARCHITECTURE_LLM.md) を参照してください。
+
 # PixEmber Phase L「ローカルLLMランタイム（llamadart）運用ゲート」
 
 > 目的: 小説AI要約PoCのローカルLLMランタイムを `llamadart` に固定した運用手順

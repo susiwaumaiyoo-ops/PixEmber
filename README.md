@@ -80,6 +80,11 @@ fullscreen image viewer.
   - A single settings screen (Drawer → Settings) groups saved searches, AI recommendation entries, novel reader settings (same values as the in-reader HUD), library screens, and backup management.
   - Drawer「設定」から1つの設定画面で、保存した検索・AIレコメンド入口・小説リーダー設定（リーダー内HUDと同一の値を共有）・ライブラリ画面・バックアップ管理をまとめて操作できます。
 
+- **On-Device AI Novel Summary (端末内AI小説要約)**
+  - Summarize novels entirely on-device with a local GGUF model (llama.cpp via a native FFI layer), with a manual "summary now" sheet and an optional background auto-summary of subscribed tags (charging + Wi-Fi gated, cancellable, resumable). Nothing is uploaded for inference.
+  - ローカルGGUFモデル（llama.cpp をネイティブFFI層経由）で小説を端末内だけで要約。手動の「今すぐ要約」シートと、購読タグの自動要約（充電＋Wi-Fi条件・中断可・再開可）に対応。推論のための外部送信はありません。
+  - 設計詳細: [`docs/ARCHITECTURE_LLM.md`](docs/ARCHITECTURE_LLM.md)
+
 - **Cloud Sync (クラウド同期)**
   - Automatic backup of your data to Google Drive.
   - データをGoogle Driveへ自動バックアップ。

@@ -1,10 +1,12 @@
 # PixEmber — 開発ステータス
 
-最終更新: 2026-09-04（非AI機能パック Phase N1〜N8 完了）
+最終更新: 2026-09-11（Phase 9-B 自動要約 / Phase L ローカルLLM 整備・留守中バッチ作業5）
 
 ## 現在の状態
-- DB バージョン: 24（N6 で reading_notes を非破壊的に追加。ユーザー生成データのため Google Drive バックアップ対象）
-- テスト: 493 件パス、flutter analyze クリーン
+- DB バージョン: 26（v25 で llm_summaries / v26 で auto_summary_runs・auto_summary_items を追加。いずれもテーブル追加のみ・既存データ不変）
+- テスト: 734 件パス、flutter analyze クリーン
+- ローカルLLM 推論: llamadart ではなく `libnative_llm.so`（llama.cpp C API ラッパ）を Dart FFI 経由で呼ぶ設計に移行済み。詳細は [`docs/ARCHITECTURE_LLM.md`](../ARCHITECTURE_LLM.md)。
+- 自動要約（Phase 9-B）: 進行状態は STATE.md 参照（B2-4+5 完了・B2-6 実機検証は未実施）
 - 検索UX: ボトム3タブ（イラスト / 小説 / フィーリング発掘）を維持。検索バーフォーカス→アシストビュー領域置換（オーバーレイ不使用）
 
 ## 完成済み機能パック
