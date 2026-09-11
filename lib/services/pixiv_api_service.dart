@@ -122,7 +122,10 @@ class PixivApiService {
       } else {
         debugPrint("❌❌❌ [OAuth Refresh ERROR] Pixivトークンリフレッシュに失敗しました ❌❌❌");
         debugPrint("ステータスコード: ${response.statusCode}");
-        debugPrint("レスポンス内容: ${response.body}");
+        // レスポンスボディにはトークンが混入しうるため debug ビルドのみ出力する。
+        if (kDebugMode) {
+          debugPrint("レスポンス内容: ${response.body}");
+        }
         throw Exception(
           "トークンのリフレッシュに失敗しました: ${response.statusCode}\n${response.body}",
         );
@@ -170,14 +173,14 @@ class PixivApiService {
       return response.body;
     } else if (response.statusCode == 429) {
       debugPrint('[API] ERROR Status: 429 (Rate Limited), endpoint: $endpoint');
-      debugPrint('[API] ERROR Body: ${response.body}');
+      if (kDebugMode) debugPrint('[API] ERROR Body: ${response.body}');
       throw RateLimitException(
         'Pixiv APIのレート制限（429）に達しました。しばらく時間を置いてから再試行してください。',
         statusCode: 429,
       );
     } else if (response.statusCode == 401) {
       debugPrint('[API] ERROR Status: 401 (Unauthorized), endpoint: $endpoint');
-      debugPrint('[API] ERROR Body: ${response.body}');
+      if (kDebugMode) debugPrint('[API] ERROR Body: ${response.body}');
       throw AuthException(
         'Pixiv APIの認証に失敗しました（401）。再ログインが必要です。',
         statusCode: 401,
@@ -186,7 +189,7 @@ class PixivApiService {
       debugPrint(
         '[API] ERROR Status: ${response.statusCode}, endpoint: $endpoint',
       );
-      debugPrint('[API] ERROR Body: ${response.body}');
+      if (kDebugMode) debugPrint('[API] ERROR Body: ${response.body}');
       throw Exception('Pixiv APIエラー: ${response.statusCode}\n${response.body}');
     }
   }

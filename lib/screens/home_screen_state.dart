@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../illust_model.dart';
@@ -1443,9 +1444,14 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
       }
       throw Exception('リフレッシュトークンが取得できませんでした。');
     } else {
-      // トークン・認証コード・code_verifier は出力しない
-      debugPrint('[PKCE] token exchange failed: status=${response.statusCode}');
-      debugPrint('[PKCE] response body: ${response.body}');
+      // トークン・認証コード・code_verifier は出力しない。
+      // レスポンスボディにもトークンが混入しうるため debug ビルドのみ出力する。
+      if (kDebugMode) {
+        debugPrint(
+          '[PKCE] token exchange failed: status=${response.statusCode}',
+        );
+        debugPrint('[PKCE] response body (debug-only): ${response.body}');
+      }
       throw Exception(
         'トークン交換に失敗しました (status: ${response.statusCode})\n'
         '${response.body}',
