@@ -1,17 +1,17 @@
 // LLM モデルのアプリ内ダウンロードサービス（M4）。
 //
-// llamadart 0.8.22 の DefaultModelDownloadManager（ModelDownloadManager 実装）を
-// 再利用し、カタログ（M2）の「検証済み」エントリ（isVerified: pin revision +
+// 純Dart再実装の DefaultModelDownloadManager（ModelDownloadManager 実装・
+// llm_model_download_manager.dart）を使い、カタログ（M2）の「検証済み」エントリ（isVerified: pin revision +
 // SHA-256 + 正確なサイズ）を HuggingFace の pin revision から端末にダウンロードする。
 //
 // 仕様:
 // - 同時ダウンロードは 1 件。それ以上は FIFO キューで待機。
-// - 中断は HTTP Range（.part ファイル）で再開可能（llamadart マネージャ実装）。
+// - 中断は HTTP Range（.part ファイル）で再開可能（マネージャ側で実装）。
 // - SHA-256 検証はマネージャが実施。本サービスは加えてカタログの正確な
 //   サイズ検証を行う（不一致は failed）。
 // - 保存先: LlmModelPaths.managedDir()
 //   （= getApplicationCacheDirectory()/models/llm/managed）。ファイルは
-//   llamadart の既定レイアウト {safeStem}-{cacheKey[:12]}/ 配下に入り、
+//   マネージャの既定レイアウト {safeStem}-{cacheKey[:12]}/ 配下に入り、
 //   コピーせずその場で利用する。
 // - 未検証エントリ（isVerified != true）の enqueue は ArgumentError で拒否。
 
@@ -19,7 +19,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
-import 'package:llamadart/llamadart.dart'
+
+import 'llm_model_download_manager.dart'
     show
         DefaultModelDownloadManager,
         ModelCacheEntry,

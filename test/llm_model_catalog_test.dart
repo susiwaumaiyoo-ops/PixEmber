@@ -142,8 +142,14 @@ void main() {
       TestWidgetsFlutterBinding.ensureInitialized();
       final catalog = await LlmModelCatalogService().load();
 
-      expect(catalog.catalogVersion, 1);
+      expect(catalog.catalogVersion, 2);
       expect(catalog.entries.length, 5);
+      // C-1: 全 5 点が i1-Q4_0（NPU 対応）で統一されていること。
+      for (final e in catalog.entries) {
+        expect(e.quantization, 'i1-Q4_0', reason: '${e.id} は Q4_0 化');
+        expect(e.npuCompatible, isTrue, reason: '${e.id} は HTP 対応');
+        expect(e.recommendedContext, 8192);
+      }
       expect(catalog.downloadable.length, 5, reason: '全 5 点が検証済みのはず');
       final gemma = catalog.entries
           .where((e) => e.family.startsWith('Gemma'))
@@ -168,43 +174,48 @@ void main() {
         isTrue,
       );
 
-      // 2B = 推奨モデル
+      // 2B = 推奨モデル（i1-Q4_0・NPU 対応）
       final rec = catalog.recommended;
       expect(rec, isNotNull);
       expect(rec!.parameterCount, '2B');
       expect(rec.id, 'qwen35-2b-abliterated-q4km');
+      expect(rec.quantization, 'i1-Q4_0');
+      expect(rec.npuCompatible, isTrue, reason: 'Q4_0 は HTP 対応');
+      expect(rec.recommendedContext, 8192, reason: '長文対応で 8192');
       expect(
         rec.repositoryId,
-        'mradermacher/Huihui-Qwen3.5-2B-abliterated-GGUF',
+        'mradermacher/Huihui-Qwen3.5-2B-abliterated-i1-GGUF',
       );
-      expect(rec.revision, 'f36848fead3fdda244cf60195c46993d23183d4c');
-      expect(rec.fileName, 'Huihui-Qwen3.5-2B-abliterated.Q4_K_M.gguf');
-      expect(rec.expectedSizeBytes, 1270809024);
+      expect(rec.revision, '47af544aea4a32d3bb4b3f73218598df425bbdc2');
+      expect(rec.fileName, 'Huihui-Qwen3.5-2B-abliterated.i1-Q4_0.gguf');
+      expect(rec.expectedSizeBytes, 1204847328);
       expect(
         rec.sha256,
-        'aa25eea787afe56a097268f7ed3460cb623e1901d2e89cd2b654cabb42f80636',
+        'b044ec56852762ecc820d98cd6f142f0461e177a813df45115c81e681328a865',
       );
       expect(rec.licenseId, 'apache-2.0');
 
       // 0.8B（CPU 優先）
       final e08 = catalog.entries.firstWhere((e) => e.parameterCount == '0.8B');
-      expect(e08.revision, '2fabc82874616f44cdc494ec8ddc0e8ee10654b3');
+      expect(e08.quantization, 'i1-Q4_0');
+      expect(e08.revision, '4fade25176da43736bf43f5f81433f1aff0e741f');
       expect(
         e08.sha256,
-        '411e0f945a5d57c63f33bcb5bfa4d5c2711d1ce28cb7635201ac0c311a7dfdf0',
+        '6e2064158251b99f41cb90312b1d4a187a9e296b6bf9fc89a7953acac0a12a52',
       );
-      expect(e08.expectedSizeBytes, 527503840);
+      expect(e08.expectedSizeBytes, 502141696);
       expect(e08.preferredGpuLayers, 0, reason: '0.8B は CPU 優先');
       expect(e08.maxOutputTokens, 512);
 
       // 4B（高 RAM 警告）
       final e4 = catalog.entries.firstWhere((e) => e.parameterCount == '4B');
-      expect(e4.revision, '4a5daa6fbefca5fe822dc65fcb95cc4576fa9720');
+      expect(e4.quantization, 'i1-Q4_0');
+      expect(e4.revision, 'd9b9a9650c8c52635ab327bb8ceea77bc705e6d7');
       expect(
         e4.sha256,
-        '3215d8dc35d2e190a7e0a592cb03be6c46c2a14a258ae35a9e738365084eba27',
+        '5816c76daaa47ae1e94e7b4178472ae4d2a5eddb2d702b3f76271c3f46aa1a5f',
       );
-      expect(e4.expectedSizeBytes, 2557007168);
+      expect(e4.expectedSizeBytes, 2549798464);
       expect(e4.highRamWarning, isTrue);
       expect(e4.maxOutputTokens, 1024);
 

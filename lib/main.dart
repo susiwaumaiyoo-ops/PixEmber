@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:workmanager/workmanager.dart';
 import 'screens/home_screen_widget.dart';
@@ -48,6 +49,8 @@ final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // FGS 通信用ポート初期化（TaskHandler↔UI）。
+  FlutterForegroundTask.initCommunicationPort();
   // Android のみ workmanager を初期化（バックグラウンド継続ダウンロード）
   if (Platform.isAndroid) {
     await Workmanager().initialize(callbackDispatcher);

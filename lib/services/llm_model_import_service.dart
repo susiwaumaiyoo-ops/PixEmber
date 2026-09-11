@@ -67,6 +67,8 @@ class LlmModelImportResult {
     required this.path,
     required this.fileName,
     required this.sizeBytes,
+    this.quantization,
+    this.npuCompatible = true,
   });
 
   /// アプリ内部にコピーされた GGUF の絶対パス。
@@ -77,6 +79,20 @@ class LlmModelImportResult {
 
   /// ファイルサイズ（バイト）。
   final int sizeBytes;
+
+  /// 検出した量子化名（例: 'Q4_0', 'Q4_K_M'）。GGUF メタデータまたはファイル名から。
+  final String? quantization;
+
+  /// NPU(Hexagon HTP) 対応か（C-2/C-3）。量子化名から判定。
+  final bool npuCompatible;
+
+  const LlmModelImportResult.withQuant({
+    required this.path,
+    required this.fileName,
+    required this.sizeBytes,
+    required this.quantization,
+    required this.npuCompatible,
+  });
 }
 
 /// ピッカーから得られた選択ファイル（実装詳細をサービス内部へ隠す）。
@@ -240,10 +256,13 @@ class LlmModelImportService {
     // サイズ不明のストリームは常にコピーする。
     if (total != null && await dest.exists() && await dest.length() == total) {
       onProgress?.call(total, total);
-      return LlmModelImportResult(
+      final quant = detectQuantization(name);
+      return LlmModelImportResult.withQuant(
         path: dest.path,
         fileName: name,
         sizeBytes: total,
+        quantization: quant,
+        npuCompatible: npuCompatibleForQuant(quant),
       );
     }
 
@@ -283,10 +302,17 @@ class LlmModelImportService {
     await part.rename(destPath);
     final size = await dest.length();
     onProgress?.call(size, size);
-    return LlmModelImportResult(
+    // 量子化形式を GGUF file_type メタデータから検出（C-2）。
+    // 読めなければファイル名判定にフォールバック。
+    final metaQuant = await readGgufFileType(dest);
+    final quant = metaQuant ?? detectQuantization(name);
+    final npuOk = npuCompatibleForQuant(quant);
+    return LlmModelImportResult.withQuant(
       path: dest.path,
       fileName: name,
       sizeBytes: size,
+      quantization: quant,
+      npuCompatible: npuOk,
     );
   }
 
@@ -482,4 +508,242 @@ class LlmModelImportService {
     }
     return true;
   }
+
+  /// ファイル名から量子化形式を検出する（C-2 のメタデータ読取失敗時フォールバック）。
+  ///
+  /// mradermacher/Huihui 系の命名（`...i1-Q4_0.gguf` / `...Q4_K_M.gguf`）や
+  /// 一般的な `model-Q8_0.gguf` を想定。'Q0'_K_L' などのファイル名パターン
+  /// （"Q4_K", "Q5_K", "Q6_K", "IQ"）を拾う。見つからなければ null。
+  static String? detectQuantization(String fileName) {
+    final up = fileName.toUpperCase();
+    // IQ 系を優先（IQ1_xS 等、Q を含まない命名がある）。
+    if (RegExp(r'IQ[0-9]').hasMatch(up)) {
+      final m = RegExp(r'IQ[0-9][A-Z0-9_]*').firstMatch(up);
+      return m?.group(0);
+    }
+    // Q<bit><type>_<variant>（Q4_0 / Q4_K_M / Q8_0 / Q2_K_XL 等）。
+    final m = RegExp(r'Q[0-9]_[A-Z](?:_[A-Z])?').firstMatch(up);
+    return m?.group(0);
+  }
+
+  /// 量子化名から NPU(HTP) 対応かを判定（'Q4_K', 'Q5_K', 'Q6_K', IQ 系は非対応）。
+  static bool npuCompatibleForQuant(String? quantization) {
+    if (quantization == null || quantization.isEmpty) return true;
+    final q = quantization.toUpperCase();
+    if (RegExp(r'_K[MSL]').hasMatch(q)) return false;
+    if (q.contains('_K_')) return false;
+    if (q.startsWith('IQ')) return false;
+    return true;
+  }
+
+  /// GGUF ファイルの `general.file_type` メタデータ（量子化種別 enum）を読む（C-2）。
+  ///
+  /// 読めなければ null（呼び出し側でファイル名判定へフォールバック）。
+  /// 先頭 256KB だけ読み、プロパティテーブルを走査する。
+  static Future<String?> readGgufFileType(File file) async {
+    RandomAccessFile raf;
+    try {
+      raf = await file.open();
+    } catch (_) {
+      return null;
+    }
+    try {
+      final len = await raf.length();
+      if (len < 24) return null;
+      final cap = len < (1 << 18) ? len : (1 << 18);
+      await raf.setPosition(0);
+      final head = await raf.read(cap.toInt());
+      return _parseGgufFileType(head);
+    } catch (_) {
+      return null;
+    } finally {
+      await raf.close();
+    }
+  }
+
+  /// GGUF バイト列から `general.file_type`（u32 enum）を走査して量子化名へ変換。
+  static String? _parseGgufFileType(List<int> bytes) {
+    final bd = ByteData.sublistView(Uint8List.fromList(bytes));
+    var off = 0;
+    if (off + 24 > bytes.length) return null;
+    if (bytes[0] != 0x47 ||
+        bytes[1] != 0x47 ||
+        bytes[2] != 0x55 ||
+        bytes[3] != 0x46) {
+      return null;
+    }
+    off += 4; // magic
+    off += 4; // version (u32)
+    // n_tensors(u64), n_kv(u64)：Little Endian（GGUF v3 は LE 前提）。
+    final nTensors = _rdU64(bd, off);
+    off += 8;
+    final nKv = _rdU64(bd, off);
+    off += 8;
+    // テンソリ情報テーブルをスキップ。
+    for (var i = 0; i < nTensors; i++) {
+      final nameLen = _rdU64(bd, off);
+      off += 8;
+      if (nameLen < 0 || off + nameLen > bytes.length) return null;
+      off += nameLen.toInt(); // name
+      if (off + 4 > bytes.length) return null;
+      final nDims = bd.getUint32(off, Endian.little);
+      off += 4;
+      if (off + nDims * 8 > bytes.length) return null;
+      off += nDims * 8; // dims (u64 × n)
+      if (off + 4 + 8 > bytes.length) return null;
+      off += 4; // type (u32)
+      off += 8; // offset (u64)
+    }
+    // KV プロパティ。
+    for (var i = 0; i < nKv; i++) {
+      final keyLen = _rdU64(bd, off);
+      off += 8;
+      if (keyLen < 0 || off + keyLen > bytes.length) return null;
+      final key = String.fromCharCodes(bytes.sublist(off, off + keyLen.toInt()));
+      off += keyLen.toInt();
+      if (off + 4 > bytes.length) return null;
+      final type = bd.getUint32(off, Endian.little);
+      off += 4;
+      // 不要な型はスキップ、file_type(0, u32) のみ値を取る。
+      if (key == 'general.file_type') {
+        if (type != kGgufTypeU32 || off + 4 > bytes.length) return null;
+        final ft = bd.getUint32(off, Endian.little);
+        return _ggufFileTypeToQuant(ft);
+      }
+      final skip = _ggufValueSkip(type, bd, off, bytes.length);
+      if (skip < 0) return null;
+      off += skip;
+    }
+    return null;
+  }
+
+  static int _rdU64(ByteData bd, int off) =>
+      bd.lengthInBytes >= off + 8
+      ? bd.getUint64(off, Endian.little)
+      : -1;
+
+  /// GGUF 値のバイト長を返す。読取不能なら -1。
+  static int _ggufValueSkip(int type, ByteData bd, int off, int maxLen) {
+    switch (type) {
+      case kGgufTypeU8:
+      case kGgufTypeI8:
+      case kGgufTypeBool:
+        return off + 1 <= maxLen ? 1 : -1;
+      case kGgufTypeU16:
+      case kGgufTypeI16:
+        return off + 2 <= maxLen ? 2 : -1;
+      case kGgufTypeU32:
+      case kGgufTypeI32:
+      case kGgufTypeF32:
+        return off + 4 <= maxLen ? 4 : -1;
+      case kGgufTypeU64:
+      case kGgufTypeI64:
+      case kGgufTypeF64:
+        return off + 8 <= maxLen ? 8 : -1;
+      case kGgufTypeStr: {
+        final ln = _rdU64(bd, off);
+        if (ln < 0) return -1;
+        final need = 8 + ln.toInt();
+        return off + need <= maxLen ? need : -1;
+      }
+      case kGgufTypeArr: {
+        if (off + 12 > maxLen) return -1;
+        final elemType = bd.getUint32(off, Endian.little);
+        final cnt = _rdU64(bd, off + 4);
+        if (cnt < 0) return -1;
+        var p = 12;
+        for (var k = 0; k < cnt; k++) {
+          final s = _ggufValueSkip(elemType, bd, off + p, maxLen);
+          if (s < 0) return -1;
+          p += s;
+        }
+        return p;
+      }
+      default:
+        return -1;
+    }
+  }
+
+  /// GGUF file_type enum → 量子化名。
+  static String? _ggufFileTypeToQuant(int ft) {
+    switch (ft) {
+      case 0:
+        return 'F32';
+      case 1:
+        return 'F16';
+      case 2:
+        return 'Q4_0';
+      case 3:
+        return 'Q4_1';
+      case 7:
+        return 'Q8_0';
+      case 8:
+        return 'Q5_0';
+      case 9:
+        return 'Q5_1';
+      case 10:
+        return 'Q2_K';
+      case 11:
+        return 'Q3_K_S';
+      case 12:
+        return 'Q3_K_M';
+      case 13:
+        return 'Q3_K_L';
+      case 14:
+        return 'Q4_K_S';
+      case 15:
+        return 'Q4_K_M';
+      case 16:
+        return 'Q5_K_S';
+      case 17:
+        return 'Q5_K_M';
+      case 18:
+        return 'Q6_K';
+      case 19:
+        return 'IQ2_XXS';
+      case 20:
+        return 'IQ2_XS';
+      case 21:
+        return 'Q2_K_S';
+      case 22:
+        return 'IQ3_XS';
+      case 23:
+        return 'IQ3_XXS';
+      case 24:
+        return 'IQ1_S';
+      case 25:
+        return 'IQ4_NL';
+      case 26:
+        return 'IQ3_S';
+      case 27:
+        return 'IQ3_M';
+      case 28:
+        return 'IQ2_S';
+      case 29:
+        return 'IQ2_M';
+      case 30:
+        return 'IQ4_XS';
+      case 31:
+        return 'IQ1_M';
+      case 32:
+        return 'BF16';
+      default:
+        return null;
+    }
+  }
 }
+
+// GGUF value type enum（llama.cpp gguf.h 準拠）。
+const int kGgufTypeU8 = 0;
+const int kGgufTypeI8 = 1;
+const int kGgufTypeU16 = 2;
+const int kGgufTypeI16 = 3;
+const int kGgufTypeU32 = 4;
+const int kGgufTypeI32 = 5;
+const int kGgufTypeF32 = 6;
+const int kGgufTypeBool = 7;
+const int kGgufTypeStr = 8;
+const int kGgufTypeArr = 9;
+const int kGgufTypeU64 = 10;
+const int kGgufTypeI64 = 11;
+const int kGgufTypeF64 = 12;

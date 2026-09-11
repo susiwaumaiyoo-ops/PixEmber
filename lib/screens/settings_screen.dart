@@ -10,9 +10,15 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/auto_summary_bridge_controller.dart';
+import '../services/auto_summary_controller.dart';
+import '../services/fgs_lifecycle_service.dart';
+import '../services/auto_summary_settings.dart';
+import '../services/auto_summary_snapshot.dart';
 import '../services/local_llm_service.dart';
 import '../services/llm_model_import_service.dart';
 import '../services/search_preset_service.dart';
+import 'auto_summary_status_screen.dart';
 import 'ai_index_maintenance_screen.dart';
 import 'ai_recommend_feed_screen.dart';
 import 'backup_manager_screen.dart';
@@ -51,8 +57,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _llmLoading = false;
   String? _llmSelectedPath;
 
-  // ローカルAI（実験）: 実行設定（A/B: CPUスレッド・Vulkan）
+  // ローカルAI（実験）: 実行設定（A/B: CPUスレッド・推論バックエンド）
   LlmRuntimeSettings _llmRuntime = const LlmRuntimeSettings();
+  AutoSummarySettings _autoSummary = const AutoSummarySettings();
+
+  // 自動要約の実行主体コントローラ（B2-4: FGS ブリッジへ切替済み）。
+  late final AutoSummaryController _autoSummaryController =
+      AutoSummaryBridgeController();
+
+  @override
+  void dispose() {
+    _autoSummaryController.dispose();
+    super.dispose();
+  }
+
+  void _openAutoSummaryStatus() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AutoSummaryStatusScreen(controller: _autoSummaryController),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -60,6 +85,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadAll();
     _loadLlmModel();
     _loadLlmRuntime();
+    _loadAutoSummary();
+  }
+
+  /// 自動要約の設定を読み込む。
+  Future<void> _loadAutoSummary() async {
+    final s = await AutoSummarySettings.load();
+    if (mounted) setState(() => _autoSummary = s);
+  }
+
+  /// 自動要約の設定を保存して反映する。
+  Future<void> _setAutoSummary(AutoSummarySettings next) async {
+    if (mounted) setState(() => _autoSummary = next);
+    await next.save();
+  }
+
+  /// 「今すぐ実行」ボタン: FGS を ensure してから runNow を送る。
+  Future<void> _runAutoSummaryNow() async {
+    final ready = await FgsLifecycleService().ensureServiceReady();
+    if (!ready) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('自動要約サービスの起動に失敗しました')),
+        );
+      }
+      return;
+    }
+    _autoSummaryController.runNow();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('自動要約を開始しました')),
+      );
+    }
+  }
+
+  /// タグ追加ダイアログ。
+  ///
+  /// controller のライフサイクルは [_TagAddDialog] 側に委譲する。
+  /// 呼び出し側で await 直後に dispose すると、exit アニメ中は TextField が
+  /// まだ生存しており '_dependents.isEmpty' アサートで落ちるため。
+  Future<void> _addAutoSummaryTag() async {
+    final tag = await showDialog<String>(
+      context: context,
+      builder: (context) => const _TagAddDialog(),
+    );
+    final t = tag?.trim();
+    if (t == null || t.isEmpty) return;
+    if (_autoSummary.tags.contains(t)) return;
+    await _setAutoSummary(
+      _autoSummary.copyWith(tags: [..._autoSummary.tags, t]),
+    );
+  }
+
+  Future<void> _removeAutoSummaryTag(String tag) async {
+    await _setAutoSummary(_autoSummary.copyWith(
+      tags: _autoSummary.tags.where((e) => e != tag).toList(),
+    ));
   }
 
   /// ローカルAI（実験）の実行設定を読み込む。
@@ -80,13 +161,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// Vulkan（GPU・実験）を切り替えて保存する。
-  Future<void> _setLlmUseVulkan(bool value) async {
-    final next = _llmRuntime.copyWith(useVulkan: value);
+  /// 推論バックエンド（自動/NPU/GPU/CPU）を切り替えて保存する。
+  Future<void> _setLlmBackend(LlmBackend value) async {
+    final next = _llmRuntime.copyWith(backend: value);
     if (mounted) setState(() => _llmRuntime = next);
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(LlmRuntimeSettings.prefKeyUseVulkan, next.useVulkan);
+      await prefs.setString(
+        LlmRuntimeSettings.prefKeyBackend,
+        next.backend.name,
+      );
     } catch (e) {
       debugPrint('バックエンド設定の保存に失敗しました: $e');
     }
@@ -337,6 +421,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () => _open(() => const LlmModelLibraryScreen()),
           ),
           _llmRuntimeCard(),
+          _autoSummaryCard(),
           _sectionHeader('ライセンス'),
           _licenseBlock(),
         ],
@@ -344,7 +429,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  /// ローカルAI（実験）の実行設定（A: CPUスレッド比較候補、B: Vulkan切替）。
+  /// ローカルAI（実験）の実行設定（A: CPUスレッド比較候補、B: バックエンド選択）。
   ///
   /// 変更は SharedPreferences に保存され、次回のモデルロードから反映される
   /// （ロード済みエンジンの再利用条件に設定一致が含まれるため、
@@ -367,26 +452,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 2),
               const Text(
-                'Vulkan（実験）は GPU での実行を要求します。'
-                '非対応端末では CPU に自動で戻ります。',
+                '自動は NPU（Hexagon）→ GPU（OpenCL）→ CPU の順で検出します。'
+                '非対応環境は自動で CPU に戻ります。',
                 style: TextStyle(color: Colors.white54, fontSize: 11),
               ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                // ignore: deprecated_member_use
-                activeColor: Colors.pinkAccent,
-                title: const Text(
-                  'Vulkan（実験）',
-                  style: TextStyle(color: Colors.white, fontSize: 13),
-                ),
-                subtitle: Text(
-                  _llmRuntime.useVulkan ? 'GPU オフロードを要求（全層）' : 'CPU で実行',
-                  style: const TextStyle(color: Colors.white54, fontSize: 11),
-                ),
-                value: _llmRuntime.useVulkan,
-                onChanged: _setLlmUseVulkan,
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final (value, label) in const [
+                    (LlmBackend.auto, '自動'),
+                    (LlmBackend.npu, 'NPU（Hexagon）'),
+                    (LlmBackend.gpu, 'GPU（OpenCL）'),
+                    (LlmBackend.cpu, 'CPU'),
+                  ])
+                    ChoiceChip(
+                      label: Text(
+                        label,
+                        style: TextStyle(
+                          color: _llmRuntime.backend == value
+                              ? Colors.white
+                              : Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                      selected: _llmRuntime.backend == value,
+                      selectedColor: Colors.pinkAccent,
+                      backgroundColor: Colors.white12,
+                      onSelected: (_) => _setLlmBackend(value),
+                    ),
+                ],
               ),
+              const SizedBox(height: 6),
               const Divider(color: Colors.white12, height: 16),
               const Text(
                 'CPU スレッド数（要求値）',
@@ -430,6 +527,234 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  /// バックグラウンド自動要約の設定カード（Phase 9-B）。
+  Widget _autoSummaryCard() {
+    final s = _autoSummary;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      width: double.infinity,
+      child: Material(
+        color: const Color(0xFF242424),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      '自動要約（実験）',
+                      style: TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                  ),
+                  Switch(
+                    value: s.enabled,
+                    activeThumbColor: Colors.pinkAccent,
+                    onChanged: (v) => _setAutoSummary(s.copyWith(enabled: v)),
+                  ),
+                ],
+              ),
+              const Text(
+                '登録タグの小説を、充電中・WiFi時にバックグラウンドで'
+                '自動要約しキャッシュへ蓄積します。'
+                'バックグラウンド実行は準備中です。',
+                style: TextStyle(color: Colors.white54, fontSize: 11),
+              ),
+              const SizedBox(height: 8),
+              _autoSummaryStatusRow(),
+              const SizedBox(height: 4),
+              const Text('対象タグ',
+                  style: TextStyle(color: Colors.white, fontSize: 13)),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final t in s.tags)
+                    InputChip(
+                      label: Text(t,
+                          style: const TextStyle(color: Colors.white70)),
+                      backgroundColor: Colors.white12,
+                      onDeleted: () => _removeAutoSummaryTag(t),
+                      deleteIconColor: Colors.white54,
+                    ),
+                  ActionChip(
+                    avatar: const Icon(Icons.add, color: Colors.pinkAccent, size: 18),
+                    label: const Text('追加',
+                        style: TextStyle(color: Colors.pinkAccent)),
+                    backgroundColor: Colors.white12,
+                    onPressed: _addAutoSummaryTag,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Divider(color: Colors.white12, height: 16),
+              _autoSummaryToggleRow(
+                  '充電中のみ実行', s.chargeOnly, (v) => s.copyWith(chargeOnly: v)),
+              _autoSummaryToggleRow(
+                  'WiFi接続時のみ実行', s.wifiOnly, (v) => s.copyWith(wifiOnly: v)),
+              _autoSummaryToggleRow('推論中 画面ON維持（高速）', s.keepScreenOn,
+                  (v) => s.copyWith(keepScreenOn: v)),
+              const SizedBox(height: 4),
+              _autoSummaryChipRow<int>(
+                label: '1セッション最大件数',
+                choices: AutoSummarySettings.maxChoices,
+                selected: s.maxPerSession,
+                display: (v) => '$v件',
+                onSelect: (v) => s.copyWith(maxPerSession: v),
+              ),
+              _autoSummaryChipRow<int>(
+                label: 'クールダウン',
+                choices: AutoSummarySettings.cooldownChoices,
+                selected: s.cooldownSeconds,
+                display: (v) => '$v秒',
+                onSelect: (v) => s.copyWith(cooldownSeconds: v),
+              ),
+              _autoSummaryChipRow<double>(
+                label: '温度閾値',
+                choices: AutoSummarySettings.tempChoices,
+                selected: s.temperatureLimitCelsius,
+                display: (v) => '${v.toInt()}℃',
+                onSelect: (v) => s.copyWith(temperatureLimitCelsius: v),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '最終実行: ${s.lastRunAtMillis == 0 ? '未実行' : _fmtEpoch(s.lastRunAtMillis)}'
+                '　累計処理: ${s.totalProcessed}件',
+                style: TextStyle(color: Colors.grey[500], fontSize: 10.5),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _runAutoSummaryNow,
+                      icon: const Icon(Icons.play_arrow, size: 16),
+                      label: const Text('今すぐ実行'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.pinkAccent,
+                        side: const BorderSide(color: Colors.pinkAccent),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 自動要約カード内のステータス行。実行主体コントローラのバッチング済み
+  /// スナップショットを購読して表示するだけ（件数はここで数えない・§3-A）。
+  Widget _autoSummaryStatusRow() {
+    return ValueListenableBuilder<AutoSummarySnapshot>(
+      valueListenable: _autoSummaryController.state,
+      builder: (context, s, _) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Icon(autoSummaryPhaseIcon(s.phase), color: Colors.pinkAccent, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${autoSummaryRunStateLabel(s)}　${s.savedCount}/${s.targetCount}件保存',
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      autoSummaryStatusLabel(s),
+                      style: const TextStyle(color: Colors.white54, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: _openAutoSummaryStatus,
+                child: const Text('状況を見る',
+                    style: TextStyle(color: Colors.pinkAccent, fontSize: 12)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _autoSummaryToggleRow(
+      String label, bool value, AutoSummarySettings Function(bool) apply) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(label,
+              style: const TextStyle(color: Colors.white70, fontSize: 13)),
+        ),
+        Switch(
+          value: value,
+          activeThumbColor: Colors.pinkAccent,
+          onChanged: (v) => _setAutoSummary(apply(v)),
+        ),
+      ],
+    );
+  }
+
+  Widget _autoSummaryChipRow<T>({
+    required String label,
+    required List<T> choices,
+    required T selected,
+    required String Function(T) display,
+    required AutoSummarySettings Function(T) onSelect,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: const TextStyle(color: Colors.white70, fontSize: 13)),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final c in choices)
+                ChoiceChip(
+                  label: Text(
+                    display(c),
+                    style: TextStyle(
+                      color: c == selected ? Colors.white : Colors.white70,
+                      fontSize: 12,
+                    ),
+                  ),
+                  selected: c == selected,
+                  selectedColor: Colors.pinkAccent,
+                  backgroundColor: Colors.white12,
+                  onSelected: (_) => _setAutoSummary(onSelect(c)),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _fmtEpoch(int millis) {
+    final dt = DateTime.fromMillisecondsSinceEpoch(millis);
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${dt.year}/${two(dt.month)}/${two(dt.day)} '
+        '${two(dt.hour)}:${two(dt.minute)}';
   }
 
   Widget _sectionHeader(String title) {
@@ -1025,6 +1350,10 @@ class _LlmModelSheetState extends State<_LlmModelSheet> {
         return;
       }
       await LlmModelPaths.setModelPath(result.path);
+      // C-2: NPU(HTP) 非対応の量子化（K/IQ 系）は非ブロッキングの警告ダイアログ。
+      if (!result.npuCompatible && mounted) {
+        _showNpuWarning(result.quantization, result.fileName);
+      }
       final models = await LlmModelPaths.discover();
       if (!mounted) return;
       setState(() {
@@ -1055,6 +1384,48 @@ class _LlmModelSheetState extends State<_LlmModelSheet> {
         _error = '取り込みに失敗しました。もう一度お試しください。';
       });
     }
+  }
+
+  /// NPU(HTP) 非対応量子化モデルを取り込んだ際の警告（C-2）。非ブロッキング。
+  void _showNpuWarning(String? quantization, String fileName) {
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1C),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'NPU 非対応の量子化形式',
+                style: TextStyle(color: Colors.white, fontSize: 15),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'このモデル（${quantization ?? '不明'}）はNPU(HTP)非対応の量子化形式です。\n'
+          'CPU実行になり生成速度が大幅に低下します。\n'
+          'Q4_0 または Q8_0 形式を推奨します。',
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 13,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text(
+              'OK',
+              style: TextStyle(color: Colors.pinkAccent),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// 進行中のコピーのキャンセルを要求する。
@@ -1352,6 +1723,62 @@ class _LlmModelSheetState extends State<_LlmModelSheet> {
             '再読み込み',
             style: TextStyle(color: Colors.pinkAccent, fontSize: 12),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 自動要約の「対象タグを追加」ダイアログ。
+///
+/// TextEditingController の所有権をこの State が持つことで、
+/// await showDialog 直後に呼び出し側が dispose してしまう
+/// '_dependents.isEmpty' アサート(exit アニメ中の生存 TextField 競合)を回避する。
+class _TagAddDialog extends StatefulWidget {
+  const _TagAddDialog();
+
+  @override
+  State<_TagAddDialog> createState() => _TagAddDialogState();
+}
+
+class _TagAddDialogState extends State<_TagAddDialog> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+    Navigator.of(context).pop(text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF1C1C1C),
+      title: const Text('対象タグを追加'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        decoration: const InputDecoration(
+          hintText: '例: 百合',
+          hintStyle: TextStyle(color: Colors.white38),
+        ),
+        style: const TextStyle(color: Colors.white),
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('キャンセル'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('追加'),
         ),
       ],
     );

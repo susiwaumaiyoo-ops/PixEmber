@@ -1,29 +1,35 @@
 // M5: モデル別推論プリセット + モデル切替用の選択肢モデル。
 //
-// カタログ（assets/llm_models.json）の fileName 一致で
+// カタログ(assets/llm_models.json)の fileName 一致で
 // context / maxOutputTokens / GPU layers を解決する。
-// 未一致モデル（カスタム GGUF など）は安全側の既定値を使う。
+// 未一致モデル(カスタム GGUF など)は安全側の既定値を使う。
 
 import 'package:path/path.dart' as p;
 
 import '../models/llm_model_catalog_entry.dart';
 
-/// モデル別の推論パラメータ（M5）。
+/// モデル別の推論パラメータ(M5)。
 ///
 /// カタログの recommendedContext / maxOutputTokens / preferredGpuLayers を
 /// そのまま推論に反映するための値集合。
 class LlmInferencePreset {
   const LlmInferencePreset({
-    this.contextSize = 4096,
+    this.contextSize = defaultContextSize,
     this.maxOutputTokens = 512,
     this.gpuLayers = 0,
   });
 
-  /// 既定プリセット（カタログ不一致・カスタムモデル用の安全値）。
+  /// A-1: 既定コンテキストサイズ(長文対応で 8192)。
   ///
-  /// - contextSize: 4096（本文2000字 + プロンプト + 出力に十分）
-  /// - maxOutputTokens: 512（3セクション出力に十分）
-  /// - gpuLayers: 0（CPU のみ = 最も互換性が高い）
+  /// カタログで recommendedContext が指定されたモデルはその値を使う。
+  /// ハードコードせずプリセット/カタログ経由で上書き可能にしておく。
+  static const int defaultContextSize = 8192;
+
+  /// 既定プリセット(カタログ不一致・カスタムモデル用の安全値)。
+  ///
+  /// - contextSize: 8192(長編対応。ロード失敗時は 4096 へ自動縮小)
+  /// - maxOutputTokens: 512(3セクション出力に十分)
+  /// - gpuLayers: 0(CPU のみ = 最も互換性が高い)
   static const LlmInferencePreset defaults = LlmInferencePreset();
 
   /// コンテキストサイズ。
@@ -32,7 +38,7 @@ class LlmInferencePreset {
   /// 最大出力トークン。
   final int maxOutputTokens;
 
-  /// GPU オフロード層数（0=CPU のみ、-1=自動）。
+  /// GPU オフロード層数(0=CPU のみ、-1=自動)。
   final int gpuLayers;
 
   /// カタログエントリからプリセットを作る。
@@ -44,7 +50,7 @@ class LlmInferencePreset {
     );
   }
 
-  /// [fileNameOrPath]（絶対パス可）のファイル名でカタログを引き、
+  /// [fileNameOrPath](絶対パス可)のファイル名でカタログを引き、
   /// 一致するプリセットを返す。見つからなければ [defaults]。
   ///
   /// ファイル名比較は大文字小文字を無視する。
@@ -63,7 +69,7 @@ class LlmInferencePreset {
   }
 }
 
-/// モデル切替 UI 用の選択肢（M5）。
+/// モデル切替 UI 用の選択肢(M5)。
 class LlmModelChoice {
   const LlmModelChoice({
     required this.path,
@@ -74,9 +80,9 @@ class LlmModelChoice {
   /// GGUF の絶対パス。
   final String path;
 
-  /// 表示ラベル（カタログ displayName、無ければファイル名）。
+  /// 表示ラベル(カタログ displayName、無ければファイル名)。
   final String label;
 
-  /// このモデルの推論プリセット（カタログ解決済み・未一致は既定値）。
+  /// このモデルの推論プリセット(カタログ解決済み・未一致は既定値)。
   final LlmInferencePreset preset;
 }

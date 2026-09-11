@@ -1,11 +1,35 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
-import 'package:llamadart/llamadart.dart' show LlamaChatMessage, LlamaChatRole;
 
 import '../novel_model.dart' show NovelTextData;
+import 'llm_chunking.dart';
 import 'local_llm_service.dart';
 import 'novel_parser.dart';
+
+/// 長文処理の方式（B-5 表示用 / B-6 キャッシュキー用）。
+enum LlmProcessingMode {
+  /// 全文を 1 回のプロンプトで一括処理（抜粋スキップ）。
+  fullAll,
+
+  /// 頭/中/尾の均衡抜粋で 1 回処理（チャンク不可時のフォールバック）。
+  excerpt,
+
+  /// 全文をチャンク分割し map-reduce で処理。
+  chunked,
+}
+
+/// [LlmProcessingMode] の表示ラベル。
+String llmProcessingModeLabel(LlmProcessingMode mode, {int chunks = 0}) {
+  switch (mode) {
+    case LlmProcessingMode.fullAll:
+      return '全文一括';
+    case LlmProcessingMode.excerpt:
+      return '抜粋';
+    case LlmProcessingMode.chunked:
+      return 'チャンク（$chunks分割）';
+  }
+}
 
 /// 小説のAI要約結果（3セクション + 生成メタ情報）。
 class LlmSummaryResult {
@@ -44,10 +68,21 @@ class LlmSummaryResult {
   /// プロンプト入力のトークン数（B）。トークナイザで実測できた場合のみ設定。
   final int? inputTokens;
 
+  /// モデルが出力した思考プロセス（本文マーカーより前の自由形式テキスト）。
+  /// 存在しなければ null。UI では折りたたみで別表示する。
+  final String? thinking;
+
+  /// 生成の停止理由の表示文言(B)。未取得・キャッシュ経由は null。
+  final String? stopReason;
+
+  /// 処理方式の表示ラベル(B-5): 全文一括 / 抜粋 / チャンク（N分割）。
+  final String? processingMode;
+
   const LlmSummaryResult({
     required this.synopsis,
     required this.intro,
     required this.tagSuggestions,
+    this.thinking,
     this.copyWarning = false,
     this.bodySourceNote,
     this.modelLabel,
@@ -56,7 +91,46 @@ class LlmSummaryResult {
     this.generatedAt,
     this.timeToFirstTokenMs,
     this.inputTokens,
+    this.stopReason,
+    this.processingMode,
   });
+
+  /// FGS engine 間転送用のシリアライズ。
+  Map<String, dynamic> toMap() => {
+    'synopsis': synopsis,
+    'intro': intro,
+    'tagSuggestions': tagSuggestions,
+    'thinking': thinking,
+    'copyWarning': copyWarning,
+    'bodySourceNote': bodySourceNote,
+    'modelLabel': modelLabel,
+    'generationMs': generationMs,
+    'tokensPerSecond': tokensPerSecond,
+    'generatedAt': generatedAt?.millisecondsSinceEpoch,
+    'timeToFirstTokenMs': timeToFirstTokenMs,
+    'inputTokens': inputTokens,
+    'stopReason': stopReason,
+    'processingMode': processingMode,
+  };
+
+  static LlmSummaryResult fromMap(Map<dynamic, dynamic> m) => LlmSummaryResult(
+    synopsis: m['synopsis'] as String? ?? '',
+    intro: m['intro'] as String? ?? '',
+    tagSuggestions: (m['tagSuggestions'] as List?)?.cast<String>() ?? [],
+    thinking: m['thinking'] as String?,
+    copyWarning: m['copyWarning'] as bool? ?? false,
+    bodySourceNote: m['bodySourceNote'] as String?,
+    modelLabel: m['modelLabel'] as String?,
+    generationMs: m['generationMs'] as int?,
+    tokensPerSecond: (m['tokensPerSecond'] as num?)?.toDouble(),
+    generatedAt: m['generatedAt'] != null
+        ? DateTime.fromMillisecondsSinceEpoch(m['generatedAt'] as int)
+        : null,
+    timeToFirstTokenMs: m['timeToFirstTokenMs'] as int?,
+    inputTokens: m['inputTokens'] as int?,
+    stopReason: m['stopReason'] as String?,
+    processingMode: m['processingMode'] as String?,
+  );
 }
 
 /// 要約生成でユーザーに表示する例外（自然な日本語メッセージを持つ）。
@@ -85,7 +159,34 @@ class LlmSummaryService {
   LlmSummaryService._();
 
   /// 本文入力予算（文字数）。[extractBalancedBody] の冒頭+中盤+終盤の合計。
-  static const int maxBodyChars = 3000;
+  /// A-2: 長文対応で 6000（抜粋へフォールバックする場合の上限）。
+  static const int maxBodyChars = 6000;
+
+  /// A-2: 生成用に最低限確保するコンテキスト余白（トークン）。
+  static const int genReserveTokens = 1024;
+
+  /// B-2: 1 チャンクの目標トークン数。
+  static const int chunkTargetTokens = 6000;
+
+  /// B-2: 前チャンク末尾との重複トークン数。
+  static const int chunkOverlapTokens = 200;
+
+  /// B-3: map 時のチャンク要点メモ生成上限トークン。
+  static const int mapMaxTokens = 256;
+
+  /// B-4: reduce の再帰段数上限。
+  static const int maxReduceLevels = 2;
+
+  /// プロンプト全体の固定オーバーヘッド（役割文等）の余裕（トークン）。
+  static const int promptOverheadTokens = 220;
+
+  /// B-3: 要点メモ用のシステムプロンプト（チャンク 1 件あたり）。
+  static const String _memoSystemPrompt =
+      'あなたは日本語の小説の一節から要点を抽出するアシスタントです。\n'
+      '与えられた本文だけに基づき、展開・登場人物・重要事項を箇条書きで'
+      '5行以内にまとめること。\n'
+      '前置き・英語・思考過程は含めない。各項目は「・」で始めずに'
+      '1行1項目で簡潔に書くこと。';
 
   /// コピー検出の n（文字数）。
   static const int copyNgram = 5;
@@ -168,19 +269,17 @@ class LlmSummaryService {
   ///
   /// M1: 作者説明に言及しない。本文に基づく要約・ネタバレ禁止を明示する。
   static const String _systemPrompt =
-      'あなたは小説を要約するアシスタントです。\n'
-      'ユーザーは小説のタイトル・タグ・本文の抜粋（冒頭/中盤/終盤）を渡します。\n'
-      '本文の内容に基づいて、自分の言葉でオリジナルの要約を書きなさい。'
-      '入力には作者の説明文は含まれません。本文の文面をそのまま写さないこと。\n'
-      '具体的な結末や重要な真相のネタバレは含めないこと。\n'
-      '以下の形式だけを、余計な説明なしで出力してください。\n'
+      'あなたは日本語の小説を要約するアシスタントです。\n'
+      '入力は小説のタイトル・タグ・本文の抜粋です。\n'
+      '本文だけを根拠に、自分の言葉で要約してください。入力の文面をそのまま写さないこと。\n'
+      '結末や重要な真相(ネタバレ)は書かないこと。\n'
+      '思考過程・前置き・英語・箇条書き記号(・や*)は出力に含めないこと。\n'
+      'あらすじは3文、紹介は2文、タグは読点区切りで5つにしてください。\n'
+      '見出しの直後に内容だけを書き、件数や説明文は含めないこと。\n'
+      '次の3つの見出しだけを、この順で出力してください。\n'
       '【あらすじ】\n'
-      '3行（1行1文・作品の全体像を絞った要約）\n'
       '【紹介】\n'
-      'ネタバレの少ない導入文（2〜3文・読者に作品の魅力を伝える。'
-      '具体的な結末や重要な真相を書かないこと）\n'
-      '【タグ】\n'
-      '5つの候補タグ（半角コンマで区切った1行）';
+      '【タグ】';
 
   /// 要約生成用メッセージ列（system + user）を構築する。
   ///
@@ -189,7 +288,7 @@ class LlmSummaryService {
   /// 均衡抽出する。
   ///
   /// [emphasizeRephrase] はコピー検出後のリトライ時に言い換えを強調する。
-  static List<LlamaChatMessage> buildPrompt({
+  static List<LlmChatMessage> buildPrompt({
     required String title,
     List<String> tags = const [],
     required String body,
@@ -212,24 +311,81 @@ class LlmSummaryService {
       );
     }
     return [
-      LlamaChatMessage.fromText(
-        role: LlamaChatRole.system,
-        text: _systemPrompt,
-      ),
-      LlamaChatMessage.fromText(
-        role: LlamaChatRole.user,
-        text: buffer.toString(),
-      ),
+      LlmChatMessage.fromText(role: LlmChatRole.system, text: _systemPrompt),
+      LlmChatMessage.fromText(role: LlmChatRole.user, text: buffer.toString()),
     ];
+  }
+
+  /// 最終本文テキスト（[text]）をそのまま使うプロンプトを構築する。
+  ///
+  /// [buildPrompt] と異なり [text] は正規化・抜粋済みであることを前提とし、
+  /// 抜粋処理は行わない（全文一括 / チャンク map-reduce 用）。
+  static List<LlmChatMessage> buildPromptFromText({
+    required String title,
+    List<String> tags = const [],
+    required String text,
+    String bodyLabel = '本文',
+    bool emphasizeRephrase = false,
+  }) {
+    final tagLine = tags
+        .map((t) => t.trim())
+        .where((t) => t.isNotEmpty)
+        .join(', ');
+    final buffer = StringBuffer()
+      ..writeln('タイトル: ${title.trim()}')
+      ..writeln('タグ: ${tagLine.isEmpty ? '（なし）' : tagLine}')
+      ..writeln('$bodyLabel:')
+      ..writeln(text);
+    if (emphasizeRephrase) {
+      buffer.writeln(
+        '注意: 前の回答は既存の文章と酷似していました。'
+        '必ず文構造・語彙を変えて、自分の言葉で要約し直してください。',
+      );
+    }
+    return [
+      LlmChatMessage.fromText(role: LlmChatRole.system, text: _systemPrompt),
+      LlmChatMessage.fromText(role: LlmChatRole.user, text: buffer.toString()),
+    ];
+  }
+
+  /// 閉じた思考タグ（think 系）のみ除去する。
+  ///
+  /// 開いたタグ（閉じ損ね）は除去せず、[parseOutput] の思考分離に任せる。
+  static String stripThinkTags(String raw) {
+    return raw.replaceAll(
+      RegExp(
+        r'<(?:think|thinking|reasoning|thought)>.*?</(?:think|thinking|reasoning|thought)>',
+        dotAll: true,
+        caseSensitive: false,
+      ),
+      '',
+    );
+  }
+
+  /// 本文セクションマーカー（あらすじ/紹介/タグ）の最初の出現位置。
+  /// 見つかなければ -1。
+  static int _firstMarkerIndex(String text) {
+    var min = -1;
+    for (final m in [sectionSynopsis, sectionIntro, sectionTags]) {
+      final i = text.indexOf(m);
+      if (i >= 0 && (min < 0 || i < min)) min = i;
+    }
+    return min;
   }
 
   /// モデル出力から [LlmSummaryResult] を解析する。
   ///
   /// 3セクション（【あらすじ】【紹介】【タグ】）が揃い、タグが1件以上
   /// 見つからなければ null を返す（呼び出し側が例外に変換する）。
+  /// 最初の本文マーカーより前の自由形式テキストは思考プロセスとして
+  /// [LlmSummaryResult.thinking] に分離する。
   static LlmSummaryResult? parseOutput(String raw) {
-    final text = raw.trim();
-    if (text.isEmpty) return null;
+    final cleaned = stripThinkTags(raw).trim();
+    if (cleaned.isEmpty) return null;
+    final marker = _firstMarkerIndex(cleaned);
+    // 最初の本文マーカーより前は思考プロセスとして分離（自由形式にも対応）。
+    final thinking = marker > 0 ? cleaned.substring(0, marker).trim() : '';
+    final text = marker >= 0 ? cleaned.substring(marker) : cleaned;
     final synopsis = _extractSection(text, sectionSynopsis, [
       sectionIntro,
       sectionTags,
@@ -243,6 +399,7 @@ class LlmSummaryService {
       synopsis: synopsis,
       intro: intro,
       tagSuggestions: tags.length > 5 ? tags.sublist(0, 5) : tags,
+      thinking: thinking.isEmpty ? null : thinking,
     );
   }
 
@@ -261,20 +418,29 @@ class LlmSummaryService {
 
   /// タグ行を分解する（コンマ・読点・空白・改行で区切り）。
   /// 先頭の箇条書きマーカー（「1. 」や「・」）だけを取り除く。
+  /// Phase9-A防御: 「5つのタグ」「以下の5つ」等のメタテキスト(件数・指示文)を除外。
+  static final RegExp _tagMetaRegExp = RegExp(
+    r'^(?:以下の|次の)?[0-9０-９]*(?:つの|個の|個|つ)(?:タグ|tags?)?$',
+    caseSensitive: false,
+  );
+
   static List<String> _splitTags(String raw) {
     return raw
         .split(RegExp(r'[、,，\s]+'))
         .map(
-          (t) =>
-              t.trim().replaceAll(RegExp(r'^(?:\d+[.、)）]\s*|[・\-*]\s*)'), ''),
+          (t) => t
+              .trim()
+              .replaceAll(RegExp(r'^(?:\d+[.、)）]\s*|[・\-*]\s*)'), '')
+              .trim(),
         )
         .where((t) => t.isNotEmpty)
+        .where((t) => !_tagMetaRegExp.hasMatch(t))
         .toList();
   }
 
   /// 出力がモデルの拒否応答に該当するか（解析失敗時のみ判定する）。
   static bool looksRefused(String raw) {
-    final t = raw.trim();
+    final t = stripThinkTags(raw).trim();
     if (t.isEmpty) return false;
     if (parseOutput(t) != null) return false;
     const patterns = <String>[
@@ -417,13 +583,16 @@ class LlmSummaryService {
     List<String> tags = const [],
     required String body,
   }) {
-    final excerpt = extractBalancedBody(normalizeNovelBody(body));
+    // B-6: 正規化後の「全文」を指紋に使う。抜粋や処理方式（全文一括 /
+    // チャンク）は実行時のコンテキスト依存で変わり得るため、指紋には
+    // 含めない（方式が違っても同じ本文ならキャッシュを再利用する）。
+    final normalized = normalizeNovelBody(body);
     final tagLine = tags
         .map((t) => t.trim())
         .where((t) => t.isNotEmpty)
         .join(',');
     return sha256
-        .convert(utf8.encode('v2|$title|$tagLine|$excerpt'))
+        .convert(utf8.encode('v3|$title|$tagLine|$normalized'))
         .toString();
   }
 
@@ -439,34 +608,40 @@ class LlmSummaryService {
   /// - [isExcessiveCopy] で閾値超過なら言い換え強化プロンプトで
   ///   **最大1回だけ**再生成。2回目でなお超過なら copyWarning: true
   ///   を付けて返す（無限再生成しない）。
-  static Future<LlmSummaryResult> generate({
+  /// プロンプトのトークン数。ネイティブ実測不可なら文字数から概算する。
+  static Future<int> _promptTokens(
+    LocalLlmService service,
+    List<LlmChatMessage> messages,
+  ) async {
+    final measured = await service.promptTokenCount(messages);
+    if (measured != null) return measured;
+    final chars = messages.map((m) => m.content).join('\n').length;
+    return LlmChunker.approxTokens(chars) + promptOverheadTokens;
+  }
+
+  /// 1 回の最終生成（コピー検出・言い換え 1 回再生成を含む）。
+  static Future<LlmSummaryResult> _runFinalPass({
     required LocalLlmService service,
     required String title,
-    required String body,
-    List<String> tags = const [],
-    String? description,
+    required List<String> tags,
+    required String bodyText,
+    required String copyCheckBody,
+    String? copyCheckDescription,
+    required String sourceNote,
+    required LlmProcessingMode mode,
+    int chunks = 0,
     void Function(String piece)? onToken,
     String? modelLabel,
     void Function()? onRegeneration,
   }) async {
-    final normalized = normalizeNovelBody(body);
-    if (normalized.isEmpty) {
-      throw const LlmSummaryException(kLlmBodyUnavailableMessage);
-    }
-    final excerpt = extractBalancedBody(normalized);
-    final sourceNote = normalized.length <= maxBodyChars
-        ? '生成元: 小説本文（全文 ${_fmtNum(normalized.length)} 文字）'
-        : '生成元: 小説本文（全文 ${_fmtNum(normalized.length)} 文字から 冒頭・中盤・終盤 を抽出（計 ${_fmtNum(excerpt.length)} 文字））';
-
     LlmSummaryResult? result;
     var copyWarning = false;
-    // B: 最終 attempt のプロンプトを保持し、生成後にトークン数を実測する。
-    var lastMessages = const <LlamaChatMessage>[];
+    var lastMessages = const <LlmChatMessage>[];
     for (var attempt = 0; attempt < 2; attempt++) {
-      final messages = buildPrompt(
+      final messages = buildPromptFromText(
         title: title,
         tags: tags,
-        body: body,
+        text: bodyText,
         emphasizeRephrase: attempt == 1,
       );
       lastMessages = messages;
@@ -488,25 +663,24 @@ class LlmSummaryService {
       final output = '${parsed.synopsis}\n${parsed.intro}';
       final excessive = isExcessiveCopy(
         output: output,
-        body: excerpt,
-        description: description,
+        body: copyCheckBody,
+        description: copyCheckDescription,
       );
       if (attempt == 0 && excessive) {
         onRegeneration?.call();
-        continue; // 言い換え強化プロンプトで1回だけ再生成（上限1回）。
+        continue;
       }
       copyWarning = excessive;
       break;
     }
     final r = result!;
     final stats = service.lastGenerationStats;
-    // B: 入力トークン数。モデルのトークナイザで実測できる場合のみ設定する
-    // （実測不可なら null のまま = 「個別取得不可」として扱う。推定値は報告しない）。
     final inputTokens = await service.promptTokenCount(lastMessages);
     return LlmSummaryResult(
       synopsis: r.synopsis,
       intro: r.intro,
       tagSuggestions: r.tagSuggestions,
+      thinking: r.thinking,
       copyWarning: copyWarning,
       bodySourceNote: sourceNote,
       modelLabel: modelLabel,
@@ -515,6 +689,171 @@ class LlmSummaryService {
       generatedAt: DateTime.now(),
       timeToFirstTokenMs: stats?.timeToFirstTokenMs,
       inputTokens: inputTokens,
+      stopReason: stats?.stopReason,
+      processingMode: llmProcessingModeLabel(mode, chunks: chunks),
+    );
+  }
+
+  /// B-3: 1 チャンクから要点メモを生成する（KV リセットはネイティブ側で自動）。
+  static Future<String> _mapChunk(
+    LocalLlmService service,
+    String chunkText,
+  ) async {
+    final messages = [
+      LlmChatMessage.fromText(
+        role: LlmChatRole.system,
+        text: _memoSystemPrompt,
+      ),
+      LlmChatMessage.fromText(role: LlmChatRole.user, text: chunkText),
+    ];
+    final raw = await service.generate(
+      messages,
+      options: const LlmGenerationOptions(temp: 0.2, maxTokens: mapMaxTokens),
+    );
+    final clean = stripThinkTags(raw).trim();
+    return clean.isEmpty ? chunkText : clean;
+  }
+
+  /// 要約生成を一通り実行する（本文正規化 → 方式判定 → 生成 → 解析 → コピー検出）。
+  ///
+  /// [service] は呼び出し側が loadModel 済みであることを想定。
+  /// B-1: 全文が一括上限に収まるなら全文一括、収まらないならチャンク分割。
+  /// A-2: プロンプト全体がコンテキストから生成用余白を引いた予算に
+  ///      収まるようトークン数で制御し、超過時は抜粋/チャンクを縮める。
+  static Future<LlmSummaryResult> generate({
+    required LocalLlmService service,
+    required String title,
+    required String body,
+    List<String> tags = const [],
+    String? description,
+    void Function(String piece)? onToken,
+    String? modelLabel,
+    void Function()? onRegeneration,
+    void Function(int current, int total)? onStageProgress,
+  }) async {
+    final normalized = normalizeNovelBody(body);
+    if (normalized.isEmpty) {
+      throw const LlmSummaryException(kLlmBodyUnavailableMessage);
+    }
+    final context = service.effectiveContextSize;
+    final budget = (context - genReserveTokens).clamp(1024, context);
+
+    // B-1: まず全文一括が可能か（トークン実測で判定）。
+    final fullMessages = buildPromptFromText(
+      title: title,
+      tags: tags,
+      text: normalized,
+    );
+    final fullTokens = await _promptTokens(service, fullMessages);
+    if (fullTokens <= budget) {
+      final note = '生成元: 小説本文（全文 ${_fmtNum(normalized.length)} 文字・一括）';
+      return _runFinalPass(
+        service: service,
+        title: title,
+        tags: tags,
+        bodyText: normalized,
+        copyCheckBody: normalized,
+        copyCheckDescription: description,
+        sourceNote: note,
+        mode: LlmProcessingMode.fullAll,
+        onToken: onToken,
+        modelLabel: modelLabel,
+        onRegeneration: onRegeneration,
+      );
+    }
+
+    // B: チャンク分割（map-reduce）。抜粋には落とさない。
+    final chunkTokens = chunkTargetTokens < (budget - promptOverheadTokens)
+        ? chunkTargetTokens
+        : (budget - promptOverheadTokens);
+    final chunkChars = LlmChunker.approxChars(
+      chunkTokens < 512 ? 512 : chunkTokens,
+    );
+    final overlapChars = LlmChunker.approxChars(chunkOverlapTokens);
+    final chunks = LlmChunker.split(
+      normalized,
+      maxChars: chunkChars,
+      overlapChars: overlapChars,
+    );
+    if (chunks.length <= 1) {
+      // チャンク不要（境界丸めで1つ）→ 抜粋でなく全文一括へ回す。
+      final note = '生成元: 小説本文（全文 ${_fmtNum(normalized.length)} 文字・一括）';
+      return _runFinalPass(
+        service: service,
+        title: title,
+        tags: tags,
+        bodyText: normalized,
+        copyCheckBody: normalized,
+        copyCheckDescription: description,
+        sourceNote: note,
+        mode: LlmProcessingMode.fullAll,
+        onToken: onToken,
+        modelLabel: modelLabel,
+        onRegeneration: onRegeneration,
+      );
+    }
+
+    // map: 各チャンクから要点メモ（直列・セッション1つ）。
+    final memos = <String>[];
+    for (final c in chunks) {
+      if (service.isCancelled) {
+        throw const LlmCancelledException();
+      }
+      onStageProgress?.call(c.index + 1, chunks.length);
+      final memo = await _mapChunk(service, c.text);
+      memos.add('【チャンク${c.index + 1}】\n$memo');
+    }
+
+    // reduce: メモ結合 → 最終生成。予算超過時は 2 段まで圧縮。
+    var combined = memos.join('\n\n');
+    var level = 0;
+    while (level < maxReduceLevels) {
+      final testMessages = buildPromptFromText(
+        title: title,
+        tags: tags,
+        text: combined,
+      );
+      final testTokens = await _promptTokens(service, testMessages);
+      if (testTokens <= budget) break;
+      // 半分に割って各半分を再度マップ（圧縮）する。
+      final mid = (memos.length / 2).ceil();
+      final groups = <List<String>>[
+        memos.sublist(0, mid),
+        if (mid < memos.length) memos.sublist(mid),
+      ];
+      final compressed = <String>[];
+      for (var g = 0; g < groups.length; g++) {
+        if (service.isCancelled) {
+          throw const LlmCancelledException();
+        }
+        onStageProgress?.call(g + 1, groups.length + 1);
+        final text = groups[g].join('\n\n');
+        final memo = await _mapChunk(service, text);
+        compressed.add('【要約メモ${g + 1}】\n$memo');
+      }
+      memos
+        ..clear()
+        ..addAll(compressed);
+      combined = memos.join('\n\n');
+      level++;
+    }
+
+    final note =
+        '生成元: 小説本文（全文 ${_fmtNum(normalized.length)} 文字を '
+        '${chunks.length} 分割して解析）';
+    return _runFinalPass(
+      service: service,
+      title: title,
+      tags: tags,
+      bodyText: combined,
+      copyCheckBody: normalized,
+      copyCheckDescription: description,
+      sourceNote: note,
+      mode: LlmProcessingMode.chunked,
+      chunks: chunks.length,
+      onToken: onToken,
+      modelLabel: modelLabel,
+      onRegeneration: onRegeneration,
     );
   }
 

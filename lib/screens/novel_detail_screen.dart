@@ -115,6 +115,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
         resolveBody: _resolveLlmBody,
         workId: widget.novel.id,
         availableModels: choices,
+        // FGS 経由（デフォルト: bridgeController 未指定 → シート内部で生成）。
       ),
     );
   }

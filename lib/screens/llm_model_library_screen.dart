@@ -7,7 +7,7 @@
 //
 // 初回表示時に abliterated（安全アライメント軽減）モデルの同意ダイアログ
 // を表示し、SharedPreferences に永続化する（同意なしでは画面を閉じる）。
-// ダウンロードは LlmModelDownloadService（M4・llamadart 再利用）が担当し、
+// ダウンロードは LlmModelDownloadService（M4）が担当し、
 // 本画面は「確認ダイアログ→キュー投入→進捗/キャンセル/再試行表示」を行う。
 
 import 'dart:async';
@@ -20,6 +20,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/llm_model_catalog_entry.dart';
 import '../services/llm_model_catalog_service.dart';
 import '../services/llm_model_download_service.dart';
+import '../services/llm_model_import_service.dart';
 import '../services/local_llm_service.dart';
 import '../widgets/llm_model_card.dart';
 
@@ -287,6 +288,7 @@ class _LlmModelLibraryScreenState extends State<LlmModelLibraryScreen> {
           '${e.quantization}・${LlmModelCatalogService.formatBytes(e.expectedSizeBytes)}・${e.licenseId}',
       description: e.description,
       badge: e.isRecommended ? '推奨' : null,
+      npuBadge: e.npuCompatible,
       warning: e.highRamWarning ? 'RAM使用量が大きいです（3GB以上推奨）' : null,
       progress: inFlight ? t.progress : null,
       progressLabel: inFlight || retryable ? _taskProgressLabel(t) : null,
@@ -415,6 +417,12 @@ class _LlmModelLibraryScreenState extends State<LlmModelLibraryScreen> {
         ],
       ),
     );
+  }
+
+  /// カスタムモデルの subtitle（ファイル名から検出した量子化形式を付与、C-3）。
+  String _customSubtitle(String path) {
+    final q = LlmModelImportService.detectQuantization(p.basename(path));
+    return q == null ? 'カスタムモデル（ファイルピッカー取り込み）' : 'カスタムモデル（$q・ファイルピッカー取り込み）';
   }
 
   void _showCustomDetails(String path) {
@@ -561,6 +569,7 @@ class _LlmModelLibraryScreenState extends State<LlmModelLibraryScreen> {
                           '${m.entry.quantization}・ダウンロード済み・${p.basename(m.path)}',
                       description: m.entry.description,
                       badge: 'ダウンロード済み',
+                      npuBadge: m.entry.npuCompatible,
                       warning: m.entry.highRamWarning
                           ? 'RAM使用量が大きいです（3GB以上推奨）'
                           : null,
@@ -575,8 +584,11 @@ class _LlmModelLibraryScreenState extends State<LlmModelLibraryScreen> {
                   for (final f in _customFiles)
                     LlmModelCard(
                       title: p.basename(f),
-                      subtitle: 'カスタムモデル（ファイルピッカー取り込み）',
+                      subtitle: _customSubtitle(f),
                       badge: 'カスタム',
+                      npuBadge: LlmModelImportService.npuCompatibleForQuant(
+                        LlmModelImportService.detectQuantization(p.basename(f)),
+                      ),
                       isSelected: _selectedPath == f,
                       onSelect: () => _selectModel(f),
                       onDetails: () => _showCustomDetails(f),

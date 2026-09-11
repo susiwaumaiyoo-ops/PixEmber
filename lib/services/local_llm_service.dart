@@ -2,22 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:llamadart/llamadart.dart'
-    show
-        GenerationParams,
-        LlamaBackend,
-        LlamaChatMessage,
-        LlamaCompletionChunk,
-        GpuBackend,
-        LlamaEngine,
-        ModelParams;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'llm_model_preset.dart';
+import 'native_llm_engine.dart';
 
-/// ローカルLLM（llama.cpp）のサービス状態。
+/// ローカルLLM（llama.cpp / libnative_llm.so）のサービス状態。
 enum LlmState {
   /// 初期状態・モデル未ロード、または生成が完了・キャンセルされた後。
   idle,
@@ -33,6 +25,98 @@ enum LlmState {
 
   /// 直近の操作が失敗した（[LocalLlmService.errorMessage] 参照）。
   error,
+}
+
+/// チャットの役割（llama.cpp のチャットテンプレートが期待する文字列と一致）。
+enum LlmChatRole {
+  system,
+  user,
+  assistant;
+
+  /// ネイティブ（テンプレ適用）へ渡す役割名。
+  String get wireName => name;
+}
+
+/// 1メッセージ（role + content）。
+class LlmChatMessage {
+  const LlmChatMessage({required this.role, required this.content});
+
+  /// テキストから生成する（llamadart 時代の互換ファクトリ）。
+  factory LlmChatMessage.fromText({
+    required LlmChatRole role,
+    required String text,
+  }) => LlmChatMessage(role: role, content: text);
+
+  final LlmChatRole role;
+  final String content;
+
+  @override
+  bool operator ==(Object other) =>
+      other is LlmChatMessage && other.role == role && other.content == content;
+
+  @override
+  int get hashCode => Object.hash(role, content);
+
+  @override
+  String toString() => 'LlmChatMessage($role, ${content.length} chars)';
+}
+
+/// 生成サンプリング設定（llamadart GenerationParams の互換置き換え）。
+class LlmGenerationOptions {
+  const LlmGenerationOptions({
+    this.temp = 0.2,
+    this.topP = 0.9,
+    this.maxTokens = 1024,
+  });
+
+  /// 温度（<=0 で greedy）。
+  final double temp;
+
+  /// top-p（ネイティブ実装では未使用・UI/テスト互換のため維持）。
+  final double topP;
+
+  /// 生成上限トークン数。
+  final int maxTokens;
+
+  @override
+  bool operator ==(Object other) =>
+      other is LlmGenerationOptions &&
+      other.temp == temp &&
+      other.topP == topP &&
+      other.maxTokens == maxTokens;
+
+  @override
+  int get hashCode => Object.hash(temp, topP, maxTokens);
+}
+
+/// 推論バックエンドの要求（auto = HTP → OpenCL → CPU の自動検出順）。
+enum LlmBackend {
+  auto,
+  npu,
+  gpu,
+  cpu;
+
+  /// nllm_load の backend_kind 引数（-1=auto 0=cpu 1=opencl 2=htp）。
+  int get kindInt {
+    switch (this) {
+      case LlmBackend.auto:
+        return -1;
+      case LlmBackend.npu:
+        return 2;
+      case LlmBackend.gpu:
+        return 1;
+      case LlmBackend.cpu:
+        return 0;
+    }
+  }
+
+  /// 保存文字列から復元（不正値は auto）。
+  static LlmBackend parse(String? name) {
+    for (final b in LlmBackend.values) {
+      if (b.name == name) return b;
+    }
+    return LlmBackend.auto;
+  }
 }
 
 /// 直近1回の生成メトリクス（M5 + B: 待ち時間内訳）。
@@ -53,6 +137,7 @@ class LlmGenerationStats {
     this.nativePromptEvalTokens,
     this.nativeEvalMs,
     this.nativeEvalTokens,
+    this.stopReason,
   });
 
   /// 生成したトークン数（非空チャンク数の近似）。
@@ -85,7 +170,7 @@ class LlmGenerationStats {
   /// ネイティブ backend 名（取得できない場合は null）。
   final String? backendName;
 
-  /// Vulkan ロード失敗により CPU へフォールバックしたか。
+  /// バックエンドロード失敗により CPU へフォールバックしたか。
   final bool? usedCpuFallback;
 
   /// ネイティブ計測: プロンプト評価時間(ms)（取得できない場合は null）。
@@ -100,6 +185,10 @@ class LlmGenerationStats {
   /// ネイティブ計測: 生成評価トークン数。
   final int? nativeEvalTokens;
 
+  /// 直近生成の停止理由の表示文言(EOS/上限到達/キャンセル/エラー)。
+  /// キャッシュヒット等でネイティブ計測が無い場合は null。
+  final String? stopReason;
+
   /// ネイティブ計測に基づく生成速度（取得できない場合は null）。
   double? get nativeTokensPerSecond {
     final ms = nativeEvalMs;
@@ -110,10 +199,9 @@ class LlmGenerationStats {
 
   /// 1秒あたりの生成トークン数（計測不能なら 0.0）。
   ///
-  /// 修正前は elapsed（TTFT を含む全体時間）が分母で、prefill が長い
-  /// 実機で過小評価されていた。TTFT が取れる場合は「最初の出力以降の
-  /// 経過時間」をデコード時間の近似として使う。ネイティブ計測
-  /// （[nativeTokensPerSecond]）が取れる場合は UI はそちらを優先表示する。
+  /// TTFT が取れる場合は「最初の出力以降の経過時間」をデコード時間の
+  /// 近似として使う。ネイティブ計測（[nativeTokensPerSecond]）が取れる
+  /// 場合は UI はそちらを優先表示する。
   double get tokensPerSecond {
     if (generatedTokens == 0) return 0.0;
     final ms = elapsed.inMilliseconds;
@@ -124,60 +212,80 @@ class LlmGenerationStats {
   }
 }
 
-/// llamadart ネイティブ（llama.cpp）から取得した 1 生成分の計測値。
+/// ネイティブ（libnative_llm.so = llama.cpp）から取得した 1 生成分の計測値。
 ///
-/// llama.cpp は生成開始時に perf カウンタをリセットする
-/// （llamadart 0.8.22 llama_cpp_service.dart の generate 前リセットを確認）
-/// ため 1 生成分の値。取得できない項目は null（推定値は報告しない）。
+/// nllm_get_stats は直近 1 生成の実測値を返すため 1 生成分。
+/// 取得できない項目は null（推定値は報告しない）。
 class LlmNativePerf {
   const LlmNativePerf({
     this.promptEvalMs,
     this.promptEvalTokens,
     this.evalMs,
     this.evalTokens,
+    this.stopReason,
   });
 
   final double? promptEvalMs;
   final int? promptEvalTokens;
   final double? evalMs;
   final int? evalTokens;
+
+  /// 停止理由コード(0=eos 1=limit 2=cancel 3=error, -1/未取得=null)。
+  final int? stopReason;
 }
 
 /// ローカルLLMの実行設定（A/B: CPUスレッド数・推論バックエンド）。
 class LlmRuntimeSettings {
-  const LlmRuntimeSettings({this.cpuThreads = 0, this.useVulkan = false});
+  const LlmRuntimeSettings({
+    this.cpuThreads = 0,
+    this.backend = LlmBackend.auto,
+  });
 
   /// SharedPreferences キー。
   static const String prefKeyCpuThreads = 'llm_pref_cpu_threads';
-  static const String prefKeyUseVulkan = 'llm_pref_use_vulkan';
+  static const String prefKeyBackend = 'llm_pref_backend';
+
+  /// 旧 Vulkan 切り替えのキー（移行専用・読み取りのみ）。
+  static const String prefKeyUseVulkanLegacy = 'llm_pref_use_vulkan';
 
   /// スレッド数の選択肢（0 = 自動・現状の基準。1 は診断用）。
   static const List<int> cpuThreadChoices = <int>[0, 1, 2, 4];
 
-  /// 要求する推論スレッド数（0 = llama.cpp の自動）。numberOfThreads と
-  /// numberOfThreadsBatch の両方に同じ要求値を渡す（実効値は取得不能なため
-  /// UI には「要求値」として表示する）。
+  /// 要求する推論スレッド数（0 = llama.cpp の自動）。実効値は取得不能なため
+  /// UI には「要求値」として表示する。
   final int cpuThreads;
 
-  /// Vulkan（GPU）を要求するか。未対応端末ではロード失敗時に CPU へ
-  /// 1 回だけフォールバックする（ユーザーの明示操作でのみ有効）。
-  final bool useVulkan;
+  /// 要求する推論バックエンド。npu/gpu でロード失敗時は CPU へ
+  /// 1 回だけフォールバックする。
+  final LlmBackend backend;
 
-  LlmRuntimeSettings copyWith({int? cpuThreads, bool? useVulkan}) =>
+  LlmRuntimeSettings copyWith({int? cpuThreads, LlmBackend? backend}) =>
       LlmRuntimeSettings(
         cpuThreads: cpuThreads ?? this.cpuThreads,
-        useVulkan: useVulkan ?? this.useVulkan,
+        backend: backend ?? this.backend,
       );
 
   /// 保存された設定を読む（不正値は既定に戻す）。
+  ///
+  /// 旧バージョンの Vulkan bool 設定はバックエンド選択へ移行する
+  /// （true → gpu / false → auto）。
   static Future<LlmRuntimeSettings> load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final t = prefs.getInt(prefKeyCpuThreads) ?? 0;
-      final vulkan = prefs.getBool(prefKeyUseVulkan) ?? false;
+      final storedBackend = prefs.getString(prefKeyBackend);
+      final LlmBackend backend;
+      if (storedBackend != null) {
+        backend = LlmBackend.parse(storedBackend);
+      } else {
+        // 旧 Vulkan 設定からの移行。
+        backend = (prefs.getBool(prefKeyUseVulkanLegacy) ?? false)
+            ? LlmBackend.gpu
+            : LlmBackend.auto;
+      }
       return LlmRuntimeSettings(
         cpuThreads: cpuThreadChoices.contains(t) ? t : 0,
-        useVulkan: vulkan,
+        backend: backend,
       );
     } catch (_) {
       return const LlmRuntimeSettings();
@@ -188,10 +296,10 @@ class LlmRuntimeSettings {
   bool operator ==(Object other) =>
       other is LlmRuntimeSettings &&
       other.cpuThreads == cpuThreads &&
-      other.useVulkan == useVulkan;
+      other.backend == backend;
 
   @override
-  int get hashCode => Object.hash(cpuThreads, useVulkan);
+  int get hashCode => Object.hash(cpuThreads, backend);
 }
 
 /// 生成キャンセルを示す例外（UIはエラー表示にしない）。
@@ -203,152 +311,33 @@ class LlmCancelledException implements Exception {
 
 /// 推論エンジンの抽象化（テスト用の fake 差し替え用）。
 ///
-/// 本番は [LlamaDartEngine]（llamadart）。モデルロード・トークン生成は
-/// llamadart が起動する worker isolate 内で実行され UI スレッドをブロックしない。
+/// 本番は [NativeLlmEngine]（libnative_llm.so への FFI）。モデルロード・
+/// トークン生成は ワーカー isolate 内で実行され UI スレッドをブロックしない。
 abstract class LlmInferenceEngine {
   /// モデルをロードする（テストの fake 実装は no-op でよい）。
   Future<void> loadModel(String modelPath);
 
-  /// [messages] を与え、トークンをストリームで返す。
-  Stream<LlamaCompletionChunk> generate({
-    required List<LlamaChatMessage> messages,
-    required GenerationParams options,
+  /// [messages] を与え、テキスト断片（UTF-8 完了済み）をストリームで返す。
+  Stream<String> generate({
+    required List<LlmChatMessage> messages,
+    required LlmGenerationOptions options,
   });
 
   /// 使用済みリソースを解放する。
   void dispose();
 }
 
-/// llamadart による本番実装。
-class LlamaDartEngine implements LlmInferenceEngine {
-  LlamaDartEngine({
-    int contextSize = 8192,
-    int gpuLayers = 0,
-    int cpuThreads = 0,
-    bool useVulkan = false,
-  }) : _contextSize = contextSize,
-       _gpuLayers = gpuLayers,
-       _cpuThreads = cpuThreads,
-       _useVulkan = useVulkan,
-       _engine = LlamaEngine(LlamaBackend());
-
-  /// 実際に使用した backend のラベル（メトリクス表示用）。
-  static const String backendLabel = 'llama_cpp';
-
-  final int _contextSize;
-  final int _gpuLayers;
-  final int _cpuThreads;
-  final bool _useVulkan;
-  final LlamaEngine _engine;
-  bool _loaded = false;
-  bool _disposed = false;
-  int? _resolvedGpuLayers;
-  String? _backendName;
-
-  /// 要求したスレッド数（実効値は取得不能なため要求値を表示する）。
-  int get requestedCpuThreads => _cpuThreads;
-
-  /// ネイティブが解決した GPU 層数（取得失敗時は null）。
-  int? get resolvedGpuLayers => _resolvedGpuLayers;
-
-  /// ネイティブ backend 名（取得失敗時は null）。
-  String? get backendName => _backendName;
-
-  /// ネイティブ（llama.cpp）の 1 生成分 perf 計測を取得する。
-  /// 取得できない場合は null（推定しない）。
-  Future<LlmNativePerf?> readNativePerf() async {
-    if (!_loaded || _disposed) return null;
-    try {
-      final perf = await _engine.getPerformanceContext();
-      if (perf == null) return null;
-      return LlmNativePerf(
-        promptEvalMs: perf.promptEvalMs,
-        promptEvalTokens: perf.promptEvalTokens,
-        evalMs: perf.evalMs,
-        evalTokens: perf.evalTokens,
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  @override
-  Future<void> loadModel(String modelPath) async {
-    if (_disposed) {
-      throw StateError('LlamaDartEngine is already disposed.');
-    }
-    if (_loaded) return;
-    // B: Vulkan 要求時は全層オフロード（ModelParams.maxGpuLayers = 999、
-    // 存在確認済み定数）と preferredBackend: vulkan を明示する。
-    // llamadart 側の Android 向け保守設定・Qwen3.5 例外は変更しない。
-    // Vulkan 非要求時は CPU 強制（Android の auto は llamadart が CPU に
-    // 解決するため、挙動を明示的に固定する）。
-    await _engine.loadModel(
-      modelPath,
-      modelParams: ModelParams(
-        contextSize: _contextSize,
-        gpuLayers: _useVulkan ? ModelParams.maxGpuLayers : _gpuLayers,
-        preferredBackend: _useVulkan ? GpuBackend.vulkan : GpuBackend.cpu,
-        numberOfThreads: _cpuThreads,
-        numberOfThreadsBatch: _cpuThreads,
-      ),
-    );
-    _loaded = true;
-    // ロード後の診断値（表示専用。失敗は握り潰す）。
-    try {
-      _resolvedGpuLayers = await _engine.getResolvedGpuLayers();
-    } catch (_) {
-      _resolvedGpuLayers = null;
-    }
-    try {
-      _backendName = await _engine.getBackendName();
-    } catch (_) {
-      _backendName = null;
-    }
-  }
-
-  @override
-  Stream<LlamaCompletionChunk> generate({
-    required List<LlamaChatMessage> messages,
-    required GenerationParams options,
-  }) {
-    if (_disposed) {
-      throw StateError('LlamaDartEngine is already disposed.');
-    }
-    // B: thinking を無効化して engine 呼び出しに明示的に届かせる
-    // （要約は 3 セクション形式出力のみを必要とし、推論チャネルは不要）。
-    return _engine.create(messages, params: options, enableThinking: false);
-  }
-
-  /// プロンプトのトークン数を実測する（B）。llamadart の [LlamaEngine.tokenize]
-  /// （ネイティブのトークナイザ）を利用する。未ロード時は例外を投げるため
-  /// 呼び出し側で握り潰す前提。
-  Future<int> promptTokenCount(List<LlamaChatMessage> messages) async {
-    final prompt = messages.map((m) => m.content).join('\n');
-    final tokens = await _engine.tokenize(prompt);
-    return tokens.length;
-  }
-
-  @override
-  void dispose() {
-    if (_disposed) return;
-    _disposed = true;
-    unawaited(_engine.dispose().catchError((Object _) {}));
-  }
-}
-
-/// ローカルLLM推論を司るサービス（llamadart ラッパー）。
+/// ローカルLLM推論を司るサービス（libnative_llm.so ラッパー）。
 ///
 /// 状態機械: idle / loading / generating / done / error。
 /// [onStateChange] で状態遷移、[generate] の onToken でストリーミング配信。
 ///
 /// 規約:
 /// - [dispose] 以降は [onStateChange] を絶対に呼ばない（setState 後の dispose 対策）。
-/// - [cancel] はストリーム購読を破棄して idle に戻す。
-///   購読破棄は llamadart の cancel token に伝播し、worker isolate が
-///   次のトークン境界でデコードを停止する（実キャンセル）。
+/// - [cancel] はネイティブへ停止要求（nllm_request_stop）を行い、
+///   ワーカーは次のトークン境界でデコードを停止する（実キャンセル）。
 class LocalLlmService {
-  /// [engineFactory] 未指定時は llama.cpp 実装（[LlamaDartEngine]）を使う。
+  /// [engineFactory] 未指定時は llama.cpp 実装（[NativeLlmEngine]）を使う。
   ///
   /// [preset] は [engineFactory] 未指定時にエンジンへ渡される推論プリセット。
   /// 通常はカタログ fileName で解決した値
@@ -356,20 +345,16 @@ class LocalLlmService {
   LocalLlmService({
     LlmInferenceEngine Function(String modelPath)? engineFactory,
     LlmInferencePreset preset = LlmInferencePreset.defaults,
-    LlmRuntimeSettings runtimeSettings = const LlmRuntimeSettings(),
-  }) : _preset = preset,
-       runtimeSettings = runtimeSettings,
+    this.runtimeSettings = const LlmRuntimeSettings(),
+  }) : _preset = preset, // ignore: prefer_initializing_formals
        _customEngineFactory = engineFactory;
 
   /// 要約生成向けコンテキストサイズ（本文2000字+プロンプト+出力に余力）。
   static const int defaultContextSize = 8192;
 
   /// 要約生成向けサンプリング（低温度で安定した出力を取る）。
-  static const GenerationParams defaultGenerationOptions = GenerationParams(
-    temp: 0.2,
-    topP: 0.9,
-    maxTokens: 1024,
-  );
+  static const LlmGenerationOptions defaultGenerationOptions =
+      LlmGenerationOptions(temp: 0.2, topP: 0.9, maxTokens: 1024);
 
   final LlmInferenceEngine Function(String modelPath)? _customEngineFactory;
   final LlmInferencePreset _preset;
@@ -377,9 +362,21 @@ class LocalLlmService {
   /// 現在要求されている実行設定（A/B）。
   LlmRuntimeSettings runtimeSettings;
 
-  /// 直近のロードで実際に適用した設定（再利用判定に使用）。
-  LlmRuntimeSettings _currentSettings = const LlmRuntimeSettings();
+  /// 直近のロードが実際に適用したセッションキー（再利用判定に使用）。
+  _LlmSessionKey? _currentKey;
   bool _lastLoadUsedCpuFallback = false;
+
+  /// A-3: ロード失敗時にコンテキストを縮小して再試行したか。
+  bool _lastLoadUsedContextFallback = false;
+
+  /// A-3: 縮小フォールバックで使用するコンテキストサイズ。
+  static const int fallbackContextSize = 4096;
+
+  /// A-3: プリセットより小さいコンテキストで再試行するための上書き値。
+  int? _contextSizeOverride;
+
+  /// A-3: 実際にロードへ渡すコンテキストサイズ（縮小済みなら小さい値）。
+  int get effectiveContextSize => _contextSizeOverride ?? _preset.contextSize;
 
   LlmState _state = LlmState.idle;
   String? _errorMessage;
@@ -389,6 +386,12 @@ class LocalLlmService {
   LlmInferenceEngine? _engine;
   String? _currentModelPath;
   LlmGenerationStats? _lastGenerationStats;
+
+  /// シート跨ぎでエンジンを保持するためのセッションキャッシュ（プロセス単一）。
+  /// LocalLlmService は要約シート再生成のたびに新インスタンス化されるため、
+  /// 同一キーならワーカー/ネイティブセッションを再ロードなく再利用する。
+  /// カスタムファクトリ（テスト）は対象外。
+  static _LlmSessionEntry? _sharedSession;
 
   /// 状態遷移通知。[dispose] 以降は呼ばれない。
   void Function(LlmState state, String? error)? onStateChange;
@@ -402,26 +405,34 @@ class LocalLlmService {
   /// コンストラクタで渡された推論プリセット（M5）。
   LlmInferencePreset get preset => _preset;
 
-  /// 直近のロードが Vulkan 失敗 → CPU フォールバックだったか。
+  /// 直近のロードがバックエンド失敗 → CPU フォールバックだったか。
   bool get lastLoadUsedCpuFallback => _lastLoadUsedCpuFallback;
 
+  /// A-3: 直近のロードがコンテキスト縮小(8192→4096)だったか。
+  bool get lastLoadUsedContextFallback => _lastLoadUsedContextFallback;
+
+  /// A-3: コンテキスト縮小の表示文言(発生していなければ null)。
+  String? get contextShrinkNote => _lastLoadUsedContextFallback
+      ? 'コンテキスト縮小: ${_preset.contextSize}→$fallbackContextSize'
+      : null;
+
   /// エンジンを生成する（カスタムファクトリ（テスト）優先。
-  /// 実機は [LlmRuntimeSettings] を ModelParams へ反映する）。
-  LlmInferenceEngine _newEngine(String modelPath, LlmRuntimeSettings s) {
+  /// 実機は [LlmRuntimeSettings] をネイティブパラメータへ反映する）。
+  LlmInferenceEngine _buildEngine(_LlmSessionKey key) {
     final custom = _customEngineFactory;
-    if (custom != null) return custom(modelPath);
-    return LlamaDartEngine(
-      contextSize: _preset.contextSize,
-      gpuLayers: _preset.gpuLayers,
-      cpuThreads: s.cpuThreads,
-      useVulkan: s.useVulkan,
+    if (custom != null) return custom(key.modelPath);
+    return NativeLlmEngine(
+      backend: key.backend,
+      contextSize: key.contextSize,
+      gpuLayers: key.gpuLayers,
+      cpuThreads: key.cpuThreads,
     );
   }
 
   /// プリセットに基づく生成オプション（M5）。
   ///
   /// maxTokens はプリセットの maxOutputTokens（温度等は従来値を維持）。
-  GenerationParams get generationOptions => GenerationParams(
+  LlmGenerationOptions get generationOptions => LlmGenerationOptions(
     temp: 0.2,
     topP: 0.9,
     maxTokens: _preset.maxOutputTokens,
@@ -436,14 +447,28 @@ class LocalLlmService {
 
   /// プロンプトのトークン数を実測する（B）。
   ///
-  /// llamadart の tokenize API（ネイティブトークナイザ）が利用できる場合は
-  /// 実測値を返す。テストの fake エンジンやネイティブ未ロードなどで
-  /// 実測できない場合は null（= 「個別取得不可」。推定値は返さない）。
-  Future<int?> promptTokenCount(List<LlamaChatMessage> messages) async {
+  /// ネイティブ（llama.cpp）のトークナイザが利用できる場合は実測値を返す。
+  /// テストの fake エンジンやネイティブ未ロードなどで実測できない場合は
+  /// null（= 「個別取得不可」。推定値は返さない）。
+  Future<int?> promptTokenCount(List<LlmChatMessage> messages) async {
     final engine = _engine;
-    if (engine is! LlamaDartEngine) return null;
+    if (engine is! NativeLlmEngine) return null;
     try {
-      return await engine.promptTokenCount(messages);
+      final prompt = messages.map((m) => m.content).join('\n');
+      return await engine.countTokens(prompt);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 単一テキストのトークン数を実測する(B: チャンク分割の予算計算)。
+  ///
+  /// ネイティブのトークナイザが使えない場合(fake エンジン等)は null。
+  Future<int?> countTokens(String text) async {
+    final engine = _engine;
+    if (engine is! NativeLlmEngine) return null;
+    try {
+      return await engine.countTokens(text);
     } catch (_) {
       return null;
     }
@@ -480,22 +505,47 @@ class LocalLlmService {
 
   /// モデルを読み込む（ファイル検証 + エンジン生成 + 実際のロード）。
   ///
-  /// 実際のロードは llamadart の worker isolate 内で実行され、
+  /// 実際のロードは NativeLlmEngine のワーカー isolate 内で実行され、
   /// UI スレッドはブロックされない。
   ///
   /// 成功: true（state -> idle）。ファイル不在・ロード失敗: false（state -> error）。
+  /// セッション再利用キーを作る（モデルパス + 実行設定 + プリセット値）。
+  _LlmSessionKey _keyFor(String modelPath, LlmRuntimeSettings s) {
+    return _LlmSessionKey(
+      modelPath: modelPath,
+      backend: s.backend,
+      // A-3: 縮小フォールバック適用中は小さい値でキーを組む(再利用判定)。
+      contextSize: effectiveContextSize,
+      gpuLayers: _preset.gpuLayers,
+      cpuThreads: s.cpuThreads,
+    );
+  }
+
   Future<bool> loadModel(String modelPath) async {
     if (_disposed || _busy) return false;
-    // B: 同一モデルがロード済みなら再ロードしない（シート再表示・再試行の
-    // ボトルネック排除。重みはそのまま再利用する）。
-    // 再利用条件: モデルパスに加え、ロード時に適用する実行設定
-    // （スレッド数・バックエンド・gpuLayers 等）が完全一致する場合のみ。
-    // 設定が変わった場合は古いエンジンを再利用しない。
-    if (_engine != null &&
-        _currentModelPath == modelPath &&
-        _currentSettings == runtimeSettings &&
-        !_cancelled) {
+    final key = _keyFor(modelPath, runtimeSettings);
+    // B: 同一セッションがロード済みなら再ロードしない。再利用条件は
+    // モデルパスに加え、バックエンド・コンテキスト・gpuLayers・スレッド数
+    // が完全一致する場合のみ（= タプルキー一致）。設定が変われば再ロード。
+    if (_engine != null && _currentKey == key && !_cancelled) {
       _lastLoadMs = 0;
+      return true;
+    }
+    // シート跨ぎ保持: 別の LocalLlmService インスタンスが同一キーで
+    // ロードしたネイティブセッションがあれば adopt（再ロード回避）。
+    // カスタムファクトリ（テスト）は対象外。
+    final shared = _customEngineFactory == null ? _sharedSession : null;
+    if (shared != null &&
+        shared.key == key &&
+        shared.engine is NativeLlmEngine &&
+        (shared.engine as NativeLlmEngine).isReusable) {
+      _disposeOwnEngine(excluding: shared.engine);
+      _engine = shared.engine;
+      _currentKey = key;
+      _currentModelPath = modelPath;
+      _lastLoadUsedCpuFallback = false;
+      _lastLoadMs = 0;
+      _transition(LlmState.idle);
       return true;
     }
     _busy = true;
@@ -508,46 +558,89 @@ class LocalLlmService {
         throw StateError('Model file not found: $modelPath');
       }
       _engine?.dispose();
-      LlmInferenceEngine? engine;
+      _engine = null;
+      final engine = _buildEngine(key);
       try {
-        engine = _newEngine(modelPath, runtimeSettings);
         await engine.loadModel(modelPath);
       } catch (_) {
         // 失敗したエンジンは確実に解放する（同時にロードするのは常時1つ）。
         try {
-          engine?.dispose();
+          engine.dispose();
         } catch (_) {}
         rethrow;
       }
       loadWatch.stop();
       _lastLoadMs = loadWatch.elapsedMilliseconds;
       _lastLoadUsedCpuFallback = false;
-      _engine = engine;
-      _currentModelPath = modelPath;
-      _currentSettings = runtimeSettings;
+      _lastLoadUsedContextFallback = false;
+      _adopt(engine, key, modelPath);
       _transition(LlmState.idle);
       return true;
     } catch (e) {
-      // B: Vulkan 要求でのロード失敗は、失敗したエンジンを解放して
-      // CPU 設定で 1 回だけ再試行する（未対応端末でのクラッシュ防止）。
-      if (runtimeSettings.useVulkan && !_lastLoadUsedCpuFallback) {
+      // A-3: コンテキスト過大によるロード失敗(HTP バッファ確保失敗等)に
+      // 備え、プリセットが 4096 超なら 4096 で 1 回だけ再試行する。
+      // ただしファイル自体が存在しない場合(同期検証失敗)は対象外。
+      // 縮小は HTP(NPU) の 4GiB DSP 上限で起きるバッファ確保失敗への
+      // 対処であり、CPU/GPU では無関係なため npu のときだけ発火させる。
+      final modelMissing = e is StateError &&
+          e.message.toString().contains('Model file not found');
+      if (!modelMissing &&
+          runtimeSettings.backend == LlmBackend.npu &&
+          !_lastLoadUsedContextFallback &&
+          _contextSizeOverride == null &&
+          _preset.contextSize > fallbackContextSize) {
+        LlmInferenceEngine? shrinkEngine;
         try {
-          final cpuSettings = runtimeSettings.copyWith(useVulkan: false);
-          final cpuEngine = _newEngine(modelPath, cpuSettings);
+          _contextSizeOverride = fallbackContextSize;
+          final shrinkKey = _keyFor(modelPath, runtimeSettings);
+          shrinkEngine = _buildEngine(shrinkKey);
+          await shrinkEngine.loadModel(modelPath);
+          loadWatch.stop();
+          _lastLoadMs = loadWatch.elapsedMilliseconds;
+          _lastLoadUsedCpuFallback = false;
+          _lastLoadUsedContextFallback = true;
+          debugPrint(
+            'LocalLlmService: context shrink fallback '
+            '${_preset.contextSize} -> $fallbackContextSize',
+          );
+          _adopt(shrinkEngine, shrinkKey, modelPath);
+          shrinkEngine = null; // adopt 済み = 二重 dispose 防止
+          _transition(LlmState.idle);
+          return true;
+        } catch (_) {
+          try {
+            shrinkEngine?.dispose();
+          } catch (_) {}
+          // 縮小も失敗 → 元のコンテキストへ戻して後続フォールバックへ。
+          _contextSizeOverride = null;
+        }
+      }
+      // B: NPU/GPU 要求でのロード失敗は、失敗したエンジンを解放して
+      // CPU 設定で 1 回だけ再試行する（未対応端末でのクラッシュ防止）。
+      if ((runtimeSettings.backend == LlmBackend.npu ||
+              runtimeSettings.backend == LlmBackend.gpu) &&
+          !_lastLoadUsedCpuFallback) {
+        LlmInferenceEngine? cpuEngine;
+        try {
+          final cpuSettings = runtimeSettings.copyWith(backend: LlmBackend.cpu);
+          final cpuKey = _keyFor(modelPath, cpuSettings);
+          cpuEngine = _buildEngine(cpuKey);
           await cpuEngine.loadModel(modelPath);
           loadWatch.stop();
           _lastLoadMs = loadWatch.elapsedMilliseconds;
           _lastLoadUsedCpuFallback = true;
-          _engine = cpuEngine;
-          _currentModelPath = modelPath;
-          _currentSettings = cpuSettings;
           // 以後のロード要求が実際に動作している CPU 設定と比較されるよう、
           // 実行要求値を実値へ同期する（再利用判定の一致）。
           runtimeSettings = cpuSettings;
+          _adopt(cpuEngine, cpuKey, modelPath);
+          cpuEngine = null; // adopt 済み = 二重 dispose 防止
           _transition(LlmState.idle);
           return true;
         } catch (_) {
-          // CPU 再試行も失敗 → 元のエラーとして扱う。
+          // CPU 再試行も失敗 → エンジンを確実に解放してから元エラー扱い。
+          try {
+            cpuEngine?.dispose();
+          } catch (_) {}
         }
       }
       _transition(LlmState.error, error: _friendlyError(e));
@@ -557,15 +650,34 @@ class LocalLlmService {
     }
   }
 
+  /// ロード済みエンジンをこのサービスに紐付け、静的セッションキャッシュへ登録。
+  void _adopt(LlmInferenceEngine engine, _LlmSessionKey key, String modelPath) {
+    _engine = engine;
+    _currentKey = key;
+    _currentModelPath = modelPath;
+    if (_customEngineFactory == null) {
+      _sharedSession = _LlmSessionEntry(key: key, engine: engine);
+    }
+  }
+
+  /// このインスタンスが保持する旧エンジンを解放する（[excluding] は残す）。
+  void _disposeOwnEngine({LlmInferenceEngine? excluding}) {
+    final own = _engine;
+    if (own == null || identical(own, excluding)) return;
+    try {
+      own.dispose();
+    } catch (_) {}
+  }
+
   /// [messages] からテキストを生成し、トークンを onToken でストリーム配信。
   ///
   /// 成功: 完全テキストを返す（state -> done）。
   /// 失敗: Exception を投げる（state -> error）。
   /// キャンセル: [LlmCancelledException]（state -> idle）。
   Future<String> generate(
-    List<LlamaChatMessage> messages, {
+    List<LlmChatMessage> messages, {
     void Function(String piece)? onToken,
-    GenerationParams? options,
+    LlmGenerationOptions? options,
   }) async {
     if (_disposed) {
       throw StateError('LocalLlmService is already disposed.');
@@ -593,14 +705,14 @@ class LocalLlmService {
       // await for でストリームを最後まで消費する。ジェネレータの完了と
       // ループ終了が完全同期するため、FakeAsync の widget テスト
       // （モデル切替シート等）でも確実に完了する。
-      // キャンセルは cancel() でフラグを立て、次のトークンで
-      // LlmCancelledException を投げてループを抜ける
-      // （await for が自動的に購読を破棄する）。
-      await for (final chunk in stream) {
+      // キャンセルは cancel()（ネイティブへ停止要求済み）でフラグを立て、
+      // 次のトークンで LlmCancelledException を投げてループを抜ける
+      // （await for が自動的に購読を破棄する。ストリーム側も rc==1 で
+      //  LlmCancelledException を配信するため双方から検知する）。
+      await for (final piece in stream) {
         if (_cancelled) {
           throw const LlmCancelledException();
         }
-        final piece = _chunkText(chunk);
         if (piece.isEmpty) continue;
         generatedTokens++;
         ttftMs ??= stopwatch.elapsedMilliseconds;
@@ -613,7 +725,7 @@ class LocalLlmService {
       stopwatch.stop();
       // B: backend/thinking は実エンジンで確定した値のみ報告する
       // （fake エンジンでは「実測不能」として null を返す）。
-      final native = engine is LlamaDartEngine ? engine : null;
+      final native = engine is NativeLlmEngine ? engine : null;
       LlmNativePerf? nativePerf;
       if (native != null) {
         try {
@@ -627,7 +739,7 @@ class LocalLlmService {
         elapsed: stopwatch.elapsed,
         timeToFirstTokenMs: ttftMs,
         loadMs: _lastLoadMs,
-        backend: native != null ? LlamaDartEngine.backendLabel : null,
+        backend: native != null ? NativeLlmEngine.backendLabel : null,
         thinkingEnabled: native != null ? false : null,
         requestedThreads: native?.requestedCpuThreads,
         requestedThreadsBatch: native?.requestedCpuThreads,
@@ -638,6 +750,7 @@ class LocalLlmService {
         nativePromptEvalTokens: nativePerf?.promptEvalTokens,
         nativeEvalMs: nativePerf?.evalMs,
         nativeEvalTokens: nativePerf?.evalTokens,
+        stopReason: _stopReasonLabel(nativePerf?.stopReason),
       );
       _transition(LlmState.done);
       return buffer.toString();
@@ -655,31 +768,60 @@ class LocalLlmService {
 
   /// 生成中であることをキャンセルする（state -> idle）。
   ///
-  /// 次のトークンで生成ループを中断する（await for が購読を破棄する。
-  /// llamadart でもトークン境界でデコードが停止する）。
+  /// ネイティブへアトミックな停止要求（nllm_request_stop）を渡し、
+  /// ワーカーは次のトークン境界でデコードを停止する。
   void cancel() {
-    if (!_busy) return;
+    // B: チャンク境界(生成と生成の間は _busy=false)でもキャンセルを
+    // 有効にするためフラグは常に立てる。ネイティブ停止要求は生成中のみ。
     _cancelled = true;
+    if (!_busy) return;
+    final engine = _engine;
+    if (engine is NativeLlmEngine) {
+      engine.requestStop();
+    }
   }
 
+  /// B: 直近のキャンセル要求フラグ(チャンク境界の判定用)。
+  bool get isCancelled => _cancelled;
+
   /// サービスを終了する。以降は [onStateChange] は呼ばれない。
+  ///
+  /// 本番（NativeLlmEngine）ではシートを閉じてもネイティブセッションは
+  /// 静的キャッシュ [_sharedSession] に保持し、次回同一キーで adopt する
+  /// （再ロード回避）。アプリ background 時の解放は Phase C。
+  /// カスタムファクトリ（テスト）は従来通り即時解放する。
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
     _cancelled = true;
-    _engine?.dispose();
+    if (_customEngineFactory != null) {
+      try {
+        _engine?.dispose();
+      } catch (_) {}
+    }
     _engine = null;
+    _currentKey = null;
     _currentModelPath = null;
     onStateChange = null;
   }
 
-  /// ストリームチャンクからテキスト差分を抽出する。
-  static String _chunkText(LlamaCompletionChunk chunk) {
-    if (chunk.choices.isEmpty) return '';
-    return chunk.choices.first.delta.content ?? '';
+  /// 生メッセージをユーザー表示用に変換する（本文・URL等は出力しない）。
+  /// native 停止理由コード → 表示文言(0=eos 1=limit 2=cancel 3=error)。
+  static String? _stopReasonLabel(int? code) {
+    switch (code) {
+      case 0:
+        return 'EOS(自然終了)';
+      case 1:
+        return '上限到達(未完了)';
+      case 2:
+        return 'キャンセル';
+      case 3:
+        return 'エラー';
+      default:
+        return null;
+    }
   }
 
-  /// 生メッセージをユーザー表示用に変換する（本文・URL等は出力しない）。
   static String _friendlyError(Object e) {
     final msg = e.toString();
     if (msg.contains('Model file not found')) {
@@ -694,6 +836,49 @@ class LocalLlmService {
         : firstLine;
     return 'ローカルAIの動作に失敗しました: $clipped';
   }
+}
+
+/// セッション再利用キー（モデルパス + 実行設定 + プリセット値のタプル）。
+///
+/// これが完全一致した場合のみ既存エンジン（ネイティブセッション）を
+/// 再ロードなく再利用する。バックエンド・コンテキスト・gpuLayers・
+/// スレッド数のいずれかが変われば別キー = 再ロード。
+@immutable
+class _LlmSessionKey {
+  const _LlmSessionKey({
+    required this.modelPath,
+    required this.backend,
+    required this.contextSize,
+    required this.gpuLayers,
+    required this.cpuThreads,
+  });
+
+  final String modelPath;
+  final LlmBackend backend;
+  final int contextSize;
+  final int gpuLayers;
+  final int cpuThreads;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _LlmSessionKey &&
+      other.modelPath == modelPath &&
+      other.backend == backend &&
+      other.contextSize == contextSize &&
+      other.gpuLayers == gpuLayers &&
+      other.cpuThreads == cpuThreads;
+
+  @override
+  int get hashCode =>
+      Object.hash(modelPath, backend, contextSize, gpuLayers, cpuThreads);
+}
+
+/// シート跨ぎで保持するセッション（キーとエンジン实例の対応）。
+class _LlmSessionEntry {
+  _LlmSessionEntry({required this.key, required this.engine});
+
+  final _LlmSessionKey key;
+  final LlmInferenceEngine engine;
 }
 
 /// モデルファイルの配置・解決（M4 以降はアプリ内ダウンロードに対応）。

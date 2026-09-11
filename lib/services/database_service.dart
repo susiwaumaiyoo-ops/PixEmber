@@ -39,7 +39,7 @@ class DatabaseService {
     final path = join(dbPath, 'pixiv_viewer.db');
     return await openDatabase(
       path,
-      version: 25,
+      version: 26,
       onConfigure: (db) async {
         // 外部キー制約（ON DELETE CASCADE 等）を有効化。
         // SQLite はデフォルトで無効のため接続毎に設定が必要。
@@ -93,6 +93,8 @@ class DatabaseService {
     await _createReadingNotes(db);
     // LLM要約キャッシュ（v25 追加）
     await _createLlmSummaries(db);
+    // 自動要約の実行状態・作品キュー（v26 追加）
+    await _createAutoSummary(db);
   }
 
   /// ダウンロードキューグループテーブルを作成する（_onCreate / v17 migration / onOpen 共用）。
@@ -756,6 +758,9 @@ class DatabaseService {
     // LLM要約キャッシュ（v25 追加）
     await _createLlmSummaries(db);
 
+    // 自動要約の実行状態・作品キュー（v26 追加）
+    await _createAutoSummary(db);
+
     await db.execute('CREATE INDEX idx_history_workid ON history(work_id)');
     await db.execute(
       'CREATE INDEX idx_folder_items_folderid ON folder_items(folder_id)',
@@ -1360,6 +1365,53 @@ class DatabaseService {
       await _createLlmSummaries(db);
       debugPrint('[Migration v24->v25] llm_summaries を追加');
     }
+    if (oldVersion < 26) {
+      // 自動要約の実行状態・作品キュー（Phase 9-B・非破壊的増設）。
+      await _createAutoSummary(db);
+      debugPrint('[Migration v25->v26] auto_summary_runs/items を追加');
+    }
+  }
+
+  /// 自動要約の実行状態（auto_summary_runs）と作品キュー
+  /// （auto_summary_items）を作成する（_onCreate / v26 migration / onOpen 共用）。
+  ///
+  /// - 本文・思考・生成途中トークンは保存しない（進捗DBへ本文を複製しない）。
+  /// - OS 停止後は stale な running を照合して中断扱いにする（復元用）。
+  Future<void> _createAutoSummary(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS auto_summary_runs (
+        run_id TEXT PRIMARY KEY,
+        phase TEXT NOT NULL,
+        wait_reason TEXT NOT NULL DEFAULT 'none',
+        started_at_millis INTEGER NOT NULL DEFAULT 0,
+        updated_at_millis INTEGER NOT NULL DEFAULT 0,
+        current_tag TEXT,
+        current_work_id INTEGER,
+        current_work_title TEXT,
+        model_label TEXT,
+        backend_name TEXT,
+        candidates_fetched INTEGER NOT NULL DEFAULT 0,
+        has_more_candidates INTEGER NOT NULL DEFAULT 0,
+        stop_reason TEXT,
+        is_final INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS auto_summary_items (
+        run_id TEXT NOT NULL,
+        work_id INTEGER NOT NULL,
+        tags_json TEXT NOT NULL DEFAULT '[]',
+        title TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'waiting',
+        error_reason TEXT,
+        updated_at_millis INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (run_id, work_id)
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_asr_final '
+      'ON auto_summary_runs(is_final, updated_at_millis)',
+    );
   }
 
   // ==========================================================================

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
+import '../services/auto_summary_bridge_controller.dart';
+import '../services/fgs_lifecycle_service.dart';
+import '../services/llm_run_arbiter.dart';
 import '../services/local_llm_service.dart';
-import '../services/llm_model_preset.dart'
-    show LlmInferencePreset, LlmModelChoice;
+import '../services/llm_model_preset.dart' show LlmModelChoice;
 import '../services/llm_summary_cache_service.dart';
 import '../services/llm_summary_service.dart';
 
@@ -27,6 +29,7 @@ class LlmSummarySheet extends StatefulWidget {
     this.workId,
     this.availableModels = const <LlmModelChoice>[],
     this.serviceFactory,
+    this.bridgeController,
   });
 
   /// 使用する GGUF モデルの絶対パス（初期値。「別モデルで再生成」で更新）。
@@ -36,7 +39,12 @@ class LlmSummarySheet extends StatefulWidget {
   final List<LlmModelChoice> availableModels;
 
   /// サービス生成ファクトリ（テストで fake エンジン注入に使用）。
+  /// 非 null ならローカル実行（テスト互換）。null なら FGS 経由。
   final LocalLlmService Function()? serviceFactory;
+
+  /// FGS ブリッジコントローラ（手動要約の要求・応答）。
+  /// null なら内部で生成・破棄する。
+  final AutoSummaryBridgeController? bridgeController;
 
   final String title;
 
@@ -77,16 +85,32 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
   /// B: 自動再生成（コピー検知リトライ）の回数。
   int _regenerations = 0;
 
+  /// B-5: チャンク進捗（現在 / 全チャンク数）。0 = 非チャンク。
+  int _chunkCurrent = 0;
+  int _chunkTotal = 0;
+  bool get _chunking => _chunkTotal > 1;
+
   /// B: loading 中に表示する進行ステージ（本文処理 / モデル準備）。
   String _stageText = 'モデルを準備中…（初回は数秒〜数十秒かかることがあります）';
 
   /// 現在選択中のモデルパス（M5）。「別モデルで再生成」で更新される。
   String _activeModelPath = '';
 
+  /// FGS 経由の手動要約用。
+  AutoSummaryBridgeController? _bridge;
+  bool _ownsBridge = false;
+  String _requestId = '';
+  bool _waitingForAuto = false;
+
   @override
   void dispose() {
     // 生成中・読み込み中でも確実に破棄（dispose 後の setState は起きない）。
     _service?.dispose();
+    if (_ownsBridge) {
+      _bridge?.dispose();
+    } else if (_bridge != null) {
+      _bridge!.onManualEvent = null;
+    }
     super.dispose();
   }
 
@@ -102,19 +126,26 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
       _bodyMs = null;
       _cacheHit = false;
       _regenerations = 0;
+      _waitingForAuto = false;
       _stageText = '本文を処理中…';
     });
     // B: 本文解決の計測開始。
     final bodyWatch = Stopwatch()..start();
-    // 切替のたびに新しいサービスを作り、旧エンジンを解放する
-    // （同時にロードするモデルは常に1つ・M5）。
-    // 実行設定は本文解決後に読む（エラー経路では不要なプラグイン I/O を避ける）。
+    // テスト用ファクトリが指定されていればローカル実行（旧経路）。
+    if (widget.serviceFactory != null) {
+      await _startLocal(bodyWatch);
+      return;
+    }
+    // FGS 経由の実行。
+    await _startViaFgs(bodyWatch);
+  }
+
+  /// テスト互換のローカル実行経路（serviceFactory 指定時）。
+  Future<void> _startLocal(Stopwatch bodyWatch) async {
     final old = _service;
     _service = null;
     old?.dispose();
     try {
-      // M1: まず小説本文を解決（キャッシュ → 取得 + 保存）。
-      // 取得失敗時は作者説明へのフォールバックなしでエラーにする。
       final body = (await widget.resolveBody()) ?? '';
       if (!mounted) return;
       bodyWatch.stop();
@@ -129,10 +160,7 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
         });
         return;
       }
-      final settings = await LlmRuntimeSettings.load();
-      final svc =
-          widget.serviceFactory?.call() ??
-          LocalLlmService(preset: _activePreset, runtimeSettings: settings);
+      final svc = widget.serviceFactory!.call();
       _service = svc;
       final ok = await svc.loadModel(_activeModelPath);
       if (!mounted) return;
@@ -143,18 +171,24 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
         });
         return;
       }
-      // M6: キャッシュ照会（モデルIDはモデルパスのファイル名）。
       final fingerprint = LlmSummaryService.computeSourceFingerprint(
         title: widget.title,
         tags: widget.tags,
         body: body,
       );
       final modelId = p.basename(_activeModelPath);
+      // F2: キャッシュ有効性判定にモデルファイル hash を含める（手動/自動共通）。
+      // workId 指定時のみ計算（UI テストの pump 回数に影響しないよう lazy）。
+      String? modelFileHash;
       if (widget.workId != null) {
+        modelFileHash = await LlmSummaryCacheService.computeModelFileHash(
+          _activeModelPath,
+        );
         final cached = await LlmSummaryCacheService().get(
           workId: widget.workId!,
           modelId: modelId,
           sourceFingerprint: fingerprint,
+          modelFileHash: modelFileHash,
         );
         if (cached != null) {
           if (!mounted) return;
@@ -171,9 +205,16 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
         title: widget.title,
         body: body,
         tags: widget.tags,
-        description: widget.description, // コピー検出のみ（プロンプトには含めない）
+        description: widget.description,
         modelLabel: _activeModelLabel,
         onRegeneration: () => _regenerations++,
+        onStageProgress: (current, total) {
+          if (!mounted) return;
+          setState(() {
+            _chunkCurrent = current;
+            _chunkTotal = total;
+          });
+        },
         onToken: (piece) {
           if (!mounted) return;
           setState(() {
@@ -189,15 +230,15 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
         _phase = _SheetPhase.done;
         _result = result;
       });
-      // M6: 生成結果をキャッシュに保存（失敗は無視・表示を妨げない）。
       if (widget.workId != null) {
-        final modelFileHash = await LlmSummaryCacheService.computeModelFileHash(
-          _activeModelPath,
-        );
         await LlmSummaryCacheService().save(
           workId: widget.workId!,
           modelId: modelId,
-          modelFileHash: modelFileHash,
+          modelFileHash:
+              modelFileHash ??
+              await LlmSummaryCacheService.computeModelFileHash(
+                _activeModelPath,
+              ),
           sourceFingerprint: fingerprint,
           result: result,
         );
@@ -207,6 +248,8 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
       setState(() {
         _phase = _SheetPhase.loading;
         _noteCancelled = true;
+        _chunkCurrent = 0;
+        _chunkTotal = 0;
       });
     } on LlmSummaryException catch (e) {
       if (!mounted) return;
@@ -227,7 +270,178 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
     }
   }
 
+  /// FGS 経由の手動要約実行（B2-4+5: 推論は FGS 側 LlmRunArbiter のみ）。
+  Future<void> _startViaFgs(Stopwatch bodyWatch) async {
+    try {
+      // 1. 本文解決。
+      final body = (await widget.resolveBody()) ?? '';
+      if (!mounted) return;
+      bodyWatch.stop();
+      setState(() {
+        _bodyMs = bodyWatch.elapsedMilliseconds;
+        _stageText = 'モデルを準備中…（初回は数秒〜数十秒かかることがあります）';
+      });
+      if (body.trim().isEmpty) {
+        setState(() {
+          _phase = _SheetPhase.error;
+          _errorMessage = '小説本文を取得できないため、AI要約を生成できません。';
+        });
+        return;
+      }
+
+      // 2. キャッシュ確認（UI 側で DB 直接参照は許可）。
+      final fingerprint = LlmSummaryService.computeSourceFingerprint(
+        title: widget.title,
+        tags: widget.tags,
+        body: body,
+      );
+      final modelId = p.basename(_activeModelPath);
+      if (widget.workId != null) {
+        // F2: FGS 起動前にキャッシュを確認する際も、モデルファイル hash を
+        // 条件に含め、旧モデルの別内容キャッシュを誤って使わない。
+        final modelFileHash = await LlmSummaryCacheService.computeModelFileHash(
+          _activeModelPath,
+        );
+        final cached = await LlmSummaryCacheService().get(
+          workId: widget.workId!,
+          modelId: modelId,
+          sourceFingerprint: fingerprint,
+          modelFileHash: modelFileHash,
+        );
+        if (cached != null) {
+          if (!mounted) return;
+          _cacheHit = true;
+          setState(() {
+            _phase = _SheetPhase.done;
+            _result = cached;
+          });
+          return;
+        }
+      }
+
+      // 3. FGS 起動・READY 確認。
+      setState(() => _stageText = 'バックグラウンドサービスを起動中…');
+      final ready = await FgsLifecycleService().ensureServiceReady();
+      if (!mounted) return;
+      if (!ready) {
+        setState(() {
+          _phase = _SheetPhase.error;
+          _errorMessage = 'バックグラウンドサービスの起動に失敗しました。';
+        });
+        return;
+      }
+
+      // 4. ブリッジ準備。
+      if (_bridge == null) {
+        _bridge = widget.bridgeController ?? AutoSummaryBridgeController();
+        _ownsBridge = widget.bridgeController == null;
+      }
+      _requestId =
+          'manual-${widget.workId ?? 0}-${DateTime.now().millisecondsSinceEpoch}';
+      _bridge!.onManualEvent = _onManualEvent;
+
+      // 5. 手動要約要求を送信。
+      setState(() => _stageText = '生成を開始しています…');
+      _bridge!.submitManualSummary(
+        requestId: _requestId,
+        workId: widget.workId ?? 0,
+        title: widget.title,
+        tags: widget.tags,
+        body: body,
+        description: widget.description,
+        modelLabel: _activeModelLabel,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final firstLine = e.toString().split('\n').first.trim();
+      setState(() {
+        _phase = _SheetPhase.error;
+        _errorMessage =
+            '要約の生成に失敗しました: ${firstLine.length > 120 ? '${firstLine.substring(0, 120)}…' : firstLine}';
+      });
+    } finally {
+      _busy = false;
+    }
+  }
+
+  /// FGS 側からの手動要約イベント受信。
+  void _onManualEvent(
+    String requestId,
+    ManualRequestStatus status, {
+    String? token,
+    LlmSummaryResult? result,
+    String? error,
+  }) {
+    if (requestId != _requestId) return;
+    if (!mounted) return;
+    switch (status) {
+      case ManualRequestStatus.waiting:
+        setState(() {
+          _waitingForAuto = true;
+          _stageText = '自動要約の処理終了を待っています…';
+        });
+        break;
+      case ManualRequestStatus.generating:
+        setState(() {
+          _waitingForAuto = false;
+          if (_phase == _SheetPhase.loading) {
+            _phase = _SheetPhase.generating;
+          }
+          if (token != null) _streamText += token;
+        });
+        break;
+      case ManualRequestStatus.completed:
+        setState(() {
+          _phase = _SheetPhase.done;
+          _result = result;
+        });
+        // キャッシュ保存（失敗は無視）。
+        if (widget.workId != null && result != null) {
+          _saveToCache(result);
+        }
+        break;
+      case ManualRequestStatus.cancelled:
+        setState(() {
+          _phase = _SheetPhase.loading;
+          _noteCancelled = true;
+        });
+        break;
+      case ManualRequestStatus.error:
+        setState(() {
+          _phase = _SheetPhase.error;
+          _errorMessage = error ?? '生成に失敗しました。';
+        });
+        break;
+      case ManualRequestStatus.queued:
+        break;
+    }
+  }
+
+  Future<void> _saveToCache(LlmSummaryResult result) async {
+    try {
+      final fingerprint = LlmSummaryService.computeSourceFingerprint(
+        title: widget.title,
+        tags: widget.tags,
+        body: '', // 本文は既に解決済みだが、キャッシュキーには空で十分（workId+modelId で一意）
+      );
+      final modelId = p.basename(_activeModelPath);
+      final modelFileHash = await LlmSummaryCacheService.computeModelFileHash(
+        _activeModelPath,
+      );
+      await LlmSummaryCacheService().save(
+        workId: widget.workId!,
+        modelId: modelId,
+        modelFileHash: modelFileHash,
+        sourceFingerprint: fingerprint,
+        result: result,
+      );
+    } catch (_) {}
+  }
+
   void _cancel() {
+    if (_requestId.isNotEmpty && _bridge != null) {
+      _bridge!.cancelManualSummary(_requestId);
+    }
     _service?.cancel();
   }
 
@@ -236,14 +450,6 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
     if (_busy) return;
     setState(() => _activeModelPath = choice.path);
     _start();
-  }
-
-  /// M5: 現在のモデルの推論プリセット（候補一致。未登録なら既定値）。
-  LlmInferencePreset get _activePreset {
-    for (final m in widget.availableModels) {
-      if (m.path == _activeModelPath) return m.preset;
-    }
-    return LlmInferencePreset.defaults;
   }
 
   /// M5: 現在のモデルの表示ラベル（候補一覧から解決。未登録なら空）。
@@ -424,6 +630,13 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
               _stageText,
               style: const TextStyle(color: Colors.white70, fontSize: 13),
             ),
+            if (_waitingForAuto) ...[
+              const SizedBox(height: 8),
+              const Text(
+                '自動要約の処理終了を待っています',
+                style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
+              ),
+            ],
             if (_bodyMs != null) ...[
               const SizedBox(height: 4),
               Text(
@@ -448,9 +661,9 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Text(
-                  '生成中…',
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                Text(
+                  _chunking ? '全文解析中 ($_chunkCurrent/$_chunkTotal)…' : '生成中…',
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
               ],
             ),
@@ -552,6 +765,10 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
               ],
             ),
           ),
+        if ((result.thinking ?? '').isNotEmpty) ...[
+          _buildThinking(result.thinking!),
+          const SizedBox(height: 12),
+        ],
         _SectionLabel(label: 'あらすじ'),
         Text(
           result.synopsis,
@@ -623,6 +840,50 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
     );
   }
 
+  /// モデルが吐いた思考プロセス（本文から分離）を折りたたみ表示する。
+  Widget _buildThinking(String thinking) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          iconColor: Colors.white54,
+          collapsedIconColor: Colors.white54,
+          title: const Row(
+            children: [
+              Icon(Icons.psychology_alt, size: 16, color: Colors.amberAccent),
+              SizedBox(width: 6),
+              Text(
+                '思考プロセス',
+                style: TextStyle(color: Colors.amberAccent, fontSize: 13),
+              ),
+            ],
+          ),
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SelectableText(
+                thinking,
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 12,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// M5: 生成メタ情報（モデル名・日時・所要時間・速度）。
   Widget _buildModelMeta(LlmSummaryResult result) {
     final label = (result.modelLabel?.isNotEmpty ?? false)
@@ -656,7 +917,7 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
       if (result.inputTokens != null) ('入力トークン', '${result.inputTokens}'),
       if (tps != null) ('速度', '${tps.toStringAsFixed(1)} トークン/秒'),
       if (stats?.backend != null) ('backend', stats!.backend!),
-      if (stats?.usedCpuFallback ?? false) ('フォールバック', 'Vulkan失敗→CPUで実行'),
+      if (stats?.usedCpuFallback ?? false) ('フォールバック', 'バックエンド失敗→CPUで実行'),
       if (stats?.requestedThreads != null)
         (
           'スレッド要求',
@@ -678,8 +939,13 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
         ('ネイティブ速度', '${nativeTps.toStringAsFixed(1)} トークン/秒'),
       if (stats?.nativeEvalMs != null && (stats!.nativeEvalMs ?? 0) <= 0)
         ('ネイティブ速度', '未取得'),
+      if (stats?.stopReason != null) ('停止理由', stats!.stopReason!),
+      if (result.processingMode != null) ('処理方式', result.processingMode!),
       ('キャッシュ', _cacheHit ? 'ヒット' : 'なし'),
       if (_regenerations > 0) ('自動再生成', '$_regenerations 回'),
+      // A-3: コンテキスト縮小フォールバックが発生した場合のみ表示する。
+      if (_service?.contextShrinkNote != null)
+        ('コンテキスト', _service!.contextShrinkNote!),
     ];
     return Container(
       width: double.infinity,

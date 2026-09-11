@@ -14,6 +14,7 @@ class LlmModelCard extends StatelessWidget {
     required this.subtitle,
     this.description,
     this.badge,
+    this.npuBadge,
     this.warning,
     this.error,
     this.progress,
@@ -32,6 +33,9 @@ class LlmModelCard extends StatelessWidget {
 
   /// 状態バッジ（「推奨」「ダウンロード済み」「カスタム」等）。
   final String? badge;
+
+  /// NPU 対応バッジ（C-3）。true=⚡NPU対応 / false=⚠️CPU実行 / null=不明で非表示。
+  final bool? npuBadge;
 
   /// 警告テキスト（高 RAM 要件など）。
   final String? warning;
@@ -108,6 +112,10 @@ class LlmModelCard extends StatelessWidget {
                     ),
                   ),
                 ),
+              ],
+              if (npuBadge != null) ...[
+                const SizedBox(width: 6),
+                _NpuChip(npuCompatible: npuBadge!),
               ],
             ],
           ),
@@ -272,6 +280,31 @@ class LlmModelCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// NPU 対応/非対応の小さなバッジチップ（C-3）。
+class _NpuChip extends StatelessWidget {
+  const _NpuChip({required this.npuCompatible});
+
+  final bool npuCompatible;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = npuCompatible ? Colors.tealAccent : Colors.orangeAccent;
+    final label = npuCompatible ? '⚡ NPU対応' : '⚠️ CPU実行';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(color: color, fontSize: 10.5),
       ),
     );
   }

@@ -318,6 +318,48 @@ void main() {
       );
     });
 
+    test('F2: 同一 work×model×fp でも model_file_hash が違えばミス', () async {
+      await cache.save(
+        workId: 9,
+        modelId: 'model-a',
+        modelFileHash: 'hash-orig',
+        sourceFingerprint: 'fp',
+        result: _result(synopsis: '元モデルの要約'),
+      );
+      // 現行モデル hash が一致 → ヒット
+      final hit = await cache.get(
+        workId: 9,
+        modelId: 'model-a',
+        sourceFingerprint: 'fp',
+        modelFileHash: 'hash-orig',
+      );
+      expect(hit, isNotNull);
+      // 取り直し後（hash 変化）→ 別ファイルとしてミス扱い（再生成させる）
+      final miss = await cache.get(
+        workId: 9,
+        modelId: 'model-a',
+        sourceFingerprint: 'fp',
+        modelFileHash: 'hash-after-reimport',
+      );
+      expect(miss, isNull);
+    });
+
+    test('F2: modelFileHash 未指定は従来どおりヒット（後方互換）', () async {
+      await cache.save(
+        workId: 10,
+        modelId: 'model-a',
+        modelFileHash: 'hash-x',
+        sourceFingerprint: 'fp',
+        result: _result(synopsis: 'ok'),
+      );
+      final legacy = await cache.get(
+        workId: 10,
+        modelId: 'model-a',
+        sourceFingerprint: 'fp',
+      );
+      expect(legacy, isNotNull);
+    });
+
     test('DBが壊れていても例外を出さず null / 無視', () async {
       final broken = DatabaseService();
       final brokenDb = await databaseFactoryFfi.openDatabase(

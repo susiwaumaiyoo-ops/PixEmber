@@ -11,14 +11,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llamadart/llamadart.dart'
-    show
-        GenerationParams,
-        LlamaChatMessage,
-        LlamaChatRole,
-        LlamaCompletionChunk,
-        LlamaCompletionChunkChoice,
-        LlamaCompletionChunkDelta;
 import 'package:pixiv_viewer/models/llm_model_catalog_entry.dart';
 import 'package:pixiv_viewer/services/llm_model_preset.dart';
 import 'package:pixiv_viewer/services/llm_summary_service.dart';
@@ -37,30 +29,15 @@ class _FakeEngine implements LlmInferenceEngine {
   Future<void> loadModel(String modelPath) async {}
 
   @override
-  Stream<LlamaCompletionChunk> generate({
-    required List<LlamaChatMessage> messages,
-    required GenerationParams options,
+  Stream<String> generate({
+    required List<LlmChatMessage> messages,
+    required LlmGenerationOptions options,
   }) async* {
     for (final c in chunks) {
       await Future<void>.delayed(const Duration(milliseconds: 1));
-      yield _chunk(c);
+      yield c;
     }
     if (error != null) throw error!;
-  }
-
-  static LlamaCompletionChunk _chunk(String text) {
-    return LlamaCompletionChunk(
-      id: 'fake',
-      object: 'chat.completion.chunk',
-      created: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      model: 'fake',
-      choices: [
-        LlamaCompletionChunkChoice(
-          index: 0,
-          delta: LlamaCompletionChunkDelta(content: text),
-        ),
-      ],
-    );
   }
 
   @override
@@ -110,14 +87,14 @@ const _summaryOutputB =
     '【タグ】\nタグB1, タグB2, タグB3, タグB4, タグB5';
 
 final _userMsg = [
-  LlamaChatMessage.fromText(role: LlamaChatRole.user, text: 'hello'),
+  LlmChatMessage.fromText(role: LlmChatRole.user, text: 'hello'),
 ];
 
 void main() {
   group('LlmInferencePreset', () {
-    test('既定値: context 4096 / 出力 512 / GPU 0', () {
+    test('既定値: context 8192 / 出力 512 / GPU 0', () {
       const d = LlmInferencePreset.defaults;
-      expect(d.contextSize, 4096);
+      expect(d.contextSize, 8192);
       expect(d.maxOutputTokens, 512);
       expect(d.gpuLayers, 0);
     });

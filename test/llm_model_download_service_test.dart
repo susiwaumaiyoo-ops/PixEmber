@@ -15,7 +15,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llamadart/llamadart.dart'
+import 'package:pixiv_viewer/services/llm_model_download_manager.dart'
     show
         ModelCacheEntry,
         ModelDownloadManager,

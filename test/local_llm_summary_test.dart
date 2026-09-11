@@ -13,14 +13,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llamadart/llamadart.dart'
-    show
-        GenerationParams,
-        LlamaChatMessage,
-        LlamaChatRole,
-        LlamaCompletionChunk,
-        LlamaCompletionChunkChoice,
-        LlamaCompletionChunkDelta;
 import 'package:pixiv_viewer/illust_model.dart';
 import 'package:pixiv_viewer/novel_model.dart';
 import 'package:pixiv_viewer/screens/novel_detail_screen.dart';
@@ -44,30 +36,22 @@ class _FakeEngine implements LlmInferenceEngine {
   Future<void> loadModel(String modelPath) async {}
 
   @override
-  Stream<LlamaCompletionChunk> generate({
-    required List<LlamaChatMessage> messages,
-    required GenerationParams options,
-  }) async* {
-    for (final c in chunks) {
-      await Future<void>.delayed(chunkDelay);
-      yield _chunk(c);
+  Stream<String> generate({
+    required List<LlmChatMessage> messages,
+    required LlmGenerationOptions options,
+  }) {
+    // async* ジェネレータは購読開始まで本体を実行しない。ここでストリーム
+    // オブジェクトを同期的に返すことで、キャンセル直後に次の generate を
+    // 呼んでも busy 判定に干渉しない(状態リセット回帰テストの前提)。
+    Stream<String> body() async* {
+      for (final c in chunks) {
+        await Future<void>.delayed(chunkDelay);
+        yield c;
+      }
+      if (error != null) throw error!;
     }
-    if (error != null) throw error!;
-  }
 
-  static LlamaCompletionChunk _chunk(String text) {
-    return LlamaCompletionChunk(
-      id: 'fake',
-      object: 'chat.completion.chunk',
-      created: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      model: 'fake',
-      choices: [
-        LlamaCompletionChunkChoice(
-          index: 0,
-          delta: LlamaCompletionChunkDelta(content: text),
-        ),
-      ],
-    );
+    return body();
   }
 
   @override
@@ -85,15 +69,15 @@ class _MultiEngine implements LlmInferenceEngine {
   Future<void> loadModel(String modelPath) async {}
 
   @override
-  Stream<LlamaCompletionChunk> generate({
-    required List<LlamaChatMessage> messages,
-    required GenerationParams options,
+  Stream<String> generate({
+    required List<LlmChatMessage> messages,
+    required LlmGenerationOptions options,
   }) async* {
     final i = callCount < responses.length ? callCount : responses.length - 1;
     callCount++;
     for (final c in responses[i]) {
       await Future<void>.delayed(const Duration(milliseconds: 1));
-      yield _FakeEngine._chunk(c);
+      yield c;
     }
   }
 
@@ -101,8 +85,69 @@ class _MultiEngine implements LlmInferenceEngine {
   void dispose() {}
 }
 
+/// generate / loadModel の呼び出し回数を数えるエンジン(状態リセット回帰用)。
+class _ResetTrackingEngine implements LlmInferenceEngine {
+  _ResetTrackingEngine({this.chunks = const ['ok']});
+
+  final List<String> chunks;
+  int loadCalls = 0;
+  int generateCalls = 0;
+
+  @override
+  Future<void> loadModel(String modelPath) async {
+    loadCalls++;
+  }
+
+  @override
+  Stream<String> generate({
+    required List<LlmChatMessage> messages,
+    required LlmGenerationOptions options,
+  }) {
+    generateCalls++;
+    Stream<String> body() async* {
+      for (final c in chunks) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+        yield c;
+      }
+    }
+
+    return body();
+  }
+
+  @override
+  void dispose() {}
+}
+
+/// 初回 generate のみ decode エラーを模すエンジン。
+class _FailOnceEngine implements LlmInferenceEngine {
+  int calls = 0;
+
+  @override
+  Future<void> loadModel(String modelPath) async {}
+
+  @override
+  Stream<String> generate({
+    required List<LlmChatMessage> messages,
+    required LlmGenerationOptions options,
+  }) {
+    calls++;
+    final fail = calls == 1;
+    Stream<String> body() async* {
+      if (fail) {
+        throw StateError('decode(prompt) rc=1 at 1536/2017');
+      }
+      yield 'recovered';
+    }
+
+    return body();
+  }
+
+  @override
+  void dispose() {}
+}
+
 final _userMsg = [
-  LlamaChatMessage.fromText(role: LlamaChatRole.user, text: 'hello'),
+  LlmChatMessage.fromText(role: LlmChatRole.user, text: 'hello'),
 ];
 
 void main() {
@@ -191,6 +236,67 @@ void main() {
       expect(service.isBusy, isFalse);
     });
 
+    test('同一セッションで generate を3回連続してもロードは1回だけ', () async {
+      final engine = _ResetTrackingEngine(chunks: const ['あ']);
+      final service = LocalLlmService(engineFactory: (p) => engine);
+      await service.loadModel(writeModel());
+      final a = await service.generate(_userMsg);
+      final b = await service.generate(_userMsg);
+      final c = await service.generate(_userMsg);
+      expect([a, b, c], ['あ', 'あ', 'あ']);
+      expect(engine.loadCalls, 1);
+      expect(engine.generateCalls, 3);
+      expect(service.state, LlmState.done);
+      expect(service.isBusy, isFalse);
+    });
+
+    test('キャンセル後の次回 generate も成功する', () async {
+      final service = LocalLlmService(
+        engineFactory: (p) => _FakeEngine([
+          'a',
+          'b',
+          'c',
+        ], chunkDelay: const Duration(milliseconds: 10)),
+      );
+      await service.loadModel(writeModel());
+      var tokens = 0;
+      await expectLater(
+        service.generate(
+          _userMsg,
+          onToken: (_) {
+            tokens++;
+            if (tokens == 1) service.cancel();
+          },
+        ),
+        throwsA(isA<LlmCancelledException>()),
+      );
+      // 次回 generate が前回の状態を持ち越さず成功すること(リセットの回帰)。
+      final text = await service.generate(_userMsg);
+      expect(text, 'abc');
+      expect(service.state, LlmState.done);
+    });
+
+    test('decode エラー後の次回 generate は状態が初期化され成功する', () async {
+      final engine = _FailOnceEngine();
+      final service = LocalLlmService(engineFactory: (p) => engine);
+      await service.loadModel(writeModel());
+      await expectLater(service.generate(_userMsg), throwsStateError);
+      expect(service.state, LlmState.error);
+      final text = await service.generate(_userMsg);
+      expect(text, 'recovered');
+      expect(service.state, LlmState.done);
+      expect(engine.calls, 2);
+    });
+
+    test('dispose 後の generate は安全に StateError(エンジン未呼び出し)', () async {
+      final engine = _ResetTrackingEngine();
+      final service = LocalLlmService(engineFactory: (p) => engine);
+      await service.loadModel(writeModel());
+      await service.dispose();
+      await expectLater(service.generate(_userMsg), throwsStateError);
+      expect(engine.generateCalls, 0);
+    });
+
     test('dispose 以降は状態遷移通知されない', () async {
       final service = LocalLlmService(engineFactory: (p) => _FakeEngine([]));
       var notified = false;
@@ -231,15 +337,17 @@ void main() {
         out.length,
         lessThanOrEqualTo(LlmSummaryService.maxBodyChars + 30),
       );
-      expect(out.contains('A${'M' * 100}'), isFalse, reason: '冒頭が中盤へ流れ込まない');
+      expect(out.contains('…（中略）…'), isTrue, reason: '中略マーカーで区切られる');
     });
 
     test('clampBody は引き続き動作（後方互換）', () {
       expect(LlmSummaryService.clampBody('  本文  '), '本文');
       expect(
-        LlmSummaryService.clampBody('a' * 3500).length,
+        LlmSummaryService.clampBody('a' * 6500).length,
         LlmSummaryService.maxBodyChars,
       );
+      expect(LlmSummaryService.clampBody('a' * 3500).length, 3500,
+          reason: '上限(6000)未満は非截断');
       expect(LlmSummaryService.clampBody(''), '');
     });
   });
@@ -264,8 +372,8 @@ void main() {
 
     test('system が先頭メッセージ・作者説明に言及しない', () {
       final messages = LlmSummaryService.buildPrompt(title: 'T', body: 'B');
-      expect(messages.first.role, LlamaChatRole.system);
-      expect(messages.last.role, LlamaChatRole.user);
+      expect(messages.first.role, LlmChatRole.system);
+      expect(messages.last.role, LlmChatRole.user);
       // 日本語の形式指示が含まれる
       expect(messages.first.content, contains('あらすじ'));
       expect(messages.first.content, contains('紹介'));
@@ -280,7 +388,7 @@ void main() {
       expect(user.contains('A' * 100), isTrue);
       expect(user.contains('M' * 100), isTrue);
       expect(user.contains('Z' * 100), isTrue);
-      expect(user.contains('A${'M' * 100}'), isFalse);
+      expect(user.contains('…（中略）…'), isTrue);
     });
 
     test('emphasizeRephrase で言い換え指示が追加される', () {
@@ -338,6 +446,33 @@ void main() {
     test('空出力: null', () {
       expect(LlmSummaryService.parseOutput(''), isNull);
       expect(LlmSummaryService.parseOutput('   '), isNull);
+    });
+
+    test('思考タグ付き出力から正しく解析できる', () {
+      final r = LlmSummaryService.parseOutput(
+        '<think>\nまずは登場人物を整理しよう。\n主語を確認。\n</think>\n'
+        '【あらすじ】a\n【紹介】b\n【タグ】剣と魔法, 異世界',
+      );
+      expect(r, isNotNull);
+      expect(r!.synopsis, 'a');
+      expect(r.intro, 'b');
+      expect(r.tagSuggestions, ['剣と魔法', '異世界']);
+    });
+
+    test('閉じ損ねた思考ブロック（本文マーカー以降が残れば解析）', () {
+      final r = LlmSummaryService.parseOutput(
+        '<thinking>止まらない推論テキスト\n\n'
+        '【あらすじ】要約\n【紹介】導入\n【タグ】タグ1',
+      );
+      expect(r, isNotNull);
+      expect(r!.synopsis, '要約');
+    });
+
+    test('stripThinkTags: 閉じたタグを除去', () {
+      expect(
+        LlmSummaryService.stripThinkTags('<THINK>考え事</THINK>本文ここ'),
+        '本文ここ',
+      );
     });
 
     test('拒否検知', () {
@@ -425,6 +560,30 @@ void main() {
           ),
         ),
       );
+    });
+
+    test('長編はチャンク分割で解析（処理方式=チャンクN分割）', () async {
+      final engine = _ResetTrackingEngine(chunks: [goodOutput]);
+      final service = LocalLlmService(engineFactory: (p) => engine);
+      await service.loadModel(writeModel());
+      final big = ('第一章。本文の続き。' * 30 + '\n\n') * 80;
+      var lastStage = 0;
+      var stageTotal = 0;
+      final result = await LlmSummaryService.generate(
+        service: service,
+        title: 'T',
+        body: big,
+        onStageProgress: (c, t) {
+          lastStage = c;
+          stageTotal = t;
+        },
+      );
+      expect(result.processingMode, contains('分割'));
+      expect(result.bodySourceNote, contains('分割して解析'));
+      expect(engine.generateCalls, greaterThan(2),
+          reason: 'チャンク毎の map + 最終生成で複数回呼び出し');
+      expect(stageTotal, greaterThan(1));
+      expect(lastStage, greaterThanOrEqualTo(1));
     });
   });
 

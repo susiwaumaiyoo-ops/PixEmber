@@ -28,24 +28,46 @@ class LlmSummaryCacheService {
 
   final DatabaseService _db;
 
-  /// プロンプト版（M1の言い換え強化プロンプトを含む現行版）。
-  static const int promptVersion = 2;
+  /// プロンプト版（思考分離プロンプトを含む現行版）。
+  /// v4: 出力書式プロンプトから英語・括弧形注記を削除(問題A)。
+  /// v5: 長文対応（n_ctx 8192 + 全文/チャンク分割 map-reduce）。旧キャッシュを無効化。
+  /// v6: プロンプト修正（件数/説明文を見出しから分離、メタテキスト混入対策）。旧キャッシュ無効化。
+  static const int promptVersion = 6;
 
   /// キャッシュを照会する。ヒット時は [LlmSummaryResult] を返す。
   /// ヒットしない・読込失敗時は null（生成を継続）。
+  ///
+  /// F2（キャッシュキー整合性）: [modelFileHash] を渡すと照会条件に加え、
+  /// 保存時（[save]）と同一のモデルファイル・フィンガープリントを持つ行のみ
+  /// ヒットさせる。手動・自動で同じ有効性判定を使うため、呼び出し側は
+  /// 必ず [computeModelFileHash] の結果を渡すこと。
+  /// 後方互換（テスト等）のため未指定時は従来どおり hash 条件なしで照会する。
   Future<LlmSummaryResult?> get({
     required int workId,
     required String modelId,
     required String sourceFingerprint,
+    String? modelFileHash,
   }) async {
     try {
       final db = await _db.database;
+      final where = [
+        'work_id = ?',
+        'model_id = ?',
+        'prompt_version = ?',
+        'source_fingerprint = ?',
+      ];
+      final args = <Object?>[workId, modelId, promptVersion, sourceFingerprint];
+      // 同一モデルファイル（内容指纹）でないと誤ヒットするため hash を条件化。
+      // model_file_hash は v25 導入時から NOT NULL で全行算出済みだが、
+      // 旧行を壊さないため「指定時のみ」絞る（NULL 行は存在せず再計算不要）。
+      if (modelFileHash != null) {
+        where.add('model_file_hash = ?');
+        args.add(modelFileHash);
+      }
       final rows = await db.query(
         'llm_summaries',
-        where:
-            'work_id = ? AND model_id = ? AND prompt_version = ? '
-            'AND source_fingerprint = ?',
-        whereArgs: [workId, modelId, promptVersion, sourceFingerprint],
+        where: where.join(' AND '),
+        whereArgs: args,
         limit: 1,
       );
       if (rows.isEmpty) return null;
@@ -104,6 +126,12 @@ class LlmSummaryCacheService {
   /// ファイル名 + サイズ + 更新日時ミリ秒の SHA-256。
   /// 数GBの GGUF 全体を読まずに実質的な同一性を判定する。
   /// ファイルが存在しない・読み取れない場合はパス自体の SHA-256 を返す。
+  ///
+  /// 注: 本来は「DL/インポート時の内容 SHA-256」が最も厳密だが、それは
+  /// 導入経路（download/import）と arbiter のモデル所有者へ保存を要する
+  /// 広範な変更になるため本バッチでは見送り（未実施）。現行の
+  /// basename:size:mtime は「取得不能時のフォールバック」として十分機能し、
+  /// 取り直し時は mtime が変わるため実用上の誤ヒットは起きにくい。
   static Future<String> computeModelFileHash(String path) async {
     try {
       final f = File(path);

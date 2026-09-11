@@ -15,7 +15,8 @@ Future<void> _pumpSettings(
   SharedPreferences.setMockInitialValues(initial);
   // 全セクションが可視範囲に入るようビューポートを拡大
   // （ListView の遅延ビルドとオフスクリーンのタップを回避）。
-  tester.view.physicalSize = const Size(1080, 2400);
+  // Phase 9-B: 自動要約カード追加でコンテンツが伸びたため高さを拡大。
+  tester.view.physicalSize = const Size(1080, 4000);
   tester.view.devicePixelRatio = 1.0;
   await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
   await tester.pumpAndSettle();

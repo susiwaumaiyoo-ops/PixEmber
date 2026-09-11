@@ -6,7 +6,6 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llamadart/llamadart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:pixiv_viewer/services/local_llm_service.dart';
@@ -23,9 +22,9 @@ class _CountingEngine implements LlmInferenceEngine {
   }
 
   @override
-  Stream<LlamaCompletionChunk> generate({
-    required List<LlamaChatMessage> messages,
-    required GenerationParams options,
+  Stream<String> generate({
+    required List<LlmChatMessage> messages,
+    required LlmGenerationOptions options,
   }) async* {}
 
   @override
@@ -45,31 +44,46 @@ void main() {
     test('デフォルトは 現状維持（自動スレッド・CPU）', () {
       const s = LlmRuntimeSettings();
       expect(s.cpuThreads, 0);
-      expect(s.useVulkan, false);
+      expect(s.backend, LlmBackend.auto);
     });
 
     test('load() は保存済み値を読み、不正値は既定に戻す', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         LlmRuntimeSettings.prefKeyCpuThreads: 2,
-        LlmRuntimeSettings.prefKeyUseVulkan: true,
+        LlmRuntimeSettings.prefKeyBackend: 'npu',
       });
       final s = await LlmRuntimeSettings.load();
       expect(s.cpuThreads, 2);
-      expect(s.useVulkan, true);
+      expect(s.backend, LlmBackend.npu);
 
       SharedPreferences.setMockInitialValues(<String, Object>{
         LlmRuntimeSettings.prefKeyCpuThreads: 999,
+        LlmRuntimeSettings.prefKeyBackend: 'not-a-backend',
       });
       final s2 = await LlmRuntimeSettings.load();
       expect(s2.cpuThreads, 0);
-      expect(s2.useVulkan, false);
+      expect(s2.backend, LlmBackend.auto);
+    });
+
+    test('旧 Vulkan 設定（bool）は backend へ移行される', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        LlmRuntimeSettings.prefKeyUseVulkanLegacy: true,
+      });
+      final s = await LlmRuntimeSettings.load();
+      expect(s.backend, LlmBackend.gpu);
+
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        LlmRuntimeSettings.prefKeyUseVulkanLegacy: false,
+      });
+      final s2 = await LlmRuntimeSettings.load();
+      expect(s2.backend, LlmBackend.auto);
     });
 
     test('等価性: 設定変更を再利用判定に使える', () {
-      const a = LlmRuntimeSettings(cpuThreads: 2, useVulkan: false);
-      const b = LlmRuntimeSettings(cpuThreads: 2, useVulkan: false);
-      const c = LlmRuntimeSettings(cpuThreads: 2, useVulkan: true);
-      const d = LlmRuntimeSettings(cpuThreads: 4, useVulkan: false);
+      const a = LlmRuntimeSettings(cpuThreads: 2);
+      const b = LlmRuntimeSettings(cpuThreads: 2);
+      const c = LlmRuntimeSettings(cpuThreads: 2, backend: LlmBackend.gpu);
+      const d = LlmRuntimeSettings(cpuThreads: 4);
       expect(a, equals(b));
       expect(a == c, isFalse);
       expect(a == d, isFalse);
@@ -119,10 +133,10 @@ void main() {
       expect(engines.first.disposed, isTrue);
       expect(engines[1].disposed, isFalse);
 
-      // 設定変更（Vulkan ON）→ 再ロード。
+      // 設定変更（バックエンド GPU）→ 再ロード。
       service.runtimeSettings = const LlmRuntimeSettings(
         cpuThreads: 2,
-        useVulkan: true,
+        backend: LlmBackend.gpu,
       );
       expect(await service.loadModel(modelPath), isTrue);
       expect(loads.length, 3);
@@ -154,22 +168,22 @@ void main() {
       await service.dispose();
     });
 
-    test('Vulkan ロード失敗時は CPU へ1回だけフォールバックする', () async {
+    test('GPU バックエンド失敗時は CPU へ1回だけフォールバックする', () async {
       final disposed = <bool>[];
       // engineFactory は試行ごとに新しいインスタンスを返すため、
       // 「失敗は全体で1回だけ」を共有カウンタで表現する。
       final failOnce = <int>[0];
       final service = LocalLlmService(
-        runtimeSettings: const LlmRuntimeSettings(useVulkan: true),
+        runtimeSettings: const LlmRuntimeSettings(backend: LlmBackend.gpu),
         engineFactory: (path) =>
-            _VulkanFailEngine(disposed, failCounter: failOnce),
+            _BackendFailEngine(disposed, failCounter: failOnce),
       );
 
       expect(await service.loadModel(modelPath), isTrue);
-      // Vulkan が失敗 → CPU で成功（フォールバック記録）。
+      // GPU が失敗 → CPU で成功（フォールバック記録）。
       expect(service.lastLoadUsedCpuFallback, isTrue);
       expect(service.state, LlmState.idle);
-      // 失敗した Vulkan エンジンは解放されている。
+      // 失敗した GPU エンジンは解放されている。
       expect(disposed.where((d) => d).length, greaterThanOrEqualTo(1));
       await service.dispose();
     });
@@ -178,8 +192,8 @@ void main() {
       final loads = <int>[];
       final failOnce = <int>[0];
       final service = LocalLlmService(
-        runtimeSettings: const LlmRuntimeSettings(useVulkan: true),
-        engineFactory: (path) => _VulkanFailEngine(
+        runtimeSettings: const LlmRuntimeSettings(backend: LlmBackend.gpu),
+        engineFactory: (path) => _BackendFailEngine(
           <bool>[],
           failCounter: failOnce,
           onLoaded: () {
@@ -257,8 +271,8 @@ class _FailingEngine extends _CountingEngine {
   }
 }
 
-class _VulkanFailEngine extends _CountingEngine {
-  _VulkanFailEngine(
+class _BackendFailEngine extends _CountingEngine {
+  _BackendFailEngine(
     this.disposedList, {
     this.onLoaded,
     required this.failCounter,
@@ -275,7 +289,7 @@ class _VulkanFailEngine extends _CountingEngine {
   Future<void> loadModel(String modelPath) async {
     if (failCounter.isNotEmpty) {
       failCounter.removeLast();
-      throw StateError('simulated vulkan init failure');
+      throw StateError('simulated backend init failure');
     }
     onLoaded?.call();
   }
