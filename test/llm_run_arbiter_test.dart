@@ -200,5 +200,55 @@ void main() {
       expect(engine.generateCalls, greaterThanOrEqualTo(2));
       expect(arb.modelId, 'model.gguf');
     });
+
+    test('自動生成中に waiting した手動を cancelManual → 自動完了後も消化されない', () async {
+      final engine = _ControllableEngine('モデル');
+      final arb = arbiterWith(engine);
+      final statuses = <String>[];
+      arb.onManualEvent = (id, status, {token, result, error}) {
+        statuses.add('$id:${status.name}');
+      };
+
+      // 自動生成を開始。
+      final autoFuture = arb.generateAuto(
+        workId: 100,
+        title: '自動',
+        tags: const [],
+        body: 'あ' * 50,
+      );
+      await engine.started;
+      expect(arb.isGenerating, isTrue);
+
+      // 手動を1件 waiting させてからキャンセル。
+      final m = ManualSummaryRequest(
+        requestId: 'mc',
+        workId: 200,
+        title: '手動',
+        tags: const [],
+        body: 'い' * 50,
+      );
+      await arb.submitManual(m);
+      expect(statuses, contains('mc:waiting'));
+      expect(arb.hasManualPending, isTrue);
+
+      arb.cancelManual('mc');
+      expect(arb.hasManualPending, isFalse, reason: 'キューから除去される');
+
+      // 自動を完了 → drain 対象が無いので cancelled は発生しない。
+      engine.release();
+      await autoFuture;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(
+        statuses,
+        isNot(contains('mc:cancelled')),
+        reason: 'キュー除去済みのため cancelled イベントも出ない',
+      );
+      expect(
+        statuses,
+        isNot(contains('mc:generating')),
+        reason: '除去された手動は実行されない',
+      );
+      expect(arb.isGenerating, isFalse);
+    });
   });
 }

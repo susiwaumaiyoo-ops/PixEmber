@@ -295,6 +295,28 @@ void main() {
     svc.dispose();
   });
 
+  test('Wi-Fi 条件喪失 → waitReason=wifi（充電と区別・生成しない）', () async {
+    final ports = _StubPorts(
+      candidatesByTag: {
+        '百合': [
+          _page([_cand(1)]),
+        ],
+      },
+      bodies: {1: _longBody},
+      waitReason: AutoSummaryWaitReason.wifi,
+    );
+    final svc = AutoSummaryService(settings: _settings(), ports: ports.build());
+    svc.runNow();
+    await svc.finished;
+    final s = svc.current;
+    expect(s.phase, AutoSummaryPhase.waitingCondition);
+    expect(s.waitReason, AutoSummaryWaitReason.wifi);
+    // 条件喪失なら候補が即便でも生成・モデル準備しない。
+    expect(ports.generateCalls, 0);
+    expect(ports.prepareCalls, 0);
+    svc.dispose();
+  });
+
   test('二重 runNow → 完了まで再入しない（生成回数は1セッション分）', () async {
     final ports = _StubPorts(
       candidatesByTag: {
