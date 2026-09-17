@@ -76,4 +76,24 @@ abstract class DatabaseServiceHistory extends DatabaseServiceNovelMeta {
       'download_date': DateTime.now().toIso8601String(),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
+
+  /// ダウンロード済みイラスト一覧を取得
+  /// Phase 4c: lib/services/database_novel.dart から移植
+  /// （DB 取得方法を DatabaseService().database → database getter へ変更したのみ）。
+  Future<List<Map<String, dynamic>>> getDownloadedIllustsList() async {
+    final db = await database;
+    return await db.query('downloaded_illust', orderBy: 'download_date DESC');
+  }
+
+  /// ダウンロード済みイラストを削除
+  /// Phase 4c: lib/services/database_novel.dart から移植
+  /// （DB 取得方法を DatabaseService().database → database getter へ変更したのみ）。
+  Future<int> deleteDownloadedIllust(int workId) async {
+    final db = await database;
+    return await db.delete(
+      'downloaded_illust',
+      where: 'illust_id = ?',
+      whereArgs: [workId],
+    );
+  }
 }

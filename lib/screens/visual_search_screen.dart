@@ -12,7 +12,6 @@ import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 
-import '../services/database_novel.dart' show getDownloadedIllustsList;
 import '../services/database_service.dart';
 import '../services/visual_search_service.dart';
 import '../utils/empty_image_message.dart';
@@ -47,7 +46,7 @@ class _VisualSearchScreenState extends State<VisualSearchScreen> {
   Future<void> _load() async {
     setState(() => _isLoading = true);
     try {
-      final all = await getDownloadedIllustsList();
+      final all = await DatabaseService().getDownloadedIllustsList();
       final items = <Map<String, dynamic>>[];
       for (final e in all) {
         final p = (e['local_path'] as String?) ?? '';
