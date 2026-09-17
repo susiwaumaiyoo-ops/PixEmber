@@ -9,9 +9,10 @@ import '../../illust_model.dart';
 part 'database_core.part.dart';
 part 'database_schema.part.dart';
 part 'database_novel_meta.part.dart';
+part 'database_history.part.dart';
 
 /// データベース初期化・管理用クラス
-class DatabaseService extends DatabaseServiceNovelMeta {
+class DatabaseService extends DatabaseServiceHistory {
   static final DatabaseService _instance = DatabaseService._internal();
   factory DatabaseService() => _instance;
   DatabaseService._internal();
@@ -604,80 +605,6 @@ class DatabaseService extends DatabaseServiceNovelMeta {
       limit: 1,
     );
     return result.isNotEmpty;
-  }
-
-  // ==========================================
-  // HISTORY (履歴) - 便利メソッド
-  // ==========================================
-
-  Future<List<Map<String, dynamic>>> getHistoryList() async {
-    final db = await database;
-    return await db.query('history', orderBy: 'created_at DESC');
-  }
-
-  /// 閲覧履歴を追加/更新
-  Future<int> insertOrUpdateHistory({
-    required int workId,
-    required String title,
-    required String authorName,
-    required String previewUrl,
-    required String type,
-    String? url,
-    String? metadata,
-  }) async {
-    final db = await database;
-    final now = DateTime.now().toIso8601String();
-    return await db.insert('history', {
-      'work_id': workId,
-      'title': title,
-      'author_name': authorName,
-      'url': url,
-      'metadata': metadata,
-      'type': type,
-      'created_at': now,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-
-  /// 旧履歴レコードの欠損メタデータ（サムネイル・作者名）を非破壊で補完する。
-  /// 既存行は削除せず、指定された列のみ更新する。
-  Future<int> updateHistoryMeta({
-    required int workId,
-    String? title,
-    String? authorName,
-    String? url,
-  }) async {
-    final db = await database;
-    final values = <String, dynamic>{};
-    if (title != null && title.isNotEmpty) values['title'] = title;
-    if (authorName != null && authorName.isNotEmpty) {
-      values['author_name'] = authorName;
-    }
-    if (url != null && url.isNotEmpty) values['url'] = url;
-    if (values.isEmpty) return 0;
-    return await db.update(
-      'history',
-      values,
-      where: 'work_id = ?',
-      whereArgs: [workId],
-    );
-  }
-
-  /// ダウンロード済みイラストを登録
-  Future<int> insertDownloadedIllust({
-    required int workId,
-    required String title,
-    required String authorName,
-    required String type,
-    String? localPath,
-    String? thumbnailPath,
-  }) async {
-    final db = await database;
-    return await db.insert('downloaded_illust', {
-      'illust_id': workId,
-      'local_path': localPath ?? '',
-      'thumbnail_path': thumbnailPath,
-      'download_date': DateTime.now().toIso8601String(),
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   // ==========================================================================
