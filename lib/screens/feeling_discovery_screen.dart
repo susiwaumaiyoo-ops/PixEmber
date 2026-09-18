@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../widgets/novel_list_card.dart';
@@ -271,8 +271,8 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
   }
 
   /// モデル未ダウンロード時の導線 UI
-  Widget _buildModelDownloadPrompt(bool isDark) {
-    final subColor = isDark ? Colors.grey.shade400 : Colors.grey.shade700;
+  Widget _buildModelDownloadPrompt(ColorScheme colorScheme) {
+    final subColor = colorScheme.onSurfaceVariant;
     final progress = (_dlTotal > 0)
         ? (_dlReceived / _dlTotal).clamp(0.0, 1.0)
         : null;
@@ -302,7 +302,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
               const SizedBox(height: 8),
               Text(
                 '※ 通信量が大きいため Wi-Fi 接続での実行を推奨します',
-                style: TextStyle(fontSize: 13, color: Colors.orange.shade700),
+                style: TextStyle(fontSize: 13, color: colorScheme.tertiary),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
@@ -328,7 +328,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                 if (_dlError != null) ...[
                   Text(
                     'ダウンロードに失敗しました: $_dlError',
-                    style: TextStyle(fontSize: 13, color: Colors.red.shade400),
+                    style: TextStyle(fontSize: 13, color: colorScheme.error),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
@@ -347,7 +347,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
   }
 
   /// 初期化中の表示
-  Widget _buildModelInitializing(bool isDark) {
+  Widget _buildModelInitializing(ColorScheme colorScheme) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -356,9 +356,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
           const SizedBox(height: 16),
           Text(
             'AI モデルを初期化しています...',
-            style: TextStyle(
-              color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-            ),
+            style: TextStyle(color: colorScheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -504,7 +502,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
   }
 
   /// 検索窓候補オーバーレイを組み立てる（DB履歴 + 購読タグの部分一致）。
-  Widget _buildSuggestionsOverlay(bool isDark) {
+  Widget _buildSuggestionsOverlay(ColorScheme colorScheme) {
     final query = _queryController.text.trim();
     return FutureBuilder<List<_SearchSuggestion>>(
       future: _buildSearchSuggestions(query),
@@ -514,22 +512,25 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
           margin: const EdgeInsets.symmetric(horizontal: 16),
           constraints: const BoxConstraints(maxHeight: 280),
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
+            color: colorScheme.surfaceContainerHigh,
             borderRadius: BorderRadius.circular(12),
-            boxShadow: const [
+            boxShadow: [
               BoxShadow(
-                color: Colors.black38,
+                color: colorScheme.shadow,
                 blurRadius: 8,
-                offset: Offset(0, 4),
+                offset: const Offset(0, 4),
               ),
             ],
           ),
           child: suggestions.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.all(16),
+              ? Padding(
+                  padding: const EdgeInsets.all(16),
                   child: Text(
                     '候補がありません',
-                    style: TextStyle(color: Colors.grey, fontSize: 13),
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 13,
+                    ),
                   ),
                 )
               : ListView.builder(
@@ -543,12 +544,14 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                       leading: Icon(
                         s.isTag ? Icons.tag : Icons.history,
                         size: 16,
-                        color: s.isTag ? Colors.orangeAccent : Colors.grey,
+                        color: s.isTag
+                            ? colorScheme.tertiary
+                            : colorScheme.onSurfaceVariant,
                       ),
                       title: Text(
                         s.keyword,
                         style: TextStyle(
-                          color: isDark ? Colors.white : Colors.black,
+                          color: colorScheme.onSurface,
                           fontSize: 13,
                         ),
                       ),
@@ -693,17 +696,15 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final built = _buildScaffold(isDark, theme);
-    return built;
+    final colorScheme = theme.colorScheme;
+    return _buildScaffold(isDark, colorScheme);
   }
 
-  Widget _buildScaffold(bool isDark, ThemeData theme) {
+  Widget _buildScaffold(bool isDark, ColorScheme colorScheme) {
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF1A1A1A) : Colors.grey.shade50,
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
         title: const Text('フィーリング発掘'),
-        backgroundColor: isDark ? const Color(0xFF222222) : Colors.white,
-        foregroundColor: isDark ? Colors.white : Colors.black,
         elevation: 0.5,
         actions: [
           // 検索対象種別トグル（イラスト意味検索は flag 有効時のみ表示）。
@@ -740,7 +741,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
               child: const Icon(Icons.tune),
             ),
             tooltip: '詳細条件',
-            onPressed: () => _showFilterBottomSheet(isDark),
+            onPressed: () => _showFilterBottomSheet(colorScheme),
           ),
           // AIインデックス管理（診断・修復）へ遷移
           PopupMenuButton<String>(
@@ -787,9 +788,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                               ? 'AIモデルを初期化中... 少々お待ちください'
                               : '今の気分・キーワードを入力（例: 切ない春、ドキドキする恋愛、癒やされる日常）',
                           hintStyle: TextStyle(
-                            color: isDark
-                                ? Colors.grey.shade500
-                                : Colors.grey.shade600,
+                            color: colorScheme.onSurfaceVariant,
                             fontSize: 14,
                           ),
                           prefixIcon: _isModelInitializing
@@ -800,17 +799,13 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                                     height: 20,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      color: isDark
-                                          ? Colors.grey.shade500
-                                          : Colors.grey.shade600,
+                                      color: colorScheme.onSurfaceVariant,
                                     ),
                                   ),
                                 )
                               : Icon(
                                   Icons.search,
-                                  color: isDark
-                                      ? Colors.grey.shade500
-                                      : Colors.grey.shade600,
+                                  color: colorScheme.onSurfaceVariant,
                                 ),
                           suffixIcon:
                               _queryController.text.isNotEmpty &&
@@ -818,9 +813,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                               ? IconButton(
                                   icon: Icon(
                                     Icons.clear,
-                                    color: isDark
-                                        ? Colors.grey.shade500
-                                        : Colors.grey.shade600,
+                                    color: colorScheme.onSurfaceVariant,
                                   ),
                                   onPressed: () {
                                     _queryController.clear();
@@ -829,9 +822,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                                 )
                               : null,
                           filled: true,
-                          fillColor: isDark
-                              ? const Color(0xFF2A2A2A)
-                              : Colors.grey.shade100,
+                          fillColor: colorScheme.surfaceContainerHigh,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide.none,
@@ -842,7 +833,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                           ),
                         ),
                         style: TextStyle(
-                          color: isDark ? Colors.white : Colors.black,
+                          color: colorScheme.onSurface,
                           fontSize: 15,
                         ),
                         onSubmitted: _isModelInitializing
@@ -874,40 +865,43 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                   ],
                 ),
                 // 検索窓候補オーバーレイ（DB履歴 + 購読タグ）
-                if (_showSuggestions) _buildSuggestionsOverlay(isDark),
+                if (_showSuggestions) _buildSuggestionsOverlay(colorScheme),
               ],
             ),
           ),
         ),
       ),
-      body: _buildBody(isDark),
+      body: _buildBody(isDark, colorScheme),
     );
   }
 
-  Widget _buildBody(bool isDark) {
+  Widget _buildBody(bool isDark, ColorScheme colorScheme) {
     // DL 済みだが未初期化 → 初期化中表示
     if (_isModelInitializing) {
-      return _buildModelInitializing(isDark);
+      return _buildModelInitializing(colorScheme);
     }
     // モデル未導入かつまだ検索していない場合のみ DL 誘導を表示。
     // v2 ではモデル未導入でもキーワード検索（lexical フォールバック）が動くため、
     // 一度検索すれば結果画面へ遷移する。
     if (!_isModelDownloaded && _lastQuery.isEmpty && _results.isEmpty) {
-      return _buildModelDownloadPrompt(isDark);
+      return _buildModelDownloadPrompt(colorScheme);
     }
 
     if (_lastQuery.isEmpty && _results.isEmpty) {
-      return _buildEmptyState(isDark);
+      return _buildEmptyState(isDark, colorScheme);
     }
 
     if (_isSearching && _results.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('検索中...', style: TextStyle(color: Colors.grey)),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(
+              '検索中...',
+              style: TextStyle(color: colorScheme.onSurfaceVariant),
+            ),
           ],
         ),
       );
@@ -921,18 +915,14 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.error_outline,
-                size: 64,
-                color: isDark ? Colors.redAccent.shade200 : Colors.redAccent,
-              ),
+              Icon(Icons.error_outline, size: 64, color: colorScheme.error),
               const SizedBox(height: 16),
               Text(
                 '検索中にエラーが発生しました',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : Colors.black,
+                  color: colorScheme.onSurface,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -941,7 +931,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                 _error!,
                 style: TextStyle(
                   fontSize: 13,
-                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  color: colorScheme.onSurfaceVariant,
                   height: 1.5,
                 ),
                 textAlign: TextAlign.center,
@@ -951,12 +941,6 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                 onPressed: () => _search(),
                 icon: const Icon(Icons.refresh),
                 label: const Text('再試行'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isDark
-                      ? Colors.pinkAccent.shade200
-                      : Colors.pinkAccent,
-                  foregroundColor: isDark ? Colors.black : Colors.white,
-                ),
               ),
             ],
           ),
@@ -981,14 +965,14 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                 Icon(
                   Icons.sentiment_dissatisfied,
                   size: 64,
-                  color: isDark ? Colors.grey.shade700 : Colors.grey.shade400,
+                  color: colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(height: 16),
                 Text(
                   '「$_lastQuery」に合う作品が見つかりませんでした',
                   style: TextStyle(
                     fontSize: 16,
-                    color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                    color: colorScheme.onSurfaceVariant,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -997,7 +981,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                   '別のキーワードや気分を試してみてください',
                   style: TextStyle(
                     fontSize: 14,
-                    color: isDark ? Colors.grey.shade600 : Colors.grey.shade500,
+                    color: colorScheme.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -1005,7 +989,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                   '（類似度 ${kMinDisplaySimilarity.toStringAsFixed(2)} 以上の作品のみ表示）',
                   style: TextStyle(
                     fontSize: 12,
-                    color: isDark ? Colors.grey.shade600 : Colors.grey.shade500,
+                    color: colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -1041,13 +1025,13 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                       mainAxisExtent: 156.0,
                     ),
                     delegate: SliverChildBuilderDelegate(
-                      (ctx, index) => _buildGridOrListCard(index, isDark),
+                      (ctx, index) => _buildGridOrListCard(index, colorScheme),
                       childCount: _results.length,
                     ),
                   )
                 : SliverList(
                     delegate: SliverChildBuilderDelegate(
-                      (ctx, index) => _buildGridOrListCard(index, isDark),
+                      (ctx, index) => _buildGridOrListCard(index, colorScheme),
                       childCount: _results.length,
                     ),
                   ),
@@ -1065,7 +1049,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
   /// DB の novels 行情報から [Novel] を復元し（meta_json 優先、なければ部分列から構築）、
   /// 不完全なモデルを直接組み立てるのではなく、共通カードへ渡す。
   /// タップ時は [_navigateToDetail] が API から完全な Novel を取得して遷移する。
-  Widget _buildGridOrListCard(int index, bool isDark) {
+  Widget _buildGridOrListCard(int index, ColorScheme colorScheme) {
     if (index >= _results.length) {
       return const Center(
         child: Padding(
@@ -1107,7 +1091,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                 shownHint,
                 style: TextStyle(
                   fontSize: 11,
-                  color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                  color: colorScheme.onSurfaceVariant,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -1251,7 +1235,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
     );
   }
 
-  Widget _buildEmptyState(bool isDark) {
+  Widget _buildEmptyState(bool isDark, ColorScheme colorScheme) {
     // モデル未準備時は準備中表示（初期化中も含む）
     if (!_isModelReady || _isModelInitializing) {
       return SingleChildScrollView(
@@ -1274,9 +1258,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                     _isModelInitializing ? 'AIモデルを初期化中...' : 'AIモデルを準備中...',
                     style: TextStyle(
                       fontSize: 16,
-                      color: isDark
-                          ? Colors.grey.shade400
-                          : Colors.grey.shade600,
+                      color: colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -1284,9 +1266,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                     '初回起動時は数秒かかる場合があります',
                     style: TextStyle(
                       fontSize: 12,
-                      color: isDark
-                          ? Colors.grey.shade500
-                          : Colors.grey.shade500,
+                      color: colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -1315,17 +1295,13 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                   width: 120,
                   height: 120,
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF2A2A2A)
-                        : Colors.grey.shade100,
+                    color: colorScheme.surfaceContainerHigh,
                     borderRadius: BorderRadius.circular(60),
                   ),
                   child: Icon(
                     Icons.auto_awesome,
                     size: 60,
-                    color: isDark
-                        ? Colors.pinkAccent.shade200
-                        : Colors.pinkAccent,
+                    color: colorScheme.primary,
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -1334,7 +1310,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.black,
+                    color: colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -1343,7 +1319,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 16,
-                    color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                    color: colorScheme.onSurfaceVariant,
                     height: 1.5,
                   ),
                 ),
@@ -1357,12 +1333,12 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                     runSpacing: 8,
                     alignment: WrapAlignment.center,
                     children: [
-                      _buildSuggestionChip('切ない春', isDark),
-                      _buildSuggestionChip('ドキドキする恋愛', isDark),
-                      _buildSuggestionChip('癒やされる日常', isDark),
-                      _buildSuggestionChip('胸が熱くなる冒険', isDark),
-                      _buildSuggestionChip('不思議な世界観', isDark),
-                      _buildSuggestionChip('笑えるコメディ', isDark),
+                      _buildSuggestionChip('切ない春', colorScheme),
+                      _buildSuggestionChip('ドキドキする恋愛', colorScheme),
+                      _buildSuggestionChip('癒やされる日常', colorScheme),
+                      _buildSuggestionChip('胸が熱くなる冒険', colorScheme),
+                      _buildSuggestionChip('不思議な世界観', colorScheme),
+                      _buildSuggestionChip('笑えるコメディ', colorScheme),
                     ],
                   ),
                 ),
@@ -1372,7 +1348,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
-                    color: isDark ? Colors.grey.shade600 : Colors.grey.shade500,
+                    color: colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -1383,14 +1359,12 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
     );
   }
 
-  Widget _buildSuggestionChip(String label, bool isDark) {
+  Widget _buildSuggestionChip(String label, ColorScheme colorScheme) {
     // v2 ではモデル未導入でもキーワード検索が可能なため常に有効
     return ActionChip(
       label: Text(label, style: const TextStyle(fontSize: 13)),
-      backgroundColor: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade100,
-      side: BorderSide(
-        color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
-      ),
+      backgroundColor: colorScheme.surfaceContainerHigh,
+      side: BorderSide(color: colorScheme.outlineVariant),
       onPressed: () {
         _queryController.text = label;
         _search();
@@ -1401,7 +1375,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
   /// 複数条件検索フィルタシート（v2）。
   /// 必須/できれば/除外キーワード、完全一致/部分一致タグ、ブクマ・文字数閾値、
   /// R-18 / AI / 並び順 を設定できる。
-  void _showFilterBottomSheet(bool isDark) {
+  void _showFilterBottomSheet(ColorScheme colorScheme) {
     // 現在の値をテンポラリコントローラに反映
     _mustController.text = _query.mustKeywords.join(' ');
     _shouldController.text = _query.shouldKeywords.join(' ');
@@ -1421,7 +1395,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: isDark ? const Color(0xFF222222) : Colors.white,
+      backgroundColor: colorScheme.surfaceContainerHigh,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -1477,27 +1451,27 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                   _filterTextField(
                     _mustController,
                     '必須キーワード（空白区切り・すべて含む）',
-                    isDark: isDark,
+                    colorScheme: colorScheme,
                   ),
                   _filterTextField(
                     _shouldController,
                     'できれば含むキーワード（空白区切り）',
-                    isDark: isDark,
+                    colorScheme: colorScheme,
                   ),
                   _filterTextField(
                     _excludeController,
                     '除外キーワード（空白区切り・含むと除外）',
-                    isDark: isDark,
+                    colorScheme: colorScheme,
                   ),
                   _filterTextField(
                     _exactTagController,
                     '完全一致タグ（空白区切り）',
-                    isDark: isDark,
+                    colorScheme: colorScheme,
                   ),
                   _filterTextField(
                     _partialTagController,
                     '部分一致タグ（空白区切り）',
-                    isDark: isDark,
+                    colorScheme: colorScheme,
                   ),
                   const SizedBox(height: 8),
                   Wrap(
@@ -1555,9 +1529,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                         '未導入でも意味検索（embedding）はそのまま動作します。',
                         style: TextStyle(
                           fontSize: 11,
-                          color: isDark
-                              ? Colors.grey.shade500
-                              : Colors.grey.shade600,
+                          color: colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -1614,7 +1586,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                         child: _filterTextField(
                           _minBookmarkController,
                           '最小ブクマ数',
-                          isDark: isDark,
+                          colorScheme: colorScheme,
                           keyboardType: TextInputType.number,
                         ),
                       ),
@@ -1623,7 +1595,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                         child: _filterTextField(
                           _minLenController,
                           '最小文字数',
-                          isDark: isDark,
+                          colorScheme: colorScheme,
                           keyboardType: TextInputType.number,
                         ),
                       ),
@@ -1632,7 +1604,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
                         child: _filterTextField(
                           _maxLenController,
                           '最大文字数',
-                          isDark: isDark,
+                          colorScheme: colorScheme,
                           keyboardType: TextInputType.number,
                         ),
                       ),
@@ -1693,7 +1665,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
     TextEditingController controller,
     String hint, {
     TextInputType? keyboardType,
-    required bool isDark,
+    required ColorScheme colorScheme,
   }) => Padding(
     padding: const EdgeInsets.only(bottom: 8),
     child: TextField(
@@ -1701,9 +1673,9 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
       keyboardType: keyboardType,
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(fontSize: 13),
+        hintStyle: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
         filled: true,
-        fillColor: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade100,
+        fillColor: colorScheme.surfaceContainerHigh,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide.none,
@@ -1713,10 +1685,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
           vertical: 10,
         ),
       ),
-      style: TextStyle(
-        fontSize: 14,
-        color: isDark ? Colors.white : Colors.black,
-      ),
+      style: TextStyle(fontSize: 14, color: colorScheme.onSurface),
     ),
   );
 
