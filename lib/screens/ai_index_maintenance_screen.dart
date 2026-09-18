@@ -303,8 +303,8 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
   }
 
   /// AI モデル（Ruri v3）管理 UI。
-  Widget _buildModelManagementSection(bool isDark) {
-    final subColor = isDark ? Colors.grey.shade400 : Colors.grey.shade700;
+  Widget _buildModelManagementSection(ColorScheme colorScheme) {
+    final subColor = colorScheme.onSurfaceVariant;
     final activeId = RuriModelManager.embeddingModelId;
     final cards = <Widget>[];
     for (final spec in RuriModelSpec.all) {
@@ -316,13 +316,13 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
           : null;
       Widget statusChip;
       if (isActive) {
-        statusChip = _modelChip('アクティブ', Colors.teal);
+        statusChip = _modelChip('アクティブ', colorScheme.secondary);
       } else if (isDownloading) {
-        statusChip = _modelChip('ダウンロード中', Colors.blue);
+        statusChip = _modelChip('ダウンロード中', colorScheme.tertiary);
       } else if (downloaded) {
-        statusChip = _modelChip('導入済み', Colors.green);
+        statusChip = _modelChip('導入済み', colorScheme.primaryContainer);
       } else {
-        statusChip = _modelChip('未ダウンロード', Colors.grey);
+        statusChip = _modelChip('未ダウンロード', colorScheme.onSurfaceVariant);
       }
       cards.add(
         Container(
@@ -330,10 +330,10 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
           margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+            color: colorScheme.surfaceContainer,
             borderRadius: BorderRadius.circular(8),
             border: isActive
-                ? Border.all(color: Colors.teal, width: 1.5)
+                ? Border.all(color: colorScheme.secondary, width: 1.5)
                 : null,
           ),
           child: Column(
@@ -412,11 +412,7 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
       children: [
         Row(
           children: [
-            Icon(
-              Icons.model_training,
-              color: isDark ? Colors.tealAccent : Colors.teal,
-              size: 22,
-            ),
+            Icon(Icons.model_training, color: colorScheme.secondary, size: 22),
             const SizedBox(width: 8),
             const Text(
               'AIモデル（Ruri v3）',
@@ -439,24 +435,21 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
             margin: const EdgeInsets.only(top: 8),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isDark ? Colors.red.shade900 : Colors.red.shade50,
+              color: colorScheme.errorContainer,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               'ダウンロードエラー: $_modelDlError',
               style: TextStyle(
                 fontSize: 12,
-                color: isDark ? Colors.red.shade200 : Colors.red.shade800,
+                color: colorScheme.onErrorContainer,
               ),
             ),
           ),
         const SizedBox(height: 8),
         Text(
           '※ モデルを切り替えると既存の意味検索インデックスは互換性がなくなり再インデックスが必要です。トークナイザは全サイズで共有されます。',
-          style: TextStyle(
-            fontSize: 11,
-            color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
-          ),
+          style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
         ),
       ],
     );
@@ -486,16 +479,16 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
   }
 
   /// Reranker（高精度モード用）導入 UI。
-  Widget _buildRerankSection(bool isDark) {
+  Widget _buildRerankSection(ColorScheme colorScheme) {
     final progress = (_rerankTotal > 0)
         ? (_rerankReceived / _rerankTotal).clamp(0.0, 1.0)
         : null;
-    final subColor = isDark ? Colors.grey.shade400 : Colors.grey.shade700;
+    final subColor = colorScheme.onSurfaceVariant;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+        color: colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -503,11 +496,7 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
         children: [
           Row(
             children: [
-              Icon(
-                Icons.auto_awesome,
-                size: 18,
-                color: isDark ? Colors.tealAccent : Colors.teal,
-              ),
+              Icon(Icons.auto_awesome, size: 18, color: colorScheme.secondary),
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
@@ -522,7 +511,7 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.18),
+                    color: colorScheme.primaryContainer.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Text('導入済み', style: TextStyle(fontSize: 11)),
@@ -534,7 +523,7 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.18),
+                    color: colorScheme.tertiary.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Text('未導入', style: TextStyle(fontSize: 11)),
@@ -552,9 +541,11 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.12),
+                color: colorScheme.tertiary.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+                border: Border.all(
+                  color: colorScheme.tertiary.withValues(alpha: 0.4),
+                ),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -562,7 +553,7 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
                   Icon(
                     Icons.info_outline,
                     size: 16,
-                    color: Colors.orange.shade700,
+                    color: colorScheme.tertiary,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -571,7 +562,7 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
                       '先に「意味検索モデル」を導入してください。',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.orange.shade700,
+                        color: colorScheme.tertiary,
                       ),
                     ),
                   ),
@@ -602,7 +593,7 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
           ] else if (_rerankDlError != null) ...[
             Text(
               'ダウンロードに失敗しました: $_rerankDlError',
-              style: TextStyle(fontSize: 12, color: Colors.red.shade400),
+              style: TextStyle(fontSize: 12, color: colorScheme.error),
             ),
             const SizedBox(height: 8),
             ElevatedButton.icon(
@@ -809,22 +800,20 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF1A1A1A) : Colors.grey.shade50,
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
         title: const Text('AIインデックス管理'),
-        backgroundColor: isDark ? const Color(0xFF222222) : Colors.white,
-        foregroundColor: isDark ? Colors.white : Colors.black,
+        foregroundColor: colorScheme.onSurface,
         elevation: 0.5,
       ),
-      body: _buildBody(isDark),
+      body: _buildBody(colorScheme),
     );
   }
 
-  Widget _buildBody(bool isDark) {
+  Widget _buildBody(ColorScheme colorScheme) {
     final d = _diagnosis;
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth >= _kTabletBreakpoint;
@@ -845,7 +834,7 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
               children: [
                 Icon(
                   Icons.health_and_safety,
-                  color: isDark ? Colors.tealAccent : Colors.teal,
+                  color: colorScheme.secondary,
                   size: 22,
                 ),
                 const SizedBox(width: 8),
@@ -873,17 +862,17 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
                 ),
               )
             else if (d != null)
-              _buildDiagnosisSummaryCards(d, isDark),
+              _buildDiagnosisSummaryCards(d, colorScheme),
 
             const SizedBox(height: 16),
 
             // Reranker（高精度モード用）導入 UI
-            _buildRerankSection(isDark),
+            _buildRerankSection(colorScheme),
 
             const SizedBox(height: 16),
 
             // AI モデル（Ruri v3）管理 UI
-            _buildModelManagementSection(isDark),
+            _buildModelManagementSection(colorScheme),
 
             const SizedBox(height: 16),
 
@@ -907,7 +896,7 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+                  color: colorScheme.surfaceContainer,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -947,7 +936,7 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
               '※ ローカル修復は端末内データのみで実行。Pixivから取得は確認ダイアログ後に順次実行します（レート制限配慮）。',
               style: TextStyle(
                 fontSize: 11,
-                color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                color: colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -957,15 +946,18 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
   }
 
   /// 診断サマリをカード群で表示する（5つの数値）。
-  Widget _buildDiagnosisSummaryCards(AiIndexDiagnosisResult d, bool isDark) {
+  Widget _buildDiagnosisSummaryCards(
+    AiIndexDiagnosisResult d,
+    ColorScheme colorScheme,
+  ) {
     final items = <_DiagItem>[
-      _DiagItem('AI検索可能', d.aiSearchable, Colors.teal),
-      _DiagItem('埋め込み不足', d.embeddingDeficient, Colors.orange),
-      _DiagItem('メタデータ不足', d.metadataDeficient, Colors.amber),
-      _DiagItem('本文あり・再生成可能', d.localRepairable, Colors.blue),
-      _DiagItem('API取得が必要', d.apiRequired, Colors.redAccent),
-      _DiagItem('イラスト総数', d.totalIllusts, Colors.purple),
-      _DiagItem('イラスト埋め込み不足', d.illustEmbeddingDeficient, Colors.deepOrange),
+      _DiagItem('AI検索可能', d.aiSearchable, colorScheme.secondary),
+      _DiagItem('埋め込み不足', d.embeddingDeficient, colorScheme.tertiary),
+      _DiagItem('メタデータ不足', d.metadataDeficient, colorScheme.tertiary),
+      _DiagItem('本文あり・再生成可能', d.localRepairable, colorScheme.primary),
+      _DiagItem('API取得が必要', d.apiRequired, colorScheme.error),
+      _DiagItem('イラスト総数', d.totalIllusts, colorScheme.primary),
+      _DiagItem('イラスト埋め込み不足', d.illustEmbeddingDeficient, colorScheme.tertiary),
     ];
     return Wrap(
       spacing: 8,
@@ -988,9 +980,7 @@ class _AiIndexMaintenanceScreenState extends State<AiIndexMaintenanceScreen> {
                     it.label,
                     style: TextStyle(
                       fontSize: 12,
-                      color: isDark
-                          ? Colors.grey.shade400
-                          : Colors.grey.shade700,
+                      color: colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 2),

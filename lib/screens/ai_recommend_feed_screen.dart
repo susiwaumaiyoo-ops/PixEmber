@@ -158,14 +158,18 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth >= 700;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.recommend, color: Colors.pinkAccent),
-            SizedBox(width: 8),
-            Text('AIレコメンド', style: TextStyle(fontWeight: FontWeight.bold)),
+            Icon(Icons.recommend, color: colorScheme.primary),
+            const SizedBox(width: 8),
+            const Text(
+              'AIレコメンド',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
           ],
         ),
         actions: [
@@ -181,19 +185,19 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
           ),
         ],
       ),
-      body: _buildBody(isTablet),
+      body: _buildBody(isTablet, colorScheme),
     );
   }
 
-  Widget _buildBody(bool isTablet) {
+  Widget _buildBody(bool isTablet, ColorScheme colorScheme) {
     if (_isLoading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(color: Colors.pinkAccent),
-            SizedBox(height: 16),
-            Text('AI があなたの好みを分析中...'),
+            CircularProgressIndicator(color: colorScheme.primary),
+            const SizedBox(height: 16),
+            const Text('AI があなたの好みを分析中...'),
           ],
         ),
       );
@@ -204,7 +208,7 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.redAccent),
+            Icon(Icons.error_outline, size: 64, color: colorScheme.error),
             const SizedBox(height: 16),
             Text('エラーが発生しました', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
@@ -213,7 +217,7 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
               child: Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.grey),
+                style: TextStyle(color: colorScheme.onSurfaceVariant),
               ),
             ),
             const SizedBox(height: 16),
@@ -272,6 +276,7 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
 
   /// タブレット右ペイン: 状態サマリー・説明・再計算・設定・メンテ導線。
   Widget _buildSidePanel(RecommendFeedResult result) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
         border: Border(left: BorderSide(color: Theme.of(context).dividerColor)),
@@ -298,7 +303,10 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
               result.modelReady
                   ? '埋め込みカバレッジが低めです。インデックスを充実させると精度が向上します。'
                   : 'AI モデル未導入: API おすすめを表示中。モデルを導入すると精度が向上します。',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 12,
+                color: colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 16),
             SizedBox(
@@ -334,10 +342,14 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
   }
 
   Widget _buildStatusRow(String label, String value) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(
+          label,
+          style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+        ),
         Text(
           value,
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
@@ -347,6 +359,7 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
   }
 
   Widget _buildGuidanceBanner(RecommendFeedResult result) {
+    final colorScheme = Theme.of(context).colorScheme;
     final isModelMissing = !result.modelReady;
     final message = isModelMissing
         ? 'AI モデル未導入: API おすすめを表示中。モデルを導入すると精度が向上します。'
@@ -356,10 +369,10 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
-      color: Colors.amber.withValues(alpha: 0.15),
+      color: colorScheme.tertiary.withValues(alpha: 0.15),
       child: Row(
         children: [
-          const Icon(Icons.lightbulb_outline, color: Colors.amberAccent),
+          Icon(Icons.lightbulb_outline, color: colorScheme.tertiary),
           const SizedBox(width: 8),
           Expanded(child: Text(message, style: const TextStyle(fontSize: 12))),
           TextButton(
@@ -372,19 +385,23 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
   }
 
   Widget _buildEmptyState() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
+          Icon(
             Icons.sentiment_dissatisfied,
             size: 64,
-            color: Colors.grey,
+            color: colorScheme.onSurfaceVariant,
           ),
           const SizedBox(height: 16),
           const Text('おすすめが見つかりませんでした'),
           const SizedBox(height: 8),
-          const Text('履歴を読むと改善されます', style: TextStyle(color: Colors.grey)),
+          Text(
+            '履歴を読むと改善されます',
+            style: TextStyle(color: colorScheme.onSurfaceVariant),
+          ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
             onPressed: _onRefresh,
@@ -459,6 +476,7 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
   }
 
   Widget _buildIllustCard(RecommendCandidate candidate) {
+    final colorScheme = Theme.of(context).colorScheme;
     final illust = Illust.fromJson(candidate.row);
     final matchLabel = candidate.source == 'local'
         ? '類似度 ${(candidate.score * 100).toInt()}%'
@@ -477,14 +495,14 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
                   ? Image.network(
                       previewUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, e, s) => const ColoredBox(
-                        color: Colors.black12,
-                        child: SizedBox.expand(),
+                      errorBuilder: (_, e, s) => ColoredBox(
+                        color: colorScheme.surfaceContainerHighest,
+                        child: const SizedBox.expand(),
                       ),
                     )
-                  : const ColoredBox(
-                      color: Colors.black12,
-                      child: SizedBox.expand(),
+                  : ColoredBox(
+                      color: colorScheme.surfaceContainerHighest,
+                      child: const SizedBox.expand(),
                     ),
             ),
             Padding(
@@ -503,7 +521,10 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
                     illust.author.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -511,8 +532,8 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
                     style: TextStyle(
                       fontSize: 10,
                       color: candidate.source == 'local'
-                          ? Colors.pinkAccent
-                          : Colors.blueAccent,
+                          ? colorScheme.primary
+                          : colorScheme.tertiary,
                     ),
                   ),
                 ],
@@ -527,6 +548,7 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
 
   /// Phase N2: 理由がある場合のみカード上に ⓘ アイコンを乗せる。
   Widget _wrapWithReasonIcon(RecommendCandidate candidate, Widget card) {
+    final colorScheme = Theme.of(context).colorScheme;
     final reason = candidate.reasons;
     if (reason == null || !reason.hasReasons) return card;
     return Stack(
@@ -543,14 +565,14 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
               borderRadius: BorderRadius.circular(14),
               child: Container(
                 padding: const EdgeInsets.all(3),
-                decoration: const BoxDecoration(
-                  color: Colors.black54,
+                decoration: BoxDecoration(
+                  color: colorScheme.scrim,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.info_outline,
                   size: 15,
-                  color: Colors.white70,
+                  color: colorScheme.onSurface,
                 ),
               ),
             ),
@@ -567,6 +589,7 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
   ) {
     final title = (candidate.row['title'] as String? ?? '').trim();
     final lines = buildReasonSheetLines(reason);
+    final colorScheme = Theme.of(context).colorScheme;
     showModalBottomSheet<void>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -581,7 +604,7 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
                   width: 32,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade400,
+                    color: colorScheme.outlineVariant,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -595,7 +618,10 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
                 const SizedBox(height: 4),
                 Text(
                   title,
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -606,10 +632,10 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.psychology_alt,
                         size: 16,
-                        color: Colors.pinkAccent,
+                        color: colorScheme.primary,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -622,7 +648,10 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
                 const SizedBox(height: 6),
                 Text(
                   '一致タグ',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -636,14 +665,14 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.pinkAccent.withValues(alpha: 0.15),
+                          color: colorScheme.primary.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
                           '#$t',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
-                            color: Colors.pinkAccent,
+                            color: colorScheme.primary,
                           ),
                         ),
                       ),
@@ -654,7 +683,10 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
                 const SizedBox(height: 12),
                 Text(
                   '類似元: 「${reason.similarToRecentWorks.first.title}」',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ],

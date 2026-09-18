@@ -203,19 +203,17 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
         title: Text(
           _userDetail != null ? _userDetail!['name'] ?? '作者プロフィール' : '作者プロフィール',
         ),
-        backgroundColor: Colors.black87,
-        foregroundColor: Colors.white,
+        foregroundColor: colorScheme.onSurface,
       ),
       body: _isLoadingUser && _userDetail == null
-          ? const Center(
-              child: CircularProgressIndicator(color: Colors.pinkAccent),
-            )
+          ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
                 // 1. 作者プロフィールヘッダー
@@ -224,9 +222,9 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
                 // 2. タブバー
                 TabBar(
                   controller: _tabController,
-                  indicatorColor: Colors.pinkAccent,
-                  labelColor: Colors.pinkAccent,
-                  unselectedLabelColor: Colors.grey,
+                  indicatorColor: colorScheme.primary,
+                  labelColor: colorScheme.primary,
+                  unselectedLabelColor: colorScheme.onSurfaceVariant,
                   tabs: const [
                     Tab(text: 'イラスト・マンガ'),
                     Tab(text: '小説'),
@@ -247,6 +245,7 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
 
   Widget _buildHeader() {
     if (_userDetail == null) return const SizedBox.shrink();
+    final colorScheme = Theme.of(context).colorScheme;
 
     final avatar = _userDetail!['avatar'];
     final comment = _userDetail!['comment'] ?? '';
@@ -258,7 +257,7 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
     final totalNovels = _userDetail!['total_novels'] ?? 0;
 
     return Container(
-      color: const Color(0xFF1A1A1A),
+      color: colorScheme.surfaceContainerHigh,
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -270,7 +269,7 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
                 height: 70,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.grey[800],
+                  color: colorScheme.surfaceContainerHighest,
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: avatar != null && avatar.toString().isNotEmpty
@@ -278,13 +277,17 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
                         url: avatar,
                         fit: BoxFit.cover,
                         isThumbnail: true,
-                        errorWidget: const Icon(
+                        errorWidget: Icon(
                           Icons.person,
                           size: 35,
-                          color: Colors.grey,
+                          color: colorScheme.onSurfaceVariant,
                         ),
                       )
-                    : const Icon(Icons.person, size: 35, color: Colors.grey),
+                    : Icon(
+                        Icons.person,
+                        size: 35,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -293,15 +296,18 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
                   children: [
                     Text(
                       _userDetail!['name'] ?? '',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: colorScheme.onSurface,
                       ),
                     ),
                     Text(
                       '@${_userDetail!['account'] ?? ''}',
-                      style: const TextStyle(fontSize: 13, color: Colors.grey),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Row(
@@ -324,12 +330,15 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
               width: double.infinity,
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFF262626),
+                color: colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
                 comment,
-                style: const TextStyle(fontSize: 12, color: Colors.white70),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colorScheme.onSurfaceVariant,
+                ),
                 maxLines: 4,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -341,16 +350,20 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
   }
 
   Widget _buildStatItem(String label, String count) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+        ),
         Text(
           count,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.bold,
-            color: Colors.white,
+            color: colorScheme.onSurface,
           ),
         ),
       ],
@@ -358,15 +371,17 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
   }
 
   Widget _buildIllustsTab() {
+    final colorScheme = Theme.of(context).colorScheme;
     if (_isLoadingIllusts && _illusts.isEmpty) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.pinkAccent),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (_illusts.isEmpty) {
-      return const Center(
-        child: Text('イラスト・マンガ作品はありません。', style: TextStyle(color: Colors.grey)),
+      return Center(
+        child: Text(
+          'イラスト・マンガ作品はありません。',
+          style: TextStyle(color: colorScheme.onSurfaceVariant),
+        ),
       );
     }
 
@@ -382,9 +397,7 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
       itemCount: _illusts.length + (_isLoadingMoreIllusts ? 1 : 0),
       itemBuilder: (context, index) {
         if (index >= _illusts.length) {
-          return const Center(
-            child: CircularProgressIndicator(color: Colors.pinkAccent),
-          );
+          return const Center(child: CircularProgressIndicator());
         }
 
         final illust = _illusts[index];
@@ -401,7 +414,7 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
             });
           },
           child: Container(
-            color: Colors.grey[900],
+            color: colorScheme.surfaceContainerHighest,
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -409,9 +422,9 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
                   url: illust.urls.preview ?? '',
                   fit: BoxFit.cover,
                   isThumbnail: true,
-                  errorWidget: const Icon(
+                  errorWidget: Icon(
                     Icons.broken_image,
-                    color: Colors.grey,
+                    color: colorScheme.onSurfaceVariant,
                   ),
                 ),
                 if (illust.metaPages.isNotEmpty)
@@ -424,21 +437,21 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.7),
+                        color: colorScheme.scrim,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Row(
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.layers,
                             size: 10,
-                            color: Colors.white,
+                            color: colorScheme.onSurface,
                           ),
                           const SizedBox(width: 2),
                           Text(
                             illust.metaPages.length.toString(),
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: colorScheme.onSurface,
                               fontSize: 9,
                               fontWeight: FontWeight.bold,
                             ),
@@ -456,15 +469,17 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
   }
 
   Widget _buildNovelsTab() {
+    final colorScheme = Theme.of(context).colorScheme;
     if (_isLoadingNovels && _novels.isEmpty) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.pinkAccent),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (_novels.isEmpty) {
-      return const Center(
-        child: Text('小説作品はありません。', style: TextStyle(color: Colors.grey)),
+      return Center(
+        child: Text(
+          '小説作品はありません。',
+          style: TextStyle(color: colorScheme.onSurfaceVariant),
+        ),
       );
     }
 
@@ -474,21 +489,19 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
       itemCount: _novels.length + (_isLoadingMoreNovels ? 1 : 0),
       itemBuilder: (context, index) {
         if (index >= _novels.length) {
-          return const Center(
-            child: CircularProgressIndicator(color: Colors.pinkAccent),
-          );
+          return const Center(child: CircularProgressIndicator());
         }
 
         final novel = _novels[index];
         return Card(
-          color: const Color(0xFF1E1E1E),
+          color: colorScheme.surfaceContainerHigh,
           margin: const EdgeInsets.symmetric(vertical: 4.0),
           child: ListTile(
             leading: Container(
               width: 54,
               height: 81,
               decoration: BoxDecoration(
-                color: Colors.black,
+                color: colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(4),
               ),
               clipBehavior: Clip.antiAlias,
@@ -498,12 +511,12 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
                       fit: BoxFit.cover,
                       isThumbnail: true,
                     )
-                  : const Icon(Icons.book, color: Colors.grey),
+                  : Icon(Icons.book, color: colorScheme.onSurfaceVariant),
             ),
             title: Text(
               novel.title,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: colorScheme.onSurface,
                 fontWeight: FontWeight.bold,
                 fontSize: 14,
               ),
@@ -516,7 +529,10 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
                 const SizedBox(height: 4),
                 Text(
                   '📄 ${novel.pageCount}P  |  ✍️ ${novel.textLength}文字',
-                  style: const TextStyle(color: Colors.grey, fontSize: 11),
+                  style: TextStyle(
+                    color: colorScheme.onSurfaceVariant,
+                    fontSize: 11,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Wrap(
@@ -529,12 +545,15 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.grey[800],
+                        color: colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
                         tag,
-                        style: const TextStyle(color: Colors.grey, fontSize: 9),
+                        style: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 9,
+                        ),
                       ),
                     );
                   }).toList(),
