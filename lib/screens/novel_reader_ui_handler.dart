@@ -194,14 +194,15 @@ extension _ReaderUiHandler on _NovelReaderScreenState {
   }
 
   void _showSleepTimerDialog() {
+    final colorScheme = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF222222),
-          title: const Text(
+          backgroundColor: colorScheme.surfaceContainerHigh,
+          title: Text(
             'スリープタイマー',
-            style: TextStyle(color: Colors.white, fontSize: 16),
+            style: TextStyle(color: colorScheme.onSurface, fontSize: 16),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -211,8 +212,8 @@ extension _ReaderUiHandler on _NovelReaderScreenState {
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Text(
                     '残り時間: ${_formatSleepRemaining()}',
-                    style: const TextStyle(
-                      color: Colors.pinkAccent,
+                    style: TextStyle(
+                      color: colorScheme.primary,
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
                     ),
@@ -226,9 +227,11 @@ extension _ReaderUiHandler on _NovelReaderScreenState {
                   return ChoiceChip(
                     label: Text('$min分'),
                     selected: selected,
-                    selectedColor: Colors.pinkAccent,
+                    selectedColor: colorScheme.primary,
                     labelStyle: TextStyle(
-                      color: selected ? Colors.white : Colors.white70,
+                      color: selected
+                          ? colorScheme.onPrimary
+                          : colorScheme.onSurfaceVariant,
                     ),
                     onSelected: (_) {
                       _startSleepTimer(min);

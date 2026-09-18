@@ -228,6 +228,7 @@ class _NovelReaderScreenState extends State<NovelReaderScreen>
     final bgColor = _getBgColor();
     final textColor = _getTextColor();
     final isDarkTheme = _themeMode == 2;
+    final colorScheme = Theme.of(context).colorScheme;
 
     // スワイプバック（システムの予測型バックジェスチャー）時に確実に pop する。
     // これがないと PageView の水平スワイプと競合し、back-invoke の再呼び出しループ
@@ -269,9 +270,9 @@ class _NovelReaderScreenState extends State<NovelReaderScreen>
                 _safeNotifyHud(_showHUD);
               },
               child: _isLoading
-                  ? const Center(
+                  ? Center(
                       child: CircularProgressIndicator(
-                        color: Colors.pinkAccent,
+                        color: colorScheme.primary,
                       ),
                     )
                   : _errorMessage != null
@@ -289,7 +290,7 @@ class _NovelReaderScreenState extends State<NovelReaderScreen>
                             const SizedBox(height: 12),
                             Text(
                               _errorMessage ?? '',
-                              style: const TextStyle(color: Colors.redAccent),
+                              style: TextStyle(color: colorScheme.error),
                             ),
                             const SizedBox(height: 16),
                             ElevatedButton(
@@ -360,7 +361,7 @@ class _NovelReaderScreenState extends State<NovelReaderScreen>
                                 ? Icons.pause_circle_filled
                                 : Icons.play_circle_fill,
                             color: _isAutoScrolling
-                                ? Colors.pinkAccent
+                                ? colorScheme.primary
                                 : (isDarkTheme
                                       ? Colors.white70
                                       : Colors.black54),

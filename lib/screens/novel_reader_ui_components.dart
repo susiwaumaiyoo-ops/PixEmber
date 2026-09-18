@@ -59,6 +59,7 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
 
   // 下部HUDコントロールバー
   Widget _buildBottomHUD(bool isDark) {
+    final colorScheme = Theme.of(context).colorScheme;
     final totalPages = _textData?.novelPages.length ?? 1;
     return Container(
       padding: EdgeInsets.only(
@@ -128,8 +129,8 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
                         ),
                         min: 1.0,
                         max: totalPages.toDouble(),
-                        activeColor: Colors.pinkAccent,
-                        inactiveColor: Colors.grey.withValues(alpha: 0.3),
+                        activeColor: colorScheme.primary,
+                        inactiveColor: colorScheme.outlineVariant,
                         onChanged: (val) {
                           final targetPage = val.round() - 1;
                           _pageController?.jumpToPage(targetPage);
@@ -155,15 +156,15 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
                   children: [
                     Icon(
                       _isAutoScrolling ? Icons.pause : Icons.play_arrow,
-                      color: Colors.pinkAccent,
+                      color: colorScheme.primary,
                       size: 18,
                     ),
                     const SizedBox(width: 4),
                     Text(
                       _isAutoScrolling ? 'スクロール停止' : '自動スクロール',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Colors.pinkAccent,
+                        color: colorScheme.primary,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -173,14 +174,10 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
               // 簡易カスタマイズボタン
               TextButton.icon(
                 onPressed: _showCustomizationHUD,
-                icon: const Icon(
-                  Icons.tune,
-                  size: 16,
-                  color: Colors.pinkAccent,
-                ),
-                label: const Text(
+                icon: Icon(Icons.tune, size: 16, color: colorScheme.primary),
+                label: Text(
                   'クイック設定',
-                  style: TextStyle(fontSize: 12, color: Colors.pinkAccent),
+                  style: TextStyle(fontSize: 12, color: colorScheme.primary),
                 ),
                 style: TextButton.styleFrom(
                   padding: EdgeInsets.zero,
@@ -200,7 +197,7 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
                 IconButton(
                   icon: Icon(
                     _isTtsPaused ? Icons.play_arrow : Icons.pause,
-                    color: Colors.pinkAccent,
+                    color: colorScheme.primary,
                   ),
                   iconSize: 20,
                   padding: EdgeInsets.zero,
@@ -210,7 +207,7 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
                 ),
                 // 停止
                 IconButton(
-                  icon: const Icon(Icons.stop, color: Colors.pinkAccent),
+                  icon: Icon(Icons.stop, color: colorScheme.primary),
                   iconSize: 20,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
@@ -248,8 +245,8 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
                           max: 2.0,
                           divisions: 6,
                           label: 'x${_ttsRate.toStringAsFixed(1)}',
-                          activeColor: Colors.pinkAccent,
-                          inactiveColor: Colors.grey.withValues(alpha: 0.3),
+                          activeColor: colorScheme.primary,
+                          inactiveColor: colorScheme.outlineVariant,
                           onChanged: _onTtsRateChanged,
                         ),
                       ),
