@@ -126,6 +126,17 @@ class PixivApiService {
   Future<String> testGet(String endpoint, {Map<String, String>? params}) =>
       _get(endpoint, params: params);
 
+  /// テスト用: `_post` の境界例外変換を直接観測する（Phase 9c-2）。
+  ///
+  /// toggleBookmark は catch-all で例外を握りつぶすため、変換後の例外型を
+  /// 検証できない。本メソッドは `_post` そのものを呼び、例外をそのまま
+  /// 外に伝える。公開 API ではない。
+  @visibleForTesting
+  Future<Map<String, dynamic>> testPost(
+    String endpoint, {
+    Map<String, String>? body,
+  }) => _post(endpoint, body: body);
+
   // ==========================================
   // ミュート（ブラックリスト）動的フィルタリング
   // ==========================================
@@ -1364,27 +1375,36 @@ class PixivApiService {
   }
 
   /// 共通のPOSTリクエストメソッド
+  ///
+  /// Phase 9c-2: 実体は [PixivHttpClient.post] に委譲する（URL・ヘッダー・
+  /// body の組み立ては HttpClient 側と等価）。401 時のキャッシュ破棄（B-6）
+  /// は HttpClient.post が行う。
+  /// 戻り値は従来どおり デコード済み Map（空ボディなら {}）。
+  /// 外向きの例外契約は _get と同じ境界変換で維持:
+  ///   PixivRateLimitException → RateLimitException
+  ///   PixivAuthException     → AuthException
+  ///   上記以外              → 従来の生 Exception
+  ///
+  /// ※ 従来 _post は全ステータスを生 Exception にしていたため、429/401 も
+  ///    生 Exception 相当を維持する（従来互換）。toggleBookmark の catch-all
+  ///    はそのまま（B-7 は別フェーズ）。
   Future<Map<String, dynamic>> _post(
     String endpoint, {
     Map<String, String>? body,
   }) async {
-    final token = await getAccessToken(await getRefreshToken());
-
-    final response = await PixivHttpClient().client.post(
-      Uri.parse('$_baseUrl$endpoint'),
-      headers: {
-        ..._clientHeaders,
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: body,
-    );
-
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      if (response.body.isEmpty) return {};
-      return jsonDecode(response.body) as Map<String, dynamic>;
-    } else {
-      throw Exception('Pixiv APIエラー: ${response.statusCode}\n${response.body}');
+    try {
+      return await PixivHttpClient().post(endpoint, body: body);
+    } on PixivRateLimitException catch (e) {
+      throw RateLimitException(e.message, statusCode: e.statusCode);
+    } on PixivAuthException catch (e) {
+      throw AuthException(
+        'Pixiv APIの認証に失敗しました（401）。再ログインが必要です。',
+        statusCode: e.statusCode,
+      );
+    } on PixivForbiddenException catch (e) {
+      throw Exception('Pixiv APIエラー: ${e.statusCode}\n${e.message}');
+    } on PixivNotFoundException catch (e) {
+      throw Exception('Pixiv APIエラー: ${e.statusCode}\n${e.message}');
     }
   }
 
