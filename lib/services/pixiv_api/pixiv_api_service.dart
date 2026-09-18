@@ -83,49 +83,48 @@ class PixivApiService {
   /// 共通のGETリクエストメソッド
   /// 注意: JSON デコードはメインスレッドで軽量に行い、重いリスト解析は
   /// 各メソッドが生 body 文字列を Isolate.run に渡して実行する。
+  ///
+  /// Phase 9c-1: 実体は [PixivHttpClient.get] に委譲する（URL・ヘッダーは
+  /// HttpClient 側の baseUrl/clientHeaders と同一値）。
+  /// 401 時のキャッシュ破棄（B-6）は HttpClient.get が行う。
+  /// 戻り値は従来どおり body 文字列。外向きの例外契約は境界変換で維持:
+  ///   PixivRateLimitException → RateLimitException
+  ///   PixivAuthException     → AuthException
+  ///   上記以外              → 従来の生 Exception（403/404 を含む）
   Future<String> _get(String endpoint, {Map<String, String>? params}) async {
-    final token = await getAccessToken(await getRefreshToken());
-
-    var uri = Uri.parse('$_baseUrl$endpoint');
-    if (params != null) {
-      uri = uri.replace(queryParameters: params);
-    }
-
-    debugPrint('[API] GET $uri');
-    if (params != null && params.isNotEmpty) {
-      debugPrint('[API] Params: $params');
-    }
-
-    final response = await PixivHttpClient().client.get(
-      uri,
-      headers: {..._clientHeaders, 'Authorization': 'Bearer $token'},
-    );
-
-    if (response.statusCode == 200) {
+    try {
+      final body = await PixivHttpClient().get(endpoint, params: params);
       debugPrint('[API] Status: 200, endpoint: $endpoint');
-      return response.body;
-    } else if (response.statusCode == 429) {
+      return body;
+    } on PixivRateLimitException catch (e) {
       debugPrint('[API] ERROR Status: 429 (Rate Limited), endpoint: $endpoint');
-      if (kDebugMode) debugPrint('[API] ERROR Body: ${response.body}');
-      throw RateLimitException(
-        'Pixiv APIのレート制限（429）に達しました。しばらく時間を置いてから再試行してください。',
-        statusCode: 429,
-      );
-    } else if (response.statusCode == 401) {
+      throw RateLimitException(e.message, statusCode: e.statusCode);
+    } on PixivAuthException catch (e) {
       debugPrint('[API] ERROR Status: 401 (Unauthorized), endpoint: $endpoint');
-      if (kDebugMode) debugPrint('[API] ERROR Body: ${response.body}');
       throw AuthException(
         'Pixiv APIの認証に失敗しました（401）。再ログインが必要です。',
-        statusCode: 401,
+        statusCode: e.statusCode,
       );
-    } else {
-      debugPrint(
-        '[API] ERROR Status: ${response.statusCode}, endpoint: $endpoint',
-      );
-      if (kDebugMode) debugPrint('[API] ERROR Body: ${response.body}');
-      throw Exception('Pixiv APIエラー: ${response.statusCode}\n${response.body}');
+    } on PixivForbiddenException catch (e) {
+      // 従来 _get は 403 を生 Exception にしていたのでその表現を維持する。
+      debugPrint('[API] ERROR Status: ${e.statusCode}, endpoint: $endpoint');
+      throw Exception('Pixiv APIエラー: ${e.statusCode}\n${e.message}');
+    } on PixivNotFoundException catch (e) {
+      // 従来 _get は 404 を生 Exception にしていた。NovelNotFoundException は
+      // getNovelById 等の data==null 判定で作る既存ロジックのまま（ここでは作らない）。
+      debugPrint('[API] ERROR Status: ${e.statusCode}, endpoint: $endpoint');
+      throw Exception('Pixiv APIエラー: ${e.statusCode}\n${e.message}');
     }
   }
+
+  /// テスト用: `_get` の境界例外変換を直接観測する（Phase 9c-1）。
+  ///
+  /// 通常のエンドポイントは `_wrap` が例外を握りつぶして空結果を返すため、
+  /// 変換後の例外型を検証できない。本 getter は `_get` そのものを呼び、
+  /// 例外をそのまま外に伝える。公開 API ではない。
+  @visibleForTesting
+  Future<String> testGet(String endpoint, {Map<String, String>? params}) =>
+      _get(endpoint, params: params);
 
   // ==========================================
   // ミュート（ブラックリスト）動的フィルタリング
