@@ -6,6 +6,7 @@ import '../illust_model.dart';
 import '../novel_model.dart';
 import '../services/google_drive_service.dart';
 import '../services/pixiv_api_service.dart';
+import '../services/pixiv_api_http.dart';
 import 'bookmark_list_screen.dart';
 import 'history_screen.dart';
 import 'feeling_discovery_screen.dart';
@@ -1460,11 +1461,24 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   }
 
   // ログアウト処理
+  //
+  // B-1/B-3 (Phase 9b-1): ログアウト時には端末に保存されたリフレッシュトークンと、
+  // メモリ上のアクセストークンキャッシュを確実に破棄する。
+  // ※ シグネチャ維持: setRefreshToken と同じ非同期ファイア＆フォーゲット方式。
+  // ※ 順序: prefs 削除 → キャッシュ破棄 → setState。
   void logout() {
-    setState(() {
-      isLoggedIn = false;
-      loggedInEmail = null;
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.remove('PIXIV_REFRESH_TOKEN');
     });
+    PixivHttpClient().clearTokenCache();
+    // mounted チェック: 本番ウィジェットでは常に true。テストで state を
+    // 直接インスタンス化した場合は setState を呼ばない（要素がないため）。
+    if (mounted) {
+      setState(() {
+        isLoggedIn = false;
+        loggedInEmail = null;
+      });
+    }
   }
 
   // 小説フィルターボトムシート表示
