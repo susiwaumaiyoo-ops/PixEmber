@@ -29,4 +29,12 @@ class DatabaseService extends DatabaseServiceBackup {
   static final DatabaseService _instance = DatabaseService._internal();
   factory DatabaseService() => _instance;
   DatabaseService._internal();
+
+  /// 互換用転送: 分割前は本クラスに直属していた public static エントリ。
+  /// 実体は各 part クラスが保持する（Dart は static を継承しないため）。
+  static bool isGenuineNovelMissing(String message) =>
+      DatabaseServiceIntegrity.isGenuineNovelMissing(message);
+
+  static const int subscriptionNewItemsLimitPerTag =
+      DatabaseServiceSubscriptions.subscriptionNewItemsLimitPerTag;
 }
