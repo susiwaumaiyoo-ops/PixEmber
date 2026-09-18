@@ -36,7 +36,7 @@ class PixivImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (url.isEmpty && localFile == null) {
-      return _buildErrorWidget();
+      return _buildErrorWidget(context);
     }
 
     // リファラなどのセキュリティヘッダーを付与してPixivのアセットサーバーからの直リンク403エラーを回避
@@ -104,11 +104,12 @@ class PixivImage extends StatelessWidget {
         if (loadingProgress == null) {
           return child;
         }
+        final colorScheme = Theme.of(context).colorScheme;
         return placeholder ??
             Container(
               width: w,
               height: h,
-              color: Colors.grey.withValues(alpha: 0.1),
+              color: colorScheme.surfaceContainerHighest,
               alignment: Alignment.center,
               child: SizedBox(
                 width: 24,
@@ -119,30 +120,41 @@ class PixivImage extends StatelessWidget {
                       ? loadingProgress.cumulativeBytesLoaded /
                             loadingProgress.expectedTotalBytes!
                       : null,
-                  color: Colors.pinkAccent,
+                  color: colorScheme.primary,
                 ),
               ),
             );
       },
       errorBuilder: (context, error, stackTrace) {
-        return _buildErrorWidget();
+        return _buildErrorWidget(context);
       },
     );
   }
 
-  Widget _buildErrorWidget() {
+  Widget _buildErrorWidget(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return errorWidget ??
         Container(
           width: width,
           height: height,
-          color: Colors.grey.withValues(alpha: 0.1),
+          color: colorScheme.surfaceContainerHighest,
           alignment: Alignment.center,
-          child: const Column(
+          child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.broken_image_outlined, color: Colors.grey, size: 32),
-              SizedBox(height: 4),
-              Text('読込失敗', style: TextStyle(color: Colors.grey, fontSize: 10)),
+              Icon(
+                Icons.broken_image_outlined,
+                color: colorScheme.onSurfaceVariant,
+                size: 32,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '読込失敗',
+                style: TextStyle(
+                  color: colorScheme.onSurfaceVariant,
+                  fontSize: 10,
+                ),
+              ),
             ],
           ),
         );

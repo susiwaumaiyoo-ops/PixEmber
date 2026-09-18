@@ -129,6 +129,7 @@ class NovelListCard extends StatelessWidget {
   /// - bounded: caption / series は表示しない（省スペース、188pxに収める）。
   /// - unbounded: caption / series を1行ずつ追加。
   Widget _buildTextColumn(BuildContext context, {required bool hasBounded}) {
+    final colorScheme = Theme.of(context).colorScheme;
     final bool showCaption = !hasBounded && novel.caption.trim().isNotEmpty;
     final bool showSeries = !hasBounded && novel.series != null;
     final bool hasTags = novel.tags.isNotEmpty;
@@ -136,7 +137,7 @@ class NovelListCard extends StatelessWidget {
     final children = <Widget>[];
 
     // バッジ行（空なら Widget ごと生成しない）
-    final badges = _buildBadges();
+    final badges = _buildBadges(context);
     if (badges.isNotEmpty) {
       children.add(Wrap(spacing: 4, runSpacing: 2, children: badges));
       children.add(const SizedBox(height: _vGap));
@@ -156,7 +157,7 @@ class NovelListCard extends StatelessWidget {
             if (hasLabel)
               TextSpan(
                 text: '$matchLabel ',
-                style: const TextStyle(color: Colors.tealAccent, fontSize: 13),
+                style: TextStyle(color: colorScheme.tertiary, fontSize: 13),
               ),
             TextSpan(text: novel.title),
           ],
@@ -168,14 +169,14 @@ class NovelListCard extends StatelessWidget {
     children.add(const SizedBox(height: _vGap));
 
     // 3. 作者行
-    children.add(_buildAuthorRow());
+    children.add(_buildAuthorRow(context));
 
     // 4. 間隔
     children.add(const SizedBox(height: _vGap));
 
     // 5. タグ（最大3、Wrap で折り返し→横オーバーフローなし）
     if (hasTags) {
-      children.add(_buildTags());
+      children.add(_buildTags(context));
     }
 
     // unbounded のときのみ caption / series を追加（bounded は非表示）
@@ -184,7 +185,7 @@ class NovelListCard extends StatelessWidget {
       children.add(
         Text(
           novel.caption.trim(),
-          style: TextStyle(color: Colors.grey[400], fontSize: 12),
+          style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -205,7 +206,7 @@ class NovelListCard extends StatelessWidget {
             Expanded(
               child: Text(
                 novel.series!.title,
-                style: const TextStyle(fontSize: 12, color: Colors.blueAccent),
+                style: TextStyle(fontSize: 12, color: colorScheme.secondary),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -216,7 +217,7 @@ class NovelListCard extends StatelessWidget {
     }
 
     // 6. メタ行
-    children.add(_buildMetaRow());
+    children.add(_buildMetaRow(context));
 
     return Column(
       // stretch: 全子（バッジ/タイトル/タグWrap/メタ）をテキストエリア幅いっぱいに広げ、
@@ -229,7 +230,8 @@ class NovelListCard extends StatelessWidget {
   }
 
   /// 作者行（アイコンは常に丸型 / PixivImage で Referer 付き取得）。
-  Widget _buildAuthorRow() {
+  Widget _buildAuthorRow(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final String? avatar = novel.author.avatar;
     final bool hasAvatar = avatar != null && avatar.isNotEmpty;
 
@@ -254,7 +256,7 @@ class NovelListCard extends StatelessWidget {
         Expanded(
           child: Text(
             novel.author.name,
-            style: const TextStyle(fontSize: 12, color: Colors.white70),
+            style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -264,7 +266,8 @@ class NovelListCard extends StatelessWidget {
   }
 
   /// タグ（最大3個）。Wrap で折り返し、右端での切れ/オーバーフローを防止。
-  Widget _buildTags() {
+  Widget _buildTags(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final tags = novel.tags.take(4).toList();
     return Wrap(
       spacing: 4,
@@ -274,12 +277,12 @@ class NovelListCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
             decoration: BoxDecoration(
-              color: Colors.pinkAccent.withValues(alpha: 0.15),
+              color: colorScheme.primary.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
               '#$t',
-              style: const TextStyle(fontSize: 10, color: Colors.pinkAccent),
+              style: TextStyle(fontSize: 10, color: colorScheme.primary),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -290,33 +293,37 @@ class NovelListCard extends StatelessWidget {
 
   /// メタ行（文字数 / ページ数 / ブクマ）。薄めの色。
   /// Row の幅は有限なので Expanded + ellipsis は安全。
-  Widget _buildMetaRow() {
+  Widget _buildMetaRow(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(top: 2),
       child: Row(
         children: [
-          const Icon(Icons.notes, size: 12, color: Colors.white54),
+          Icon(Icons.notes, size: 12, color: colorScheme.onSurfaceVariant),
           const SizedBox(width: 3),
           Text(
             novel.textLength > 0 ? _formatNumber(novel.textLength) : '不明',
-            style: const TextStyle(fontSize: 11, color: Colors.white54),
+            style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
             maxLines: 1,
           ),
           const SizedBox(width: 10),
-          const Icon(Icons.menu_book, size: 12, color: Colors.white54),
+          Icon(Icons.menu_book, size: 12, color: colorScheme.onSurfaceVariant),
           const SizedBox(width: 3),
           Text(
             novel.pageCount > 0 ? '${novel.pageCount}P' : '不明',
-            style: const TextStyle(fontSize: 11, color: Colors.white54),
+            style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
             maxLines: 1,
           ),
           const SizedBox(width: 10),
-          const Icon(Icons.bookmark, size: 12, color: Colors.pinkAccent),
+          Icon(Icons.bookmark, size: 12, color: colorScheme.primary),
           const SizedBox(width: 3),
           Expanded(
             child: Text(
               _formatNumber(novel.totalBookmarks),
-              style: const TextStyle(fontSize: 11, color: Colors.white54),
+              style: TextStyle(
+                fontSize: 11,
+                color: colorScheme.onSurfaceVariant,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -331,14 +338,17 @@ class NovelListCard extends StatelessWidget {
   /// - isKeywordMatch: キーワード一致
   /// - isAiUnanalyzed: AI未解析
   /// - extraBadges: 呼び出し側任意（「参考なし」等）
-  List<Widget> _buildBadges() {
+  List<Widget> _buildBadges(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     // 類似度%はタイトル先頭にインライン表示するためここでは生成しない。
     final list = <Widget>[];
     if (isKeywordMatch) {
-      list.add(_badge(Icons.label, 'キーワード一致', Colors.amber));
+      list.add(_badge(Icons.label, 'キーワード一致', colorScheme.tertiary));
     }
     if (isAiUnanalyzed) {
-      list.add(_badge(Icons.auto_awesome, 'AI未解析', Colors.grey));
+      list.add(
+        _badge(Icons.auto_awesome, 'AI未解析', colorScheme.onSurfaceVariant),
+      );
     }
     list.addAll(extraBadges);
     return list;
@@ -397,13 +407,18 @@ class _AvatarPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.grey.shade800,
+        color: colorScheme.surfaceContainerHigh,
       ),
-      child: const Center(
-        child: Icon(Icons.person, size: 12, color: Colors.white70),
+      child: Center(
+        child: Icon(
+          Icons.person,
+          size: 12,
+          color: colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }
@@ -415,10 +430,15 @@ class _CoverPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      color: Colors.grey.shade900,
+      color: colorScheme.surfaceContainerHighest,
       alignment: Alignment.center,
-      child: const Icon(Icons.menu_book, color: Colors.white38, size: 32),
+      child: Icon(
+        Icons.menu_book,
+        color: colorScheme.onSurfaceVariant,
+        size: 32,
+      ),
     );
   }
 }

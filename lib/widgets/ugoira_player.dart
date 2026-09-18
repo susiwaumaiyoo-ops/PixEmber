@@ -145,6 +145,7 @@ class _UgoiraPlayerState extends State<UgoiraPlayer> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     if (_isLoading) {
       return Container(
         height: 350,
@@ -153,11 +154,11 @@ class _UgoiraPlayerState extends State<UgoiraPlayer> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const CircularProgressIndicator(color: Colors.pinkAccent),
+              CircularProgressIndicator(color: colorScheme.primary),
               const SizedBox(height: 16),
               Text(
                 'うごイラ展開中... ${(_loadProgress * 100).toInt()}%',
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
+                style: TextStyle(color: Colors.white70, fontSize: 13),
               ),
             ],
           ),
@@ -175,16 +176,15 @@ class _UgoiraPlayerState extends State<UgoiraPlayer> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(
-                  Icons.error_outline,
-                  color: Colors.pinkAccent,
-                  size: 40,
-                ),
+                Icon(Icons.error_outline, color: colorScheme.error, size: 40),
                 const SizedBox(height: 12),
                 Text(
                   'うごイラの読み込みに失敗しました。\n$_error',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  style: TextStyle(
+                    color: colorScheme.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 ElevatedButton.icon(
@@ -214,8 +214,11 @@ class _UgoiraPlayerState extends State<UgoiraPlayer> {
               alignment: Alignment.center,
               child: frameData != null
                   ? Image.memory(frameData, fit: BoxFit.contain)
-                  : const Center(
-                      child: Icon(Icons.broken_image, color: Colors.grey),
+                  : Center(
+                      child: Icon(
+                        Icons.broken_image,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                     ),
             ),
             // 再生一時停止オーバーレイ
@@ -238,7 +241,7 @@ class _UgoiraPlayerState extends State<UgoiraPlayer> {
             children: [
               Text(
                 '${_currentFrameIndex + 1} / ${_frames.length}',
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.white70,
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -252,8 +255,8 @@ class _UgoiraPlayerState extends State<UgoiraPlayer> {
                     0.0,
                     double.infinity,
                   ),
-                  activeColor: Colors.pinkAccent,
-                  inactiveColor: Colors.grey[800],
+                  activeColor: colorScheme.primary,
+                  inactiveColor: colorScheme.surfaceContainerHighest,
                   onChanged: (val) {
                     _timer?.cancel();
                     setState(() {

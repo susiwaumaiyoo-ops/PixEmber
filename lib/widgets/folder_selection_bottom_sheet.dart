@@ -75,69 +75,75 @@ class _FolderSelectionBottomSheetState
 
     await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF222222),
-        title: const Text(
-          '新規フォルダ作成',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: TextField(
-          controller: nameController,
-          autofocus: true,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            labelText: 'フォルダ名',
-            labelStyle: TextStyle(color: Colors.pinkAccent),
-            hintText: '例: お気に入り、AI作品など',
-            hintStyle: TextStyle(color: Colors.grey),
-            enabledBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: Colors.grey),
-            ),
-            focusedBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: Colors.pinkAccent),
+      builder: (context) {
+        final colorScheme = Theme.of(context).colorScheme;
+        return AlertDialog(
+          backgroundColor: colorScheme.surfaceContainerHigh,
+          title: Text(
+            '新規フォルダ作成',
+            style: TextStyle(
+              color: colorScheme.onSurface,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
             ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('キャンセル', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.pinkAccent,
-              foregroundColor: Colors.white,
+          content: TextField(
+            controller: nameController,
+            autofocus: true,
+            style: TextStyle(color: colorScheme.onSurface),
+            decoration: InputDecoration(
+              labelText: 'フォルダ名',
+              labelStyle: TextStyle(color: colorScheme.primary),
+              hintText: '例: お気に入り、AI作品など',
+              hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: colorScheme.outlineVariant),
+              ),
+              focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: colorScheme.primary),
+              ),
             ),
-            onPressed: () async {
-              final navigator = Navigator.of(context);
-              final messenger = ScaffoldMessenger.of(context);
-              final name = nameController.text.trim();
-              if (name.isEmpty) return;
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'キャンセル',
+                style: TextStyle(color: colorScheme.onSurfaceVariant),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+              ),
+              onPressed: () async {
+                final navigator = Navigator.of(context);
+                final messenger = ScaffoldMessenger.of(context);
+                final name = nameController.text.trim();
+                if (name.isEmpty) return;
 
-              try {
-                final db = DatabaseService();
-                await db.createFolder(name);
-                if (!context.mounted) return;
+                try {
+                  final db = DatabaseService();
+                  await db.createFolder(name);
+                  if (!context.mounted) return;
 
-                if (navigator.canPop()) {
-                  navigator.pop();
+                  if (navigator.canPop()) {
+                    navigator.pop();
+                  }
+                  _fetchFolders();
+                } catch (e) {
+                  if (!context.mounted) return;
+                  messenger.showSnackBar(
+                    SnackBar(content: Text('フォルダの作成に失敗しました: $e')),
+                  );
                 }
-                _fetchFolders();
-              } catch (e) {
-                if (!context.mounted) return;
-                messenger.showSnackBar(
-                  SnackBar(content: Text('フォルダの作成に失敗しました: $e')),
-                );
-              }
-            },
-            child: const Text('作成'),
-          ),
-        ],
-      ),
+              },
+              child: const Text('作成'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -174,11 +180,12 @@ class _FolderSelectionBottomSheetState
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(16.0),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHigh,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -187,27 +194,27 @@ class _FolderSelectionBottomSheetState
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'お気に入りフォルダに分類',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: colorScheme.onSurface,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.add_to_photos, color: Colors.pinkAccent),
+                icon: Icon(Icons.add_to_photos, color: colorScheme.primary),
                 onPressed: _createNewFolder,
                 tooltip: '新規フォルダ作成',
               ),
             ],
           ),
-          const Divider(color: Colors.grey),
+          Divider(color: colorScheme.outlineVariant),
           if (_isLoading)
-            const SizedBox(
+            SizedBox(
               height: 120,
               child: Center(
-                child: CircularProgressIndicator(color: Colors.pinkAccent),
+                child: CircularProgressIndicator(color: colorScheme.primary),
               ),
             )
           else if (_error != null)
@@ -215,7 +222,7 @@ class _FolderSelectionBottomSheetState
               padding: const EdgeInsets.symmetric(vertical: 20),
               child: Text(
                 'エラー: $_error',
-                style: const TextStyle(color: Colors.grey),
+                style: TextStyle(color: colorScheme.onSurfaceVariant),
                 textAlign: TextAlign.center,
               ),
             )
@@ -224,16 +231,16 @@ class _FolderSelectionBottomSheetState
               padding: const EdgeInsets.symmetric(vertical: 30.0),
               child: Column(
                 children: [
-                  const Text(
+                  Text(
                     'フォルダがまだありません。',
-                    style: TextStyle(color: Colors.grey),
+                    style: TextStyle(color: colorScheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 8),
                   ElevatedButton(
                     onPressed: _createNewFolder,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.pinkAccent,
-                      foregroundColor: Colors.white,
+                      backgroundColor: colorScheme.primary,
+                      foregroundColor: colorScheme.onPrimary,
                     ),
                     child: const Text('フォルダを作成する'),
                   ),
@@ -251,10 +258,13 @@ class _FolderSelectionBottomSheetState
                 itemBuilder: (context, idx) {
                   final folder = _folders[idx];
                   return ListTile(
-                    leading: const Icon(Icons.folder, color: Colors.amber),
+                    leading: Icon(Icons.folder, color: colorScheme.tertiary),
                     title: Text(
                       folder['name'],
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
+                        fontSize: 14,
+                      ),
                     ),
                     trailing: Container(
                       padding: const EdgeInsets.symmetric(
@@ -262,13 +272,13 @@ class _FolderSelectionBottomSheetState
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.grey[800],
+                        color: colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
                         '${folder['item_count']} 件',
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: colorScheme.onSurface,
                           fontSize: 10,
                         ),
                       ),
