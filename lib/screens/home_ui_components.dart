@@ -25,20 +25,23 @@ class HomeUIComponents {
     required bool isActive,
     required VoidCallback onTap,
   }) {
+    final colorScheme = Theme.of(state.context).colorScheme;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: isActive
-              ? Colors.pinkAccent.withValues(alpha: 0.3)
+              ? colorScheme.primary.withValues(alpha: 0.3)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isActive ? Colors.pinkAccent : Colors.grey[400],
+            color: isActive
+                ? colorScheme.primary
+                : colorScheme.onSurfaceVariant,
             fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
           ),
         ),
@@ -106,6 +109,7 @@ class HomeUIComponents {
         padding: const EdgeInsets.symmetric(horizontal: 8),
         itemCount: modes.length,
         itemBuilder: (ctx, idx) {
+          final colorScheme = Theme.of(ctx).colorScheme;
           final m = modes[idx];
           final isSel = m['value'] == selected;
           return Padding(
@@ -116,8 +120,8 @@ class HomeUIComponents {
                 style: const TextStyle(fontSize: 11),
               ),
               selected: isSel,
-              selectedColor: Colors.pink.withValues(alpha: 0.3),
-              checkmarkColor: Colors.pinkAccent,
+              selectedColor: colorScheme.primary.withValues(alpha: 0.3),
+              checkmarkColor: colorScheme.primary,
               onSelected: (bool sel) {
                 if (sel) state.changeRankMode(m['value']);
               },
@@ -173,10 +177,12 @@ class HomeUIComponents {
     }).toList();
 
     if (filteredIllusts.isEmpty && state.illusts.isNotEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'フィルターに一致するイラストが見つかりませんでした。',
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(
+            color: Theme.of(state.context).colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -228,6 +234,7 @@ class HomeUIComponents {
   }
 
   Widget _buildIllustGridItem(BuildContext context, dynamic illust) {
+    final colorScheme = Theme.of(context).colorScheme;
     String? previewUrl;
     try {
       previewUrl =
@@ -280,8 +287,8 @@ class HomeUIComponents {
                   left: 8,
                   child: Container(
                     padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Colors.pinkAccent,
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary,
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -308,15 +315,15 @@ class HomeUIComponents {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.bookmark,
                           size: 12,
-                          color: Colors.pinkAccent,
+                          color: colorScheme.primary,
                         ),
                         const SizedBox(width: 2),
                         Text(
                           '${illust.totalBookmarks}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: Colors.white,
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -435,20 +442,21 @@ class HomeUIComponents {
     required String message,
     required String subMessage,
   }) {
+    final colorScheme = Theme.of(state.context).colorScheme;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 64, color: Colors.grey[600]),
+          Icon(icon, size: 64, color: colorScheme.onSurfaceVariant),
           const SizedBox(height: 16),
           Text(
             message,
-            style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+            style: TextStyle(fontSize: 18, color: colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
           Text(
             subMessage,
-            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+            style: TextStyle(fontSize: 14, color: colorScheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -456,6 +464,7 @@ class HomeUIComponents {
   }
 
   Widget _buildLoadMoreIndicator() {
+    final colorScheme = Theme.of(state.context).colorScheme;
     if (state.rateLimited == true) {
       return Center(
         child: Padding(
@@ -463,18 +472,18 @@ class HomeUIComponents {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 'アクセス制限が発生しました',
                 style: TextStyle(
-                  color: Colors.red,
+                  color: colorScheme.error,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Pixivのアクセス制限（レート制限）が発生しました。\nしばらく時間を置いてから再試行してください。',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
+                style: TextStyle(color: colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
@@ -487,37 +496,34 @@ class HomeUIComponents {
         ),
       );
     }
-    return const Center(
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(16.0),
-        child: CircularProgressIndicator(color: Colors.pinkAccent),
+        padding: const EdgeInsets.all(16.0),
+        child: CircularProgressIndicator(),
       ),
     );
   }
 
   Widget buildErrorWidget() {
+    final colorScheme = Theme.of(state.context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.cloud_off, size: 64, color: Colors.pinkAccent),
+            Icon(Icons.cloud_off, size: 64, color: colorScheme.primary),
             const SizedBox(height: 16),
             Text(
               state.errorMessage?.toString() ?? 'エラーが発生しました',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+              style: TextStyle(color: colorScheme.error, fontSize: 13),
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: state.fetchData,
               icon: const Icon(Icons.refresh),
               label: const Text('再読み込みする'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.pinkAccent,
-                foregroundColor: Colors.white,
-              ),
             ),
           ],
         ),
@@ -535,6 +541,7 @@ class HomeUIComponents {
   static const double _kEncyclopediaCardMaxHeight = 180.0;
 
   Widget buildEncyclopediaCard(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     if (state.searchItem == null) return const SizedBox.shrink();
     final item = state.searchItem!;
     final String? iconUrl = item.iconUrl;
@@ -551,7 +558,7 @@ class HomeUIComponents {
                 child: Container(
                   width: 50,
                   height: 50,
-                  color: Colors.black,
+                  color: colorScheme.surfaceContainerHighest,
                   child: (iconUrl != null && iconUrl.isNotEmpty)
                       ? PixivImage(
                           url: iconUrl,
@@ -560,15 +567,12 @@ class HomeUIComponents {
                           cacheWidth: 150,
                           width: 50,
                           height: 50,
-                          errorWidget: const Icon(
+                          errorWidget: Icon(
                             Icons.bookmark_border,
-                            color: Colors.pinkAccent,
+                            color: colorScheme.primary,
                           ),
                         )
-                      : const Icon(
-                          Icons.bookmark_border,
-                          color: Colors.pinkAccent,
-                        ),
+                      : Icon(Icons.bookmark_border, color: colorScheme.primary),
                 ),
               ),
               const SizedBox(width: 12),
@@ -578,10 +582,10 @@ class HomeUIComponents {
                   children: [
                     Text(
                       '#${item.name}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
-                        color: Colors.pinkAccent,
+                        color: colorScheme.primary,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -590,15 +594,18 @@ class HomeUIComponents {
                     if (item.wordCount != null)
                       Text(
                         '作品数: ${item.wordCount}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: Colors.grey,
+                          color: colorScheme.onSurfaceVariant,
                         ),
                       )
                     else
-                      const Text(
+                      Text(
                         '作品数: 取得できません',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                       ),
                   ],
                 ),
@@ -609,9 +616,9 @@ class HomeUIComponents {
             const SizedBox(height: 10),
             Text(
               item.summary,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: Colors.white70,
+                color: colorScheme.onSurfaceVariant,
                 height: 1.4,
               ),
               maxLines: 3,
@@ -644,12 +651,15 @@ class HomeUIComponents {
                     );
                   }
                 },
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 4,
+                    horizontal: 8,
+                  ),
                   child: Text(
                     'ピクシブ百科事典で見る ↗',
                     style: TextStyle(
-                      color: Colors.blueAccent,
+                      color: colorScheme.tertiary,
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
                     ),
@@ -706,6 +716,7 @@ class HomeUIComponents {
   // 同期プログレス
   // =========================================================================
   Widget buildSyncProgressHUD() {
+    final colorScheme = Theme.of(state.context).colorScheme;
     if (state.isSyncing != true) return const SizedBox.shrink();
 
     return Center(
@@ -715,11 +726,11 @@ class HomeUIComponents {
           color: Colors.black.withValues(alpha: 0.8),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Column(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(color: Colors.pinkAccent),
-            SizedBox(height: 16),
+            CircularProgressIndicator(),
+            const SizedBox(height: 16),
             Text(
               'Google ドライブに同期中...',
               style: TextStyle(
@@ -728,10 +739,13 @@ class HomeUIComponents {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
               '処理中...',
-              style: TextStyle(color: Colors.white70, fontSize: 12),
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
             ),
           ],
         ),
@@ -745,8 +759,8 @@ class HomeUIComponents {
   Widget buildFilterSectionTitle(String title) {
     return Text(
       title,
-      style: const TextStyle(
-        color: Colors.white,
+      style: TextStyle(
+        color: Theme.of(state.context).colorScheme.onSurface,
         fontWeight: FontWeight.bold,
         fontSize: 13,
       ),
@@ -758,25 +772,28 @@ class HomeUIComponents {
     required bool selected,
     required VoidCallback onSelected,
   }) {
+    final colorScheme = Theme.of(state.context).colorScheme;
     return ChoiceChip(
       label: Text(
         label,
         style: TextStyle(
-          color: selected ? Colors.white : Colors.grey[400],
+          color: selected
+              ? colorScheme.onSurface
+              : colorScheme.onSurfaceVariant,
           fontSize: 12,
           fontWeight: selected ? FontWeight.bold : FontWeight.normal,
         ),
       ),
       selected: selected,
-      selectedColor: Colors.pinkAccent.withValues(alpha: 0.8),
-      backgroundColor: const Color(0xFF2E2E2E),
+      selectedColor: colorScheme.primary.withValues(alpha: 0.8),
+      backgroundColor: colorScheme.surfaceContainerHighest,
       elevation: selected ? 2 : 0,
       pressElevation: 4,
       onSelected: (_) => onSelected(),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(
-          color: selected ? Colors.pinkAccent : Colors.transparent,
+          color: selected ? colorScheme.primary : Colors.transparent,
           width: 1,
         ),
       ),
