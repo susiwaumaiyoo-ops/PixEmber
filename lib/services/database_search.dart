@@ -3,11 +3,13 @@ import 'dart:math';
 import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
-import 'database_service.dart';
 import 'feeling_search_query.dart';
 import 'ruri_model_manager.dart';
 
 /// コサイン類似度で類似小説を検索。
+///
+/// ※ バックアップ系（importAllData / exportAllData）は `DatabaseService`
+/// （`database_backup.part.dart`）を参照のこと。
 ///
 /// デバッグ(JIT)ビルドで数百〜数千件の embedding を処理しても ANR にならない
 /// よう、以下の方針をとる。
@@ -274,65 +276,6 @@ class _BoundedTopHeap {
       ..sort((a, b) => b.similarity.compareTo(a.similarity));
     return sorted;
   }
-}
-
-/// 全データを JSON からインポート（マージロジック付き）
-Future<Map<String, int>> importAllData(Map<String, dynamic> jsonData) async {
-  final db = await DatabaseService().database;
-  final summary = <String, int>{};
-
-  Future<int> importTable(String tableName, String idKey) async {
-    if (jsonData[tableName] == null) return 0;
-    final items = jsonData[tableName] as List<dynamic>;
-    int count = 0;
-    for (final itemJson in items) {
-      final item = itemJson as Map<String, dynamic>;
-      final id = item[idKey];
-      try {
-        await db.insert(
-          tableName,
-          item,
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-        count++;
-      } catch (e) {
-        debugPrint('Import error for $tableName $id: $e');
-      }
-    }
-    return count;
-  }
-
-  summary['novels'] = await importTable('novels', 'id');
-  summary['novel_text'] = await importTable('novel_text', 'work_id');
-  summary['novel_embeddings'] = await importTable(
-    'novel_embeddings',
-    'work_id',
-  );
-  summary['illusts'] = await importTable('illusts', 'id');
-  summary['illust_embeddings'] = await importTable(
-    'illust_embeddings',
-    'work_id',
-  );
-
-  return summary;
-}
-
-/// 全データを JSON にエクスポート
-Future<Map<String, dynamic>> exportAllData() async {
-  final db = await DatabaseService().database;
-  return {
-    'novels': await db.query('novels'),
-    'novel_text': await db.query('novel_text'),
-    'novel_embeddings': await db.query('novel_embeddings'),
-    'illusts': await db.query('illusts'),
-    'illust_embeddings': await db.query('illust_embeddings'),
-    'history': await db.query('history'),
-    'downloaded_illust': await db.query('downloaded_illust'),
-    'mutes': await db.query('mutes'),
-    'folders': await db.query('folders'),
-    'folder_items': await db.query('folder_items'),
-    'exported_at': DateTime.now().toIso8601String(),
-  };
 }
 
 /// ベクトル検索の補完用：キーワード（タイトル／概要／タグ）で小説を検索する。
