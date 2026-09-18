@@ -104,6 +104,13 @@ class PixivHttpClient {
   /// キャッシュの有効期限（UTC）。この時刻を過ぎたら再取得する。
   DateTime? _tokenExpiry;
 
+  /// 進行中のトークン取得 Future（Phase 9b-3）。
+  /// 同一リフレッシュトークンでの並行リフレッシュを1回にまとめる（B-8）。
+  Future<String>? _inFlightTokenFuture;
+
+  /// 進行中の取得に対応するリフレッシュトークン（Phase 9b-3）。
+  String? _inFlightRefreshToken;
+
   /// トークンキャッシュの有効期間（秒）。Pixiv の access_token は
   /// 通常 3600 秒（1 時間）有効だが、期限ギリギリを避けるため 5 分前に無効化する。
   static const int _tokenTtlSeconds = 3600;
@@ -121,10 +128,16 @@ class PixivHttpClient {
   }
 
   /// トークンキャッシュをクリアする（ログアウト時や 401 リフレッシュ失敗時に呼ぶ）。
+  ///
+  /// Phase 9b-3: in-flight 参照も破棄する。進行中の HTTP リクエスト自体は
+  /// キャンセルできないが、完了時のキャッシュ書き戻しは [_fetchAccessToken]
+  /// 側でこの参照を見て抑止する。
   void clearTokenCache() {
     _cachedAccessToken = null;
     _cachedRefreshToken = null;
     _tokenExpiry = null;
+    _inFlightTokenFuture = null;
+    _inFlightRefreshToken = null;
   }
 
   /// アプリ終了時に呼び出せるクローズ用（シングルトンのため通常は
@@ -165,6 +178,36 @@ class PixivHttpClient {
     if (!force && _hasValidCachedTokenFor(refreshToken)) {
       return _cachedAccessToken!;
     }
+    // Phase 9b-3: 同一リフレッシュトークンの進行中リフレッシュがあれば
+    // 並行で発行せず、その Future を待つ（バグ B-8 の直列化）。
+    // ※ 異なるトークンは共有しない（Phase 9b-2 の識別と同じ理由）。
+    // ※ force: true も並行発行せず in-flight を待つ（採用仕様）。
+    if (_inFlightTokenFuture != null &&
+        _inFlightRefreshToken == refreshToken) {
+      return _inFlightTokenFuture!;
+    }
+    _inFlightRefreshToken = refreshToken;
+    final future = _fetchAccessToken(refreshToken);
+    _inFlightTokenFuture = future;
+    try {
+      return await future;
+    } finally {
+      // 成功・失敗を問わず in-flight を解除する。
+      // 失敗した Future を参照に持ち続けると、次の呼び出しが再試行できなくなる。
+      if (_inFlightRefreshToken == refreshToken) {
+        _inFlightTokenFuture = null;
+        _inFlightRefreshToken = null;
+      }
+    }
+  }
+
+  /// リフレッシュトークンからアクセストークンを1回だけ HTTP 取得する。
+  ///
+  /// Phase 9b-3: [getAccessToken] が in-flight 管理を受け持つため、
+  /// 本メソッドは純粋に1回分の通信を行う。
+  /// ※ 通信完了時に in-flight 参照が破棄されていたらキャッシュに書き戻さない
+  ///    （clearTokenCache が完了前に呼ばれた場合の挙動）。
+  Future<String> _fetchAccessToken(String refreshToken) async {
     final now = _now();
     final clientTime =
         "${now.year.toString().padLeft(4, '0')}-"
@@ -212,13 +255,17 @@ class PixivHttpClient {
     }
     // トークンをキャッシュし、有効期限を設定する。
     // Phase 9b-2: キャッシュを識別するためのリフレッシュトークンも保存する。
+    // Phase 9b-3: 通信中に clearTokenCache で in-flight 参照が破棄された場合は
+    //             キャッシュに書き戻さない（次回 getAccessToken で再取得する）。
     final expiresIn = payload?['expires_in'] as int? ?? _tokenTtlSeconds;
     final effectiveTtl = expiresIn > _tokenSafetyMarginSeconds
         ? expiresIn - _tokenSafetyMarginSeconds
         : expiresIn;
-    _cachedAccessToken = accessToken;
-    _cachedRefreshToken = refreshToken;
-    _tokenExpiry = _now().add(Duration(seconds: effectiveTtl));
+    if (_inFlightRefreshToken == refreshToken) {
+      _cachedAccessToken = accessToken;
+      _cachedRefreshToken = refreshToken;
+      _tokenExpiry = _now().add(Duration(seconds: effectiveTtl));
+    }
     return accessToken;
   }
 
