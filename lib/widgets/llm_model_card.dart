@@ -63,16 +63,19 @@ class LlmModelCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFF2B222B) : const Color(0xFF242424),
+        color: isSelected
+            ? colorScheme.surfaceContainerHigh
+            : colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isSelected
-              ? Colors.pinkAccent.withValues(alpha: 0.8)
-              : Colors.white12,
+              ? colorScheme.primary.withValues(alpha: 0.8)
+              : colorScheme.outlineVariant,
         ),
       ),
       child: Column(
@@ -83,8 +86,8 @@ class LlmModelCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
                     fontSize: 14.5,
                     fontWeight: FontWeight.w600,
                   ),
@@ -100,14 +103,16 @@ class LlmModelCard extends StatelessWidget {
                   ),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? Colors.pinkAccent.withValues(alpha: 0.2)
-                        : const Color(0xFF333333),
+                        ? colorScheme.primary.withValues(alpha: 0.2)
+                        : colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     badge!,
                     style: TextStyle(
-                      color: isSelected ? Colors.pinkAccent : Colors.white70,
+                      color: isSelected
+                          ? colorScheme.primary
+                          : colorScheme.onSurfaceVariant,
                       fontSize: 11,
                     ),
                   ),
@@ -122,25 +127,22 @@ class LlmModelCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             subtitle,
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
+            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
           ),
           if (warning != null) ...[
             const SizedBox(height: 4),
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.warning_amber_rounded,
                   size: 14,
-                  color: Colors.orangeAccent,
+                  color: colorScheme.tertiary,
                 ),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
                     warning!,
-                    style: const TextStyle(
-                      color: Colors.orangeAccent,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: colorScheme.tertiary, fontSize: 12),
                   ),
                 ),
               ],
@@ -150,8 +152,8 @@ class LlmModelCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               description!,
-              style: const TextStyle(
-                color: Colors.white70,
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
                 fontSize: 12.5,
                 height: 1.4,
               ),
@@ -163,17 +165,18 @@ class LlmModelCard extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: progress,
                 minHeight: 6,
-                backgroundColor: const Color(0xFF333333),
-                valueColor: const AlwaysStoppedAnimation<Color>(
-                  Colors.pinkAccent,
-                ),
+                backgroundColor: colorScheme.surfaceContainerHighest,
+                valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
               ),
             ),
             if (progressLabel != null) ...[
               const SizedBox(height: 4),
               Text(
                 progressLabel!,
-                style: const TextStyle(color: Colors.white54, fontSize: 11.5),
+                style: TextStyle(
+                  color: colorScheme.onSurfaceVariant,
+                  fontSize: 11.5,
+                ),
               ),
             ],
           ],
@@ -181,19 +184,12 @@ class LlmModelCard extends StatelessWidget {
             const SizedBox(height: 6),
             Row(
               children: [
-                const Icon(
-                  Icons.error_outline,
-                  size: 14,
-                  color: Colors.redAccent,
-                ),
+                Icon(Icons.error_outline, size: 14, color: colorScheme.error),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
                     error!,
-                    style: const TextStyle(
-                      color: Colors.redAccent,
-                      fontSize: 11.5,
-                    ),
+                    style: TextStyle(color: colorScheme.error, fontSize: 11.5),
                   ),
                 ),
               ],
@@ -208,8 +204,8 @@ class LlmModelCard extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: onDownload,
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.pinkAccent,
-                    foregroundColor: Colors.black,
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 10,
@@ -222,8 +218,8 @@ class LlmModelCard extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: onRetry,
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.pinkAccent,
-                    foregroundColor: Colors.black,
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 10,
@@ -293,7 +289,8 @@ class _NpuChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = npuCompatible ? Colors.tealAccent : Colors.orangeAccent;
+    final colorScheme = Theme.of(context).colorScheme;
+    final color = npuCompatible ? colorScheme.secondary : colorScheme.tertiary;
     final label = npuCompatible ? '⚡ NPU対応' : '⚠️ CPU実行';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -302,10 +299,7 @@ class _NpuChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
-      child: Text(
-        label,
-        style: TextStyle(color: color, fontSize: 10.5),
-      ),
+      child: Text(label, style: TextStyle(color: color, fontSize: 10.5)),
     );
   }
 }
