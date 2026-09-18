@@ -6,6 +6,7 @@ import '../services/dormant_tags_service.dart';
 import '../services/reading_speed_service.dart';
 import '../services/reading_trends_service.dart';
 import '../services/usage_tracking_service.dart';
+import '../utils/datetime_format.dart';
 
 /// 日別閲覧数の1要素。
 class DailyViewCount {
@@ -145,11 +146,8 @@ Map<String, dynamic> computeStatistics(
     final createdAt = row['created_at'] as String?;
     DateTime? dt;
     if (createdAt != null && createdAt.isNotEmpty) {
-      try {
-        dt = DateTime.parse(createdAt).toLocal();
-      } catch (_) {
-        dt = null;
-      }
+      // Phase 10b: 日付パースは DateTimeFormat に集約（例外時は null で従来動作）。
+      dt = DateTimeFormat.tryParseLocal(createdAt);
     }
     if (dt != null) {
       final day = DateTime(dt.year, dt.month, dt.day);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/database_service.dart';
 import '../services/subscription_sync_service.dart';
+import '../utils/datetime_format.dart';
 import 'subscription_new_items_screen.dart';
 
 /// ローカル購読タグ一覧画面。
@@ -184,18 +185,9 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
   }
 
   String _formatCreatedAt(String? createdAt) {
+    // Phase 10b: 共通 DateTimeFormat に集約。null/空は従来どおり「日付不明」。
     if (createdAt == null || createdAt.isEmpty) return '日付不明';
-    try {
-      final dt = DateTime.parse(createdAt).toLocal();
-      final y = dt.year;
-      final m = dt.month.toString().padLeft(2, '0');
-      final d = dt.day.toString().padLeft(2, '0');
-      final hh = dt.hour.toString().padLeft(2, '0');
-      final mm = dt.minute.toString().padLeft(2, '0');
-      return '$y/$m/$d $hh:$mm';
-    } catch (_) {
-      return createdAt;
-    }
+    return DateTimeFormat.formatReadable(createdAt);
   }
 
   IconData _typeIcon(String type) {

@@ -845,6 +845,13 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
             isLoading = false;
             _computeSeriesTextLengths(novels);
           });
+          // Phase 10c: 無効な mode 等で空リストが返ってきた場合、
+          // 「データがありません」ではなくエラーとして伝える。
+          if (result.hasError && mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('ランキングの取得に失敗しました。')));
+          }
         }
       }
 

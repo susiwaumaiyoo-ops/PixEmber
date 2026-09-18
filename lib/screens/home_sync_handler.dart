@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/google_drive_service.dart';
+import '../utils/datetime_format.dart';
 
 /// Googleドライブ同期関連メソッドを管理するクラス
 class HomeSyncHandler {
@@ -165,17 +166,11 @@ class HomeSyncHandler {
       );
     }
 
-    // 最終同期日時のフォーマット
+    // 最終同期日時のフォーマット（Phase 10b: 共通 DateTimeFormat に集約）
     String? lastSyncDisplay;
     if (state.lastSyncTimestamp != null) {
-      try {
-        final dt = DateTime.parse(state.lastSyncTimestamp!).toLocal();
-        lastSyncDisplay =
-            '最終同期: ${dt.year}/${dt.month.toString().padLeft(2, '0')}/${dt.day.toString().padLeft(2, '0')} '
-            '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-      } catch (_) {
-        lastSyncDisplay = '最終同期: ${state.lastSyncTimestamp}';
-      }
+      final formatted = DateTimeFormat.formatReadable(state.lastSyncTimestamp);
+      lastSyncDisplay = formatted.isEmpty ? null : '最終同期: $formatted';
     }
 
     return Container(

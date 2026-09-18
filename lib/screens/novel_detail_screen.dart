@@ -7,6 +7,7 @@ import 'author_profile_screen.dart';
 import 'novel_reader_screen.dart';
 import 'novel_series_episodes_screen.dart';
 import 'read_later_screen.dart';
+import '../services/companion/companion_service.dart';
 import '../services/database_service.dart';
 import '../services/embedding_service.dart';
 import '../services/emotion_curve_service.dart';
@@ -22,6 +23,7 @@ import '../services/reading_speed_service.dart';
 import '../services/ruri_model_manager.dart';
 import '../services/series_progress_service.dart';
 import '../services/similar_works_service.dart';
+import '../utils/datetime_format.dart';
 import '../widgets/llm_summary_sheet.dart';
 import '../widgets/pixiv_image.dart';
 
@@ -103,6 +105,17 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     if (!mounted || modelPath == null) return;
     final choices = await _collectLlmModelChoices();
     if (!mounted) return;
+    // 10-B1: ペアリング済みなら PCサーバー経由を有効化（未ペアリングなら null）。
+    CompanionService? companion;
+    try {
+      final svc = CompanionService();
+      if (await svc.init()) {
+        companion = svc;
+      }
+    } catch (_) {
+      companion = null;
+    }
+    if (!mounted) return;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -115,6 +128,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
         resolveBody: _resolveLlmBody,
         workId: widget.novel.id,
         availableModels: choices,
+        companionService: companion,
         // FGS 経由（デフォルト: bridgeController 未指定 → シート内部で生成）。
       ),
     );
@@ -1050,11 +1064,23 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
 
     final toAdd = !_isBookmarked;
     final api = PixivApiService();
-    final success = await api.toggleBookmark(widget.novel.id, true, toAdd);
+
+    // Phase 10a (B-7): Service が投げた例外を型別に受け、理由を伝える。
+    // 成功（例外なし）の場合のみブックマーク状態を更新する。
+    String? errorMessage;
+    try {
+      await api.toggleBookmark(widget.novel.id, true, toAdd);
+    } on RateLimitException {
+      errorMessage = 'レート制限です。少し待ってから再試行してください。';
+    } on AuthException {
+      errorMessage = '認証が切れました。再ログインしてください。';
+    } catch (e) {
+      errorMessage = '通信に失敗しました。再度お試しください。';
+    }
 
     if (!mounted) return;
 
-    if (success) {
+    if (errorMessage == null) {
       setState(() {
         _isBookmarked = toAdd;
         _bookmarkCountOffset += toAdd ? 1 : -1;
@@ -1069,7 +1095,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     } else {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('通信に失敗しました。再度お試しください。')));
+      ).showSnackBar(SnackBar(content: Text(errorMessage)));
     }
     if (!mounted) return;
     setState(() => _isToggling = false);
@@ -1605,12 +1631,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   }
 
   String _formatDate(String isoDate) {
-    try {
-      final dateTime = DateTime.parse(isoDate);
-      return '${dateTime.year}/${dateTime.month.toString().padLeft(2, '0')}/${dateTime.day.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return isoDate;
-    }
+    // Phase 10b: 共通 DateTimeFormat.formatDateOnly に集約（日付のみ表示）。
+    return DateTimeFormat.formatDateOnly(isoDate);
   }
 }
 

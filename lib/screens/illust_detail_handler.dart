@@ -325,11 +325,23 @@ class IllustDetailHandler {
 
     final toAdd = !state.isBookmarked;
     final api = PixivApiService();
-    final success = await api.toggleBookmark(illust.id, false, toAdd);
+
+    // Phase 10a (B-7): Service が投げた例外を型別に受け、理由を伝える。
+    // 成功（例外なし）の場合のみブックマーク状態を更新する。
+    String? errorMessage;
+    try {
+      await api.toggleBookmark(illust.id, false, toAdd);
+    } on RateLimitException {
+      errorMessage = 'レート制限です。少し待ってから再試行してください。';
+    } on AuthException {
+      errorMessage = '認証が切れました。再ログインしてください。';
+    } catch (e) {
+      errorMessage = 'ブックマーク操作に失敗しました';
+    }
 
     if (!state.mounted) return;
 
-    if (success) {
+    if (errorMessage == null) {
       state.setState(() {
         state.isBookmarked = toAdd;
         state.bookmarkCountOffset += toAdd ? 1 : -1;
@@ -350,7 +362,7 @@ class IllustDetailHandler {
       if (state.context != null) {
         ScaffoldMessenger.of(state.context!).showSnackBar(
           SnackBar(
-            content: const Text('ブックマーク操作に失敗しました'),
+            content: Text(errorMessage),
             duration: const Duration(seconds: 2),
           ),
         );

@@ -821,10 +821,11 @@ class PixivApiService {
       final items = await filterNovelsIsolated(body);
       return _wrap(items: items, rawBody: body);
     } catch (e, stack) {
-      // 存在しない mode 等で API エラーが発生してもクラッシュさせず空結果を返す
+      // 存在しない mode 等で API エラーが発生してもクラッシュさせず空結果を返す。
+      // Phase 10c: ただし空リストを「成功」と偽装しないため hasError を立てる。
       debugPrint('[API] getNovelRanking failed: mode=$mode, error=$e');
       debugPrint(stack.toString());
-      return FetchResult<Novel>(items: const []);
+      return const FetchResult<Novel>(items: [], hasError: true);
     }
   }
 
@@ -1409,37 +1410,39 @@ class PixivApiService {
   }
 
   /// ブックマーク追加/削除
+  ///
+  /// Phase 10a (B-7): 失敗を握りつぶさず例外をそのまま投げる。
+  /// _post は 429 → RateLimitException / 401 → AuthException /
+  /// 403・404 → 生 Exception に変換済み（Phase 9c-2）。
+  /// 呼び出し側（IllustDetailHandler / NovelDetailScreen）が型別に
+  /// catch してユーザーに理由を伝える。成功時のみ true を返す。
   Future<bool> toggleBookmark(int id, bool isNovel, bool isAdd) async {
-    try {
-      if (isNovel) {
-        if (isAdd) {
-          await _post(
-            '/v2/novel/bookmark/add',
-            body: {'novel_id': id.toString(), 'restrict': 'public'},
-          );
-        } else {
-          await _post(
-            '/v1/novel/bookmark/delete',
-            body: {'novel_id': id.toString()},
-          );
-        }
+    if (isNovel) {
+      if (isAdd) {
+        await _post(
+          '/v2/novel/bookmark/add',
+          body: {'novel_id': id.toString(), 'restrict': 'public'},
+        );
       } else {
-        if (isAdd) {
-          await _post(
-            '/v2/illust/bookmark/add',
-            body: {'illust_id': id.toString(), 'restrict': 'public'},
-          );
-        } else {
-          await _post(
-            '/v1/illust/bookmark/delete',
-            body: {'illust_id': id.toString()},
-          );
-        }
+        await _post(
+          '/v1/novel/bookmark/delete',
+          body: {'novel_id': id.toString()},
+        );
       }
-      return true;
-    } catch (e) {
-      return false;
+    } else {
+      if (isAdd) {
+        await _post(
+          '/v2/illust/bookmark/add',
+          body: {'illust_id': id.toString(), 'restrict': 'public'},
+        );
+      } else {
+        await _post(
+          '/v1/illust/bookmark/delete',
+          body: {'illust_id': id.toString()},
+        );
+      }
     }
+    return true;
   }
 
   /// リフレッシュトークンを登録（永続化）
@@ -1787,12 +1790,21 @@ class PixivApiService {
 /// API 取得結果のラッパー。
 /// 一覧 [items] に加え、次ページ取得用の [nextUrl]（Pixiv が返す next_url そのもの）
 /// と検索時の百科事典カード [searchItem] を保持する。
+///
+/// [hasError] は取得失敗時に true になる（Phase 10c）。
+/// items が空でも「無反応の空リスト」ではなく「エラー＋再試行」を表示するために使う。
 class FetchResult<T> {
   final List<T> items;
   final String? nextUrl;
   final SearchItem? searchItem;
+  final bool hasError;
 
-  const FetchResult({required this.items, this.nextUrl, this.searchItem});
+  const FetchResult({
+    required this.items,
+    this.nextUrl,
+    this.searchItem,
+    this.hasError = false,
+  });
 
   /// 次ページの offset を [nextUrl] から安全に抽出する。
   /// next_url が存在しない場合は null を返し、呼び出し側でページングを終了させる。

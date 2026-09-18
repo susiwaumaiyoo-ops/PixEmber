@@ -31,6 +31,20 @@ class DateTimeFormat {
         '${local.minute.toString().padLeft(2, '0')}';
   }
 
+  /// ISO 8601 などの文字列を "2026/07/08" 形式（日付のみ）に変換する。
+  /// 解析できない場合は元の文字列をそのまま返す。
+  static String formatDateOnly(String? iso) {
+    final readable = formatReadable(iso);
+    if (readable.isEmpty || readable == iso) return readable;
+    return readable.substring(0, 10);
+  }
+
+  /// ISO 8601 文字列をローカル時刻の DateTime に変換する。解析できない場合は null。
+  static DateTime? tryParseLocal(String? iso) {
+    final dt = _tryParse(iso ?? '');
+    return dt?.toLocal();
+  }
+
   static DateTime? _tryParse(String iso) {
     try {
       return DateTime.parse(iso);
