@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:isolate';
 import 'package:flutter/foundation.dart';
-import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../database_service.dart';
 import '../pixiv_api_http.dart';
@@ -69,89 +68,17 @@ class PixivApiService {
   final DatabaseService _dbService = DatabaseService();
 
   /// 認証アクセストークンの取得（必要に応じて自動リフレッシュ）
-  Future<String> getAccessToken(String refreshToken) async {
-    try {
-      // 1. ミリ秒を完全に排除した ISO 8601 UTC 時刻を自律生成
-      final now = DateTime.now().toUtc();
-      final clientTime =
-          "${now.year.toString().padLeft(4, '0')}-"
-          "${now.month.toString().padLeft(2, '0')}-"
-          "${now.day.toString().padLeft(2, '0')}T"
-          "${now.hour.toString().padLeft(2, '0')}:"
-          "${now.minute.toString().padLeft(2, '0')}:"
-          "${now.second.toString().padLeft(2, '0')}+00:00";
-
-      // 2. 署名の計算
-      final salt = "2821213q311543184o13o121o131o1o3";
-      final input = clientTime + salt;
-      final clientHash = md5.convert(utf8.encode(input)).toString();
-
-      debugPrint("[DEBUG API SERVICE] Client Time: $clientTime");
-      debugPrint("[DEBUG API SERVICE] Client Hash: $clientHash");
-
-      final url = Uri.parse("https://oauth.secure.pixiv.net/auth/token");
-      final headers = {
-        "User-Agent": "PixivAndroidApp/5.0.234 (Android 11.0; Pixel 5)",
-        "App-OS": "android",
-        "App-OS-Version": "11.0",
-        "App-Version": "5.0.234",
-        "X-Client-Time": clientTime,
-        "X-Client-Hash": clientHash,
-        "Accept-Language": "ja_JP",
-        "Accept-Encoding": "gzip",
-        "Content-Type": "application/x-www-form-urlencoded",
-      };
-
-      final data = {
-        "client_id": "MOBrBDS8blbauoSck0ZfDbtuzpyT",
-        "client_secret": "lsACyCD94FhDUtGTXi3QzcFE2uU1hqtDaKeqrdwj",
-        "grant_type": "refresh_token",
-        "refresh_token": refreshToken,
-      };
-
-      final response = await PixivHttpClient().client.post(
-        url,
-        headers: headers,
-        body: data,
-      );
-
-      if (response.statusCode == 200) {
-        final resData = jsonDecode(response.body);
-        final responsePayload = resData['response'];
-        if (responsePayload != null) {
-          final accessToken = responsePayload['access_token'];
-          if (accessToken != null) {
-            return accessToken;
-          }
-        }
-        throw Exception("レスポンス内に access_token が見つかりませんでした。");
-      } else {
-        debugPrint("❌❌❌ [OAuth Refresh ERROR] Pixivトークンリフレッシュに失敗しました ❌❌❌");
-        debugPrint("ステータスコード: ${response.statusCode}");
-        // レスポンスボディにはトークンが混入しうるため debug ビルドのみ出力する。
-        if (kDebugMode) {
-          debugPrint("レスポンス内容: ${response.body}");
-        }
-        throw Exception(
-          "トークンのリフレッシュに失敗しました: ${response.statusCode}\n${response.body}",
-        );
-      }
-    } catch (e, stack) {
-      debugPrint("❌ [OAuth Refresh CRITICAL] 例外が発生しました: $e");
-      debugPrint(stack.toString());
-      rethrow;
-    }
-  }
+  ///
+  /// Phase 9a: 実体は [PixivHttpClient.getAccessToken] が持つ（委譲）。
+  /// トークンキャッシュ・有効期限管理も HttpClient 側に一本化され、
+  /// 本クラスは互換用の薄い転送のみ残す。
+  Future<String> getAccessToken(String refreshToken) =>
+      PixivHttpClient().getAccessToken(refreshToken);
 
   /// SharedPreferences からリフレッシュトークンを取得（未設定なら例外）
-  Future<String> getRefreshToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('PIXIV_REFRESH_TOKEN');
-    if (token == null || token.isEmpty) {
-      throw Exception('Pixivリフレッシュトークンが設定されていません。再ログインが必要です。');
-    }
-    return token;
-  }
+  ///
+  /// Phase 9a: 実体は [PixivHttpClient.getRefreshToken] が持つ（委譲）。
+  Future<String> getRefreshToken() => PixivHttpClient().getRefreshToken();
 
   /// 共通のGETリクエストメソッド
   /// 注意: JSON デコードはメインスレッドで軽量に行い、重いリスト解析は

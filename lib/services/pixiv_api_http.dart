@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'pixiv_http_headers.dart';
@@ -68,7 +69,29 @@ class PixivHttpClient {
   /// 共有 HTTP クライアント（シングルトン）。
   /// TCP 接続と TLS セッションを再利用し、2回目以降のハンドシェイク時間を削減する。
   final http.Client _client = http.Client();
-  http.Client get client => _client;
+
+  /// テスト専用のクライアント差替（本番では常に null）。
+  /// [client] getter がこちらを優先する。テスト終了時に null をセットして
+  /// 本番の共有クライアントへ戻す（プロダクションの client を close しない）。
+  http.Client? _testClient;
+
+  /// テスト用注入点: HTTP クライアントを差し替える。
+  /// デフォルト（null）は本番動作のまま。公開 API ではない。
+  @visibleForTesting
+  void setTestClient(http.Client? client) => _testClient = client;
+
+  http.Client get client => _testClient ?? _client;
+
+  /// テスト専用の現在時刻上書き（本番では常に null = 実時刻）。
+  /// トークン有効期限の境界テストのためにだけ存在する。
+  DateTime Function()? _testNow;
+
+  /// テスト用注入点: 現在時刻を固定/制御する。
+  /// デフォルト（null）は本番動作（DateTime.now()）のまま。公開 API ではない。
+  @visibleForTesting
+  void setTestNow(DateTime Function()? now) => _testNow = now;
+
+  DateTime _now() => (_testNow ?? DateTime.now)().toUtc();
 
   /// キャッシュされたアクセストークン（force: false 時に再利用）。
   String? _cachedAccessToken;
@@ -84,7 +107,7 @@ class PixivHttpClient {
   /// キャッシュされたトークンが有効かどうか。
   bool get _hasValidCachedToken {
     if (_cachedAccessToken == null || _tokenExpiry == null) return false;
-    return DateTime.now().toUtc().isBefore(_tokenExpiry!);
+    return _now().isBefore(_tokenExpiry!);
   }
 
   /// トークンキャッシュをクリアする（ログアウト時や 401 リフレッシュ失敗時に呼ぶ）。
@@ -131,7 +154,7 @@ class PixivHttpClient {
     if (!force && _hasValidCachedToken) {
       return _cachedAccessToken!;
     }
-    final now = DateTime.now().toUtc();
+    final now = _now();
     final clientTime =
         "${now.year.toString().padLeft(4, '0')}-"
         "${now.month.toString().padLeft(2, '0')}-"
@@ -143,7 +166,7 @@ class PixivHttpClient {
     const salt = '2821213q311543184o13o121o131o1o3';
     final clientHash = md5.convert(utf8.encode(clientTime + salt)).toString();
 
-    final response = await _client.post(
+    final response = await client.post(
       Uri.parse('https://oauth.secure.pixiv.net/auth/token'),
       headers: {
         'User-Agent': 'PixivAndroidApp/5.0.234 (Android 11.0; Pixel 5)',
@@ -182,7 +205,7 @@ class PixivHttpClient {
         ? expiresIn - _tokenSafetyMarginSeconds
         : expiresIn;
     _cachedAccessToken = accessToken;
-    _tokenExpiry = DateTime.now().toUtc().add(Duration(seconds: effectiveTtl));
+    _tokenExpiry = _now().add(Duration(seconds: effectiveTtl));
     return accessToken;
   }
 
@@ -195,7 +218,7 @@ class PixivHttpClient {
       uri = uri.replace(queryParameters: params);
     }
 
-    final response = await _client.get(
+    final response = await client.get(
       uri,
       headers: {...clientHeaders, 'Authorization': 'Bearer $token'},
     );
@@ -225,7 +248,7 @@ class PixivHttpClient {
   }) async {
     final token = await getAccessToken(await getRefreshToken());
 
-    final response = await _client.post(
+    final response = await client.post(
       Uri.parse('$baseUrl$endpoint'),
       headers: {
         ...clientHeaders,
