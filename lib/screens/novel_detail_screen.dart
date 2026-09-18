@@ -341,11 +341,12 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
 
   /// 似た作品カード（Phase D）。横スクロール + 「なぜ似ているか」+ もっと見る。
   Widget _buildSimilarWorksCard() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1C),
+        color: colorScheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -353,10 +354,10 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
         children: [
           Row(
             children: [
-              const Text(
+              Text(
                 '📚 似た作品',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: colorScheme.onSurface,
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                 ),
@@ -368,50 +369,62 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                       _similar!.sameSeries.isNotEmpty))
                 TextButton(
                   onPressed: _showSimilarWorksScreen,
-                  child: const Text(
+                  child: Text(
                     'もっと見る',
-                    style: TextStyle(color: Colors.pinkAccent, fontSize: 12),
+                    style: TextStyle(color: colorScheme.primary, fontSize: 12),
                   ),
                 ),
             ],
           ),
           const SizedBox(height: 8),
           if (_similarLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
               child: Center(
-                child: CircularProgressIndicator(color: Colors.pinkAccent),
+                child: CircularProgressIndicator(color: colorScheme.primary),
               ),
             )
           else if (_similar == null)
-            const Text(
+            Text(
               '読み込み中…',
-              style: TextStyle(color: Colors.grey, fontSize: 12),
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
             )
           else if (_similar!.works.isEmpty &&
               _similar!.sameAuthor.isEmpty &&
               _similar!.sameSeries.isEmpty)
             Text(
               _similarNote ?? '似た作品はありません',
-              style: const TextStyle(color: Colors.grey, fontSize: 12),
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
             )
           else ...[
             if (_similar!.works.isNotEmpty)
               _buildSimilarHorizontal(_similar!.works),
             if (_similar!.sameSeries.isNotEmpty) ...[
               const SizedBox(height: 10),
-              const Text(
+              Text(
                 '同じシリーズ',
-                style: TextStyle(color: Colors.white70, fontSize: 12),
+                style: TextStyle(
+                  color: colorScheme.onSurfaceVariant,
+                  fontSize: 12,
+                ),
               ),
               const SizedBox(height: 6),
               _buildSimilarHorizontal(_similar!.sameSeries),
             ],
             if (_similar!.sameAuthor.isNotEmpty) ...[
               const SizedBox(height: 10),
-              const Text(
+              Text(
                 '同じ作者',
-                style: TextStyle(color: Colors.white70, fontSize: 12),
+                style: TextStyle(
+                  color: colorScheme.onSurfaceVariant,
+                  fontSize: 12,
+                ),
               ),
               const SizedBox(height: 6),
               _buildSimilarHorizontal(_similar!.sameAuthor),
@@ -470,11 +483,12 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
 
   /// 感情曲線カード（Phase C）。空状態（モデル未導入/データ不足）は注記と生成ボタン。
   Widget _buildEmotionCurveCard() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1C),
+        color: colorScheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -482,10 +496,10 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
         children: [
           Row(
             children: [
-              const Text(
+              Text(
                 '💗 感情曲線',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: colorScheme.onSurface,
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                 ),
@@ -498,12 +512,12 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.15),
+                    color: colorScheme.tertiary.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: const Text(
+                  child: Text(
                     '簡易モード',
-                    style: TextStyle(color: Colors.orange, fontSize: 10),
+                    style: TextStyle(color: colorScheme.tertiary, fontSize: 10),
                   ),
                 ),
             ],
@@ -512,7 +526,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
           if (_emotionGenerating) ...[
             LinearProgressIndicator(
               minHeight: 4,
-              backgroundColor: Colors.white.withValues(alpha: 0.1),
+              backgroundColor: colorScheme.surfaceContainerHighest,
             ),
             const SizedBox(height: 8),
             Row(
@@ -520,14 +534,17 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                 Expanded(
                   child: Text(
                     _emotionProgressLabel,
-                    style: const TextStyle(color: Colors.grey, fontSize: 11),
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 11,
+                    ),
                   ),
                 ),
                 TextButton(
                   onPressed: () => EmotionCurveService().cancel(),
-                  child: const Text(
+                  child: Text(
                     'キャンセル',
-                    style: TextStyle(color: Colors.redAccent, fontSize: 12),
+                    style: TextStyle(color: colorScheme.error, fontSize: 12),
                   ),
                 ),
               ],
@@ -549,17 +566,26 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
             const SizedBox(height: 8),
             Text(
               '物語の色: ${_emotionCurve!.storyColor}',
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'グラフをタップで拡大 / 位置をタップで該当本文へジャンプ',
-              style: TextStyle(color: Colors.grey, fontSize: 10),
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                fontSize: 10,
+              ),
             ),
           ] else if (_emotionNote != null) ...[
             Text(
               _emotionNote!,
-              style: const TextStyle(color: Colors.grey, fontSize: 12),
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
             ),
             if (_emotionModelAvailable) ...[
               const SizedBox(height: 10),
@@ -568,8 +594,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                 icon: const Icon(Icons.auto_awesome, size: 16),
                 label: const Text('感情曲線を生成する'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.pinkAccent,
-                  side: const BorderSide(color: Colors.pinkAccent),
+                  foregroundColor: colorScheme.primary,
+                  side: BorderSide(color: colorScheme.primary),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
                   ),
