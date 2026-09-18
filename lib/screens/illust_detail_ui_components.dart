@@ -32,15 +32,16 @@ class IllustDetailUIComponents {
   // スマホレイアウト（従来の縦積みUIを維持）
   Widget _buildPhoneLayout(BuildContext context, IllustDetailState state) {
     final screenWidth = MediaQuery.of(context).size.width;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A1A),
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
           state.illust.title,
-          style: const TextStyle(color: Colors.white),
+          style: TextStyle(color: colorScheme.onSurface),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
@@ -48,16 +49,16 @@ class IllustDetailUIComponents {
           IconButton(
             icon: Icon(
               state.isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-              color: Colors.white,
+              color: colorScheme.onSurface,
             ),
             onPressed: () => state.handler.toggleBookmark(state),
           ),
           IconButton(
-            icon: const Icon(Icons.download_outlined, color: Colors.white),
+            icon: Icon(Icons.download_outlined, color: colorScheme.onSurface),
             onPressed: () => state.handler.downloadIllust(state),
           ),
           IconButton(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
+            icon: Icon(Icons.more_vert, color: colorScheme.onSurface),
             onPressed: () => _showMoreOptions(context, state),
           ),
         ],
@@ -85,14 +86,15 @@ class IllustDetailUIComponents {
   // タブレットレイアウト（幅 > kTabletBreakpoint: 左右分割）
   // タブレットレイアウト（幅 > kTabletBreakpoint: 左右分割）
   Widget _buildTabletLayout(BuildContext context, IllustDetailState state) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A1A),
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
           state.illust.title,
-          style: const TextStyle(color: Colors.white),
+          style: TextStyle(color: colorScheme.onSurface),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
@@ -100,16 +102,16 @@ class IllustDetailUIComponents {
           IconButton(
             icon: Icon(
               state.isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-              color: Colors.white,
+              color: colorScheme.onSurface,
             ),
             onPressed: () => state.handler.toggleBookmark(state),
           ),
           IconButton(
-            icon: const Icon(Icons.download_outlined, color: Colors.white),
+            icon: Icon(Icons.download_outlined, color: colorScheme.onSurface),
             onPressed: () => state.handler.downloadIllust(state),
           ),
           IconButton(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
+            icon: Icon(Icons.more_vert, color: colorScheme.onSurface),
             onPressed: () => _showMoreOptions(context, state),
           ),
         ],
@@ -121,7 +123,7 @@ class IllustDetailUIComponents {
           Expanded(
             flex: 6,
             child: Container(
-              color: Colors.black26,
+              color: colorScheme.surfaceContainer,
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   return _buildTabletImageViewer(
@@ -135,7 +137,7 @@ class IllustDetailUIComponents {
             ),
           ),
           // ペイン間の区切り線 (1px)
-          Container(width: 1, color: Colors.white.withValues(alpha: 0.1)),
+          Container(width: 1, color: colorScheme.outlineVariant),
           // 右ペイン (flex:4) 縦スクロール
           Expanded(
             flex: 4,
@@ -156,6 +158,7 @@ class IllustDetailUIComponents {
 
   // 作者アイコン + 作者名ブロック（左ペイン / スマホ共通）
   Widget _buildAuthorBlock(BuildContext context, IllustDetailState state) {
+    final colorScheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: () {
         Navigator.push(
@@ -179,9 +182,9 @@ class IllustDetailUIComponents {
                         url: state.illust.author.avatar!,
                         fit: BoxFit.cover,
                         isThumbnail: true,
-                        errorWidget: const Icon(
+                        errorWidget: Icon(
                           Icons.person,
-                          color: Colors.grey,
+                          color: colorScheme.onSurfaceVariant,
                         ),
                       )
                     : null,
@@ -194,21 +197,24 @@ class IllustDetailUIComponents {
                 children: [
                   Text(
                     state.illust.author.name,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: colorScheme.onSurface,
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   Text(
                     '${state.illust.totalBookmarks} ブックマーク',
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.volume_off, color: Colors.grey),
+              icon: Icon(Icons.volume_off, color: colorScheme.onSurfaceVariant),
               onPressed: () => state.handler.muteAuthor(state),
             ),
           ],
@@ -299,14 +305,15 @@ class IllustDetailUIComponents {
 
   // 右ペイン: タイトル + 作者 + キャプション + タグ + 統計 + ブックマーク + 関連作品
   Widget _buildMetaDetailsRight(BuildContext context, IllustDetailState state) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 1. タイトル
         Text(
           state.illust.title,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: colorScheme.onSurface,
             fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
@@ -320,7 +327,7 @@ class IllustDetailUIComponents {
         if (state.illust.caption.isNotEmpty) ...[
           Text(
             state.illust.caption,
-            style: const TextStyle(color: Colors.white70, fontSize: 14),
+            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14),
           ),
           const SizedBox(height: 16),
         ],
@@ -477,13 +484,14 @@ class IllustDetailUIComponents {
     double screenWidth,
     IllustDetailState state,
   ) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           state.illust.title,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: colorScheme.onSurface,
             fontSize: 18,
             fontWeight: FontWeight.bold,
           ),

@@ -164,15 +164,16 @@ class IllustDetailHandler {
   /// 外部バックエンドは使用しない。subscribed_tags テーブルへ (tag, 'illust')
   /// を保存し、重複登録は DatabaseService.addSubscribedTag 側で防止される。
   void showSubscriptionDialog(BuildContext context, String tag) {
+    final colorScheme = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF222222),
+          backgroundColor: colorScheme.surfaceContainerHigh,
           title: Text(
             'タグ「$tag」の購読登録',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: colorScheme.onSurface,
               fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
@@ -181,9 +182,9 @@ class IllustDetailHandler {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'この端末内に購読タグとして保存します。\n購読タグ一覧からタップで検索できます。',
-                style: TextStyle(color: Colors.grey),
+                style: TextStyle(color: colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 16),
               ElevatedButton(
@@ -195,7 +196,7 @@ class IllustDetailHandler {
                       _showLocalSnackBar(
                         context,
                         '「$tag」を購読登録しました！',
-                        Colors.green.shade800,
+                        colorScheme.primaryContainer,
                       );
                     }
                   } catch (e) {
@@ -203,14 +204,14 @@ class IllustDetailHandler {
                       _showLocalSnackBar(
                         context,
                         '購読登録に失敗しました: $e',
-                        Colors.red.shade800,
+                        colorScheme.errorContainer,
                       );
                     }
                   }
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.pinkAccent,
-                  foregroundColor: Colors.white,
+                  backgroundColor: colorScheme.primary,
+                  foregroundColor: colorScheme.onPrimary,
                 ),
                 child: const Text('登録する'),
               ),
@@ -223,10 +224,11 @@ class IllustDetailHandler {
 
   void showSuccessSnackBar(IllustDetailState state, String message) {
     if (state.context != null) {
+      final colorScheme = Theme.of(state.context!).colorScheme;
       ScaffoldMessenger.of(state.context!).showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: Colors.green.shade800,
+          backgroundColor: colorScheme.primaryContainer,
           duration: const Duration(seconds: 4),
         ),
       );
@@ -235,10 +237,11 @@ class IllustDetailHandler {
 
   void showErrorSnackBar(IllustDetailState state, String message) {
     if (state.context != null) {
+      final colorScheme = Theme.of(state.context!).colorScheme;
       ScaffoldMessenger.of(state.context!).showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: Colors.red.shade800,
+          backgroundColor: colorScheme.errorContainer,
           duration: const Duration(seconds: 4),
         ),
       );
@@ -377,20 +380,24 @@ class IllustDetailHandler {
     showDialog(
       context: state.context!,
       builder: (context) {
+        final colorScheme = Theme.of(context).colorScheme;
         return AlertDialog(
-          backgroundColor: const Color(0xFF222222),
+          backgroundColor: colorScheme.surfaceContainerHigh,
           title: Text(
             '作者「$authorName」をミュートしますか？',
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(color: colorScheme.onSurface),
           ),
-          content: const Text(
+          content: Text(
             'この作者の作品が表示されなくなります。',
-            style: TextStyle(color: Colors.grey),
+            style: TextStyle(color: colorScheme.onSurfaceVariant),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('キャンセル', style: TextStyle(color: Colors.white)),
+              child: Text(
+                'キャンセル',
+                style: TextStyle(color: colorScheme.onSurface),
+              ),
             ),
             TextButton(
               onPressed: () async {
@@ -405,12 +412,12 @@ class IllustDetailHandler {
                   messenger.showSnackBar(
                     SnackBar(
                       content: Text('作者「$authorName」をミュートしました'),
-                      backgroundColor: Colors.green.shade800,
+                      backgroundColor: colorScheme.primaryContainer,
                     ),
                   );
                 }
               },
-              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+              style: TextButton.styleFrom(foregroundColor: colorScheme.error),
               child: const Text('ミュートする'),
             ),
           ],
