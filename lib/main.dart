@@ -13,7 +13,9 @@ import 'novel_model.dart';
 import 'services/download_service.dart';
 import 'services/model_download_coordinator.dart';
 import 'services/pixiv_api_service.dart';
+import 'services/theme_service.dart';
 import 'services/usage_tracking_service.dart';
+import 'theme/app_theme.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 // ワークマネージャー（バックグラウンドダウンロード）のコールバックディスパッチャー。
@@ -49,8 +51,38 @@ final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Phase 11c: テーマ設定（System / Light / Dark）を SharedPreferences から読み込む。
+  // runApp 前に完了させることで初帧からテーマが反映される。
+  await ThemeService().init();
   // FGS 通信用ポート初期化（TaskHandler↔UI）。
   FlutterForegroundTask.initCommunicationPort();
+  // flutter_foreground_task v11.0.3 は init() を呼ばないと startService が
+  // ServiceNotInitializedException → ServiceRequestFailure を返し起動しない。
+  // runApp 前・一度だけ実行する（B2-6 Step1 真因修正）。
+  FlutterForegroundTask.init(
+    // 自動要約専用の単一チャンネル（新規乱立を避ける）。
+    androidNotificationOptions: AndroidNotificationOptions(
+      channelId: 'auto_summary',
+      channelName: 'PixEmber 自動要約',
+      channelDescription: '自動要約の実行状態を表示する通知',
+      channelImportance: NotificationChannelImportance.LOW,
+      priority: NotificationPriority.LOW,
+      onlyAlertOnce: true,
+    ),
+    iosNotificationOptions: const IOSNotificationOptions(
+      showNotification: false,
+      playSound: false,
+    ),
+    // AutoSummaryTaskHandler は onRepeatEvent 非依存（コマンド/通知更新は
+    // listener+Timer 駆動で完結）→ nothing() が適切。
+    foregroundTaskOptions: ForegroundTaskOptions(
+      eventAction: ForegroundTaskEventAction.nothing(),
+      autoRunOnBoot: false,
+      autoRunOnMyPackageReplaced: false,
+      allowWakeLock: true,
+      allowWifiLock: false,
+    ),
+  );
   // Android のみ workmanager を初期化（バックグラウンド継続ダウンロード）
   if (Platform.isAndroid) {
     await Workmanager().initialize(callbackDispatcher);
@@ -195,21 +227,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'PixEmber',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.pinkAccent,
-          brightness: Brightness.dark,
-          surface: const Color(0xFF121212),
-        ),
-        scaffoldBackgroundColor: const Color(0xFF121212),
-        useMaterial3: true,
-        cardTheme: const CardThemeData(color: Color(0xFF1E1E1E)),
-      ),
-      navigatorKey: _navigatorKey,
-      home: const PixivViewerHome(),
+    // Phase 11c: ThemeService の変更を MaterialApp の themeMode に反映する。
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeService().themeModeNotifier,
+      builder: (context, themeMode, _) {
+        return MaterialApp(
+          title: 'PixEmber',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeMode,
+          navigatorKey: _navigatorKey,
+          home: const PixivViewerHome(),
+        );
+      },
     );
   }
 }

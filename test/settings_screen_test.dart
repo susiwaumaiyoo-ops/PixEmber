@@ -6,6 +6,7 @@ import 'package:pixiv_viewer/screens/backup_manager_screen.dart';
 import 'package:pixiv_viewer/screens/folder_list_screen.dart';
 import 'package:pixiv_viewer/screens/settings_screen.dart';
 import 'package:pixiv_viewer/services/search_preset_service.dart';
+import 'package:pixiv_viewer/services/theme_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> _pumpSettings(
@@ -24,9 +25,10 @@ Future<void> _pumpSettings(
 
 void main() {
   group('セクション表示', () {
-    testWidgets('6セクションの見出しが表示される', (tester) async {
+    testWidgets('7セクションの見出しが表示される', (tester) async {
       await _pumpSettings(tester);
       for (final title in [
+        '外観',
         '検索',
         'レコメンド',
         '小説リーダー',
@@ -206,6 +208,65 @@ void main() {
       final list = await service.load();
       expect(list.length, 1);
       expect(list.first.name, '新名');
+    });
+  });
+
+  group('テーマ切替（Phase 11d）', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      ThemeService().resetForTesting();
+    });
+
+    testWidgets('外観セクションにアプリテーマの選択肢が表示される', (tester) async {
+      await _pumpSettings(tester);
+      expect(find.text('アプリテーマ'), findsOneWidget);
+      for (final label in ['システム設定に従う', 'ライト', 'ダーク']) {
+        expect(find.text(label), findsOneWidget, reason: label);
+      }
+    });
+
+    testWidgets('初期値はシステム設定。ダークを選ぶと永続化される', (tester) async {
+      await _pumpSettings(tester);
+      // 初期状態: システムが選択されている
+      final darkChip = find.ancestor(
+        of: find.text('ダーク'),
+        matching: find.byType(ChoiceChip),
+      );
+      await tester.tap(darkChip);
+      await tester.pumpAndSettle();
+
+      expect(ThemeService().themeMode, ThemeMode.dark);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString(ThemeService.prefKey), 'dark');
+    });
+
+    testWidgets('保存済みのテーマが起動時に選択状態になる', (tester) async {
+      SharedPreferences.setMockInitialValues({ThemeService.prefKey: 'light'});
+      await ThemeService().init();
+      await _pumpSettings(tester);
+
+      final lightChip = find.ancestor(
+        of: find.text('ライト'),
+        matching: find.byType(ChoiceChip),
+      );
+      final chip = tester.widget<ChoiceChip>(lightChip);
+      expect(chip.selected, isTrue);
+    });
+
+    testWidgets('ダーク選択後すぐにライトに切り替えられる', (tester) async {
+      await _pumpSettings(tester);
+      await tester.tap(
+        find.ancestor(of: find.text('ダーク'), matching: find.byType(ChoiceChip)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.ancestor(of: find.text('ライト'), matching: find.byType(ChoiceChip)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(ThemeService().themeMode, ThemeMode.light);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString(ThemeService.prefKey), 'light');
     });
   });
 }
