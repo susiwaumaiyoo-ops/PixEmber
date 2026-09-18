@@ -12,9 +12,10 @@ part 'database_novel_meta.part.dart';
 part 'database_history.part.dart';
 part 'database_download_queue.part.dart';
 part 'database_read_later.part.dart';
+part 'database_mutes.part.dart';
 
 /// データベース初期化・管理用クラス
-class DatabaseService extends DatabaseServiceReadLater {
+class DatabaseService extends DatabaseServiceMutes {
   static final DatabaseService _instance = DatabaseService._internal();
   factory DatabaseService() => _instance;
   DatabaseService._internal();
@@ -331,47 +332,6 @@ class DatabaseService extends DatabaseServiceReadLater {
       await _database!.close();
       _database = null;
     }
-  }
-
-  // ==========================================
-  // MUTES (ミュート設定) CRUD
-  // ==========================================
-
-  Future<List<Map<String, dynamic>>> getMutesList() async {
-    final db = await database;
-    return await db.query('mutes', orderBy: 'id ASC');
-  }
-
-  Future<int> addMute({
-    required String muteType,
-    required String value,
-    String? label,
-  }) async {
-    final db = await database;
-    return await db.insert('mutes', {
-      'mute_type': muteType,
-      'value': value,
-      'label': label,
-    }, conflictAlgorithm: ConflictAlgorithm.ignore);
-  }
-
-  /// ミュート設定を追加/更新（HomeSyncHandler などから呼ばれる）
-  Future<int> insertOrUpdateMute({
-    required String muteType,
-    required String value,
-    String? label,
-  }) async {
-    return addMute(muteType: muteType, value: value, label: label);
-  }
-
-  Future<int> deleteMute(int muteId) async {
-    final db = await database;
-    return await db.delete('mutes', where: 'id = ?', whereArgs: [muteId]);
-  }
-
-  Future<int> clearMutes() async {
-    final db = await database;
-    return await db.delete('mutes');
   }
 
   // ==========================================
