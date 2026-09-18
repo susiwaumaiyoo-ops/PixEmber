@@ -123,42 +123,45 @@ class HomeSyncHandler {
 
   // Googleドライブ同期セクションのUI
   Widget buildGoogleDriveSyncSection() {
+    final colorScheme = Theme.of(state.uiContext).colorScheme;
     if (state.loggedInEmail == null) {
       return Container(
         margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
         decoration: BoxDecoration(
-          color: Colors.teal.withValues(alpha: 0.1),
+          color: colorScheme.secondary.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.tealAccent.withValues(alpha: 0.3)),
+          border: Border.all(
+            color: colorScheme.secondary.withValues(alpha: 0.3),
+          ),
         ),
         child: ListTile(
           leading: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.teal.withValues(alpha: 0.2),
+              color: colorScheme.secondary.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.cloud_upload,
-              color: Colors.tealAccent,
+              color: colorScheme.secondary,
               size: 24,
             ),
           ),
-          title: const Text(
+          title: Text(
             'Google ドライブ同期（パーソナルクラウド）',
             style: TextStyle(
-              color: Colors.white,
+              color: colorScheme.onSurface,
               fontSize: 14,
               fontWeight: FontWeight.bold,
             ),
           ),
-          subtitle: const Text(
+          subtitle: Text(
             '履歴・お気に入り・購読データをクラウドで管理',
-            style: TextStyle(color: Colors.white60, fontSize: 11),
+            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 11),
           ),
-          trailing: const Icon(
+          trailing: Icon(
             Icons.arrow_forward_ios,
-            color: Colors.white54,
+            color: colorScheme.onSurfaceVariant,
             size: 16,
           ),
           onTap: _handleGoogleLogin,
@@ -176,9 +179,9 @@ class HomeSyncHandler {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       decoration: BoxDecoration(
-        color: const Color(0xFF252525),
+        color: colorScheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.tealAccent.withValues(alpha: 0.3)),
+        border: Border.all(color: colorScheme.secondary.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -187,7 +190,7 @@ class HomeSyncHandler {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.teal.withValues(alpha: 0.1),
+              color: colorScheme.secondary.withValues(alpha: 0.1),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
@@ -197,10 +200,10 @@ class HomeSyncHandler {
               children: [
                 CircleAvatar(
                   radius: 20,
-                  backgroundColor: Colors.teal.withValues(alpha: 0.2),
-                  child: const Icon(
+                  backgroundColor: colorScheme.secondary.withValues(alpha: 0.2),
+                  child: Icon(
                     Icons.person,
-                    color: Colors.tealAccent,
+                    color: colorScheme.secondary,
                     size: 22,
                   ),
                 ),
@@ -209,10 +212,10 @@ class HomeSyncHandler {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'ログイン中',
                         style: TextStyle(
-                          color: Colors.tealAccent,
+                          color: colorScheme.secondary,
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
@@ -220,8 +223,8 @@ class HomeSyncHandler {
                       const SizedBox(height: 2),
                       Text(
                         state.loggedInEmail!,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: colorScheme.onSurface,
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                         ),
@@ -245,7 +248,7 @@ class HomeSyncHandler {
                 Text(
                   '履歴・フォルダ・購読タグを Google ドライブ（appDataFolder）と同期',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.5),
+                    color: colorScheme.onSurfaceVariant,
                     fontSize: 11,
                   ),
                 ),
@@ -254,7 +257,7 @@ class HomeSyncHandler {
                   Text(
                     lastSyncDisplay,
                     style: TextStyle(
-                      color: Colors.tealAccent.withValues(alpha: 0.8),
+                      color: colorScheme.secondary.withValues(alpha: 0.8),
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
                     ),
@@ -273,19 +276,19 @@ class HomeSyncHandler {
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.teal.withValues(alpha: 0.15),
+                  color: colorScheme.secondary.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: Colors.tealAccent.withValues(alpha: 0.2),
+                    color: colorScheme.secondary.withValues(alpha: 0.2),
                   ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       '前回の復元結果',
                       style: TextStyle(
-                        color: Colors.tealAccent,
+                        color: colorScheme.secondary,
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
@@ -297,8 +300,8 @@ class HomeSyncHandler {
                       children: state.lastSyncSummary!.entries.map((e) {
                         return Text(
                           '${e.key}: +${e.value}',
-                          style: const TextStyle(
-                            color: Colors.white70,
+                          style: TextStyle(
+                            color: colorScheme.onSurfaceVariant,
                             fontSize: 10,
                           ),
                         );
@@ -324,13 +327,13 @@ class HomeSyncHandler {
                         ? null
                         : _handleGoogleBackup,
                     icon: state.isBackingUp
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
+                                colorScheme.onSecondary,
                               ),
                             ),
                           )
@@ -344,9 +347,9 @@ class HomeSyncHandler {
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: state.isBackingUp
-                          ? Colors.teal.withValues(alpha: 0.6)
-                          : Colors.teal,
-                      foregroundColor: Colors.white,
+                          ? colorScheme.secondary.withValues(alpha: 0.6)
+                          : colorScheme.secondary,
+                      foregroundColor: colorScheme.onSecondary,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -363,13 +366,13 @@ class HomeSyncHandler {
                         ? null
                         : _handleGoogleRestore,
                     icon: state.isRestoring
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
+                                colorScheme.onTertiary,
                               ),
                             ),
                           )
@@ -383,9 +386,9 @@ class HomeSyncHandler {
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: state.isRestoring
-                          ? Colors.blue.withValues(alpha: 0.6)
-                          : Colors.blue,
-                      foregroundColor: Colors.white,
+                          ? colorScheme.tertiary.withValues(alpha: 0.6)
+                          : colorScheme.tertiary,
+                      foregroundColor: colorScheme.onTertiary,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -409,11 +412,15 @@ class HomeSyncHandler {
                 onPressed: state.isBackingUp || state.isRestoring
                     ? null
                     : _handleGoogleLogout,
-                icon: const Icon(Icons.logout, color: Colors.white54, size: 18),
-                label: const Text(
+                icon: Icon(
+                  Icons.logout,
+                  color: colorScheme.onSurfaceVariant,
+                  size: 18,
+                ),
+                label: Text(
                   'ログアウト',
                   style: TextStyle(
-                    color: Colors.white54,
+                    color: colorScheme.onSurfaceVariant,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -422,9 +429,7 @@ class HomeSyncHandler {
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.1),
-                    ),
+                    side: BorderSide(color: colorScheme.outlineVariant),
                   ),
                 ),
               ),
