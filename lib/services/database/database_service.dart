@@ -20,9 +20,10 @@ part 'database_reading_notes.part.dart';
 part 'database_tts.part.dart';
 part 'database_usage_sessions.part.dart';
 part 'database_image_vectors.part.dart';
+part 'database_emotion_curves.part.dart';
 
 /// データベース初期化・管理用クラス
-class DatabaseService extends DatabaseServiceImageVectors {
+class DatabaseService extends DatabaseServiceEmotionCurves {
   static final DatabaseService _instance = DatabaseService._internal();
   factory DatabaseService() => _instance;
   DatabaseService._internal();
@@ -177,48 +178,6 @@ class DatabaseService extends DatabaseServiceImageVectors {
       result[table] = await db.query(table);
     }
     return result;
-  }
-
-  // ==========================================================================
-  // 小説の感情曲線（emotion_curves）CRUD — Phase C (v23)
-  // ==========================================================================
-
-  /// 小説の感情曲線キャッシュを保存（UPSERT）。
-  /// 本文から再生成可能なため Google Drive バックアップ対象外。
-  Future<int> saveEmotionCurve({
-    required int workId,
-    required String modelId,
-    required String chunksJson,
-  }) async {
-    final db = await database;
-    return await db.insert('emotion_curves', {
-      'work_id': workId,
-      'model_id': modelId,
-      'chunks_json': chunksJson,
-      'updated_at': DateTime.now().toIso8601String(),
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-
-  /// 指定小説の感情曲線キャッシュを取得（無い場合は null）。
-  Future<Map<String, dynamic>?> getEmotionCurve(int workId) async {
-    final db = await database;
-    final rows = await db.query(
-      'emotion_curves',
-      where: 'work_id = ?',
-      whereArgs: [workId],
-    );
-    if (rows.isEmpty) return null;
-    return rows.first;
-  }
-
-  /// 指定小説の感情曲線キャッシュを削除。
-  Future<int> deleteEmotionCurve(int workId) async {
-    final db = await database;
-    return await db.delete(
-      'emotion_curves',
-      where: 'work_id = ?',
-      whereArgs: [workId],
-    );
   }
 
   /// エクスポートされた全データをインポート（マージ）する。
