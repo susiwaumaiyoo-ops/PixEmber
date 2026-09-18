@@ -190,19 +190,20 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
   }
 
   Color _statusColor(String status, ThemeData theme) {
+    final colorScheme = theme.colorScheme;
     switch (status) {
       case 'completed':
-        return Colors.green;
+        return colorScheme.primaryContainer;
       case 'failed':
-        return Colors.red;
+        return colorScheme.error;
       case 'canceled':
-        return Colors.grey;
+        return colorScheme.onSurfaceVariant;
       case 'running':
-        return theme.colorScheme.primary;
+        return colorScheme.primary;
       case 'paused':
-        return Colors.orange;
+        return colorScheme.tertiary;
       default:
-        return theme.colorScheme.onSurfaceVariant;
+        return colorScheme.onSurfaceVariant;
     }
   }
 
@@ -228,7 +229,6 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
@@ -292,7 +292,7 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
           ? _buildWebUnsupported()
           : _groups.isEmpty
           ? _buildEmpty(theme)
-          : _buildList(theme, isDark),
+          : _buildList(theme),
     );
   }
 
@@ -351,7 +351,7 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
     );
   }
 
-  Widget _buildList(ThemeData theme, bool isDark) {
+  Widget _buildList(ThemeData theme) {
     return Column(
       children: [
         _buildSummary(theme),
@@ -504,7 +504,7 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
                     'エラー: ${errorCode ?? "unknown"}'
                     '${errorMessage != null && errorMessage.isNotEmpty ? " - $errorMessage" : ""}',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: Colors.red,
+                      color: theme.colorScheme.error,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -633,7 +633,9 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
     required ThemeData theme,
     bool destructive = false,
   }) {
-    final color = destructive ? Colors.red : theme.colorScheme.primary;
+    final color = destructive
+        ? theme.colorScheme.error
+        : theme.colorScheme.primary;
     return ActionChip(
       avatar: Icon(icon, size: 18, color: color),
       label: Text(label, style: TextStyle(color: color)),

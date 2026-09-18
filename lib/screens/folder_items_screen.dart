@@ -55,6 +55,7 @@ class _FolderItemsScreenState extends State<FolderItemsScreen> {
   }
 
   Future<void> _removeItem(int itemId, int workId, String type) async {
+    final colorScheme = Theme.of(context).colorScheme;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -69,7 +70,7 @@ class _FolderItemsScreenState extends State<FolderItemsScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: colorScheme.error),
             child: const Text('解除'),
           ),
         ],
@@ -153,20 +154,16 @@ class _FolderItemsScreenState extends State<FolderItemsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.folderName),
-        backgroundColor: Colors.black87,
-      ),
+      appBar: AppBar(title: Text(widget.folderName)),
       body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Colors.pinkAccent),
-            )
+          ? const Center(child: CircularProgressIndicator())
           : _error != null
           ? Center(
               child: Text(
                 'エラー: $_error',
-                style: const TextStyle(color: Colors.grey),
+                style: TextStyle(color: colorScheme.onSurfaceVariant),
               ),
             )
           : _items.isEmpty
@@ -174,16 +171,23 @@ class _FolderItemsScreenState extends State<FolderItemsScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.bookmarks, size: 64, color: Colors.grey),
+                  Icon(
+                    Icons.bookmarks,
+                    size: 64,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     'このフォルダには作品が登録されていません。',
-                    style: TextStyle(color: Colors.grey),
+                    style: TextStyle(color: colorScheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     '詳細画面でお気に入り（ハート）を長押しして登録できます。',
-                    style: TextStyle(color: Colors.grey, fontSize: 11),
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 11,
+                    ),
                   ),
                 ],
               ),
@@ -194,7 +198,7 @@ class _FolderItemsScreenState extends State<FolderItemsScreen> {
               itemBuilder: (context, idx) {
                 final item = _items[idx];
                 return Card(
-                  color: const Color(0xFF1E1E1E),
+                  color: colorScheme.surfaceContainerHigh,
                   margin: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 4,
@@ -204,7 +208,7 @@ class _FolderItemsScreenState extends State<FolderItemsScreen> {
                       width: 50,
                       height: 50,
                       decoration: BoxDecoration(
-                        color: Colors.black,
+                        color: colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       clipBehavior: Clip.antiAlias,
@@ -215,22 +219,22 @@ class _FolderItemsScreenState extends State<FolderItemsScreen> {
                               url: item['preview_url'].toString(),
                               fit: BoxFit.cover,
                               isThumbnail: true,
-                              errorWidget: const Icon(
+                              errorWidget: Icon(
                                 Icons.broken_image,
-                                color: Colors.grey,
+                                color: colorScheme.onSurfaceVariant,
                               ),
                             )
                           : Icon(
                               item['type'] == 'novel'
                                   ? Icons.book
                                   : Icons.image,
-                              color: Colors.grey,
+                              color: colorScheme.onSurfaceVariant,
                             ),
                     ),
                     title: Text(
                       item['title'] ?? '無題',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
                       ),
@@ -239,12 +243,15 @@ class _FolderItemsScreenState extends State<FolderItemsScreen> {
                     ),
                     subtitle: Text(
                       '${item['author_name'] ?? '作者'}\n[${item['type'] == 'novel' ? '小説' : 'イラスト'}]',
-                      style: const TextStyle(color: Colors.grey, fontSize: 11),
+                      style: TextStyle(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 11,
+                      ),
                     ),
                     trailing: IconButton(
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.bookmark_remove,
-                        color: Colors.redAccent,
+                        color: colorScheme.error,
                       ),
                       onPressed: () => _removeItem(
                         item['id'],
