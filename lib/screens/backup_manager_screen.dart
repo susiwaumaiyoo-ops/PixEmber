@@ -228,6 +228,7 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
     required String okLabel,
     bool isDanger = false,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -241,7 +242,7 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: isDanger
-                ? TextButton.styleFrom(foregroundColor: Colors.red)
+                ? TextButton.styleFrom(foregroundColor: colorScheme.error)
                 : null,
             child: Text(okLabel),
           ),
@@ -252,7 +253,7 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
     final loggedIn = _drive.isLoggedIn;
 
     return Scaffold(
@@ -271,7 +272,7 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
           // 上部: サインイン状態 + 今すぐバックアップ
           Container(
             padding: const EdgeInsets.all(16),
-            color: isDark ? Colors.grey[850] : Colors.grey[100],
+            color: colorScheme.surfaceContainer,
             child: Row(
               children: [
                 Expanded(
@@ -310,10 +311,14 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: Colors.green.withValues(alpha: 0.1),
+              color: colorScheme.primary.withValues(alpha: 0.12),
               child: Row(
                 children: [
-                  const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                  Icon(
+                    Icons.check_circle,
+                    color: colorScheme.primary,
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(child: Text(_lastActionMessage!)),
                   IconButton(
@@ -327,15 +332,15 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: Colors.red.withValues(alpha: 0.1),
+              color: colorScheme.error.withValues(alpha: 0.12),
               child: Row(
                 children: [
-                  const Icon(Icons.error, color: Colors.red, size: 18),
+                  Icon(Icons.error, color: colorScheme.error, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       _errorMessage!,
-                      style: const TextStyle(color: Colors.red),
+                      style: TextStyle(color: colorScheme.error),
                     ),
                   ),
                   IconButton(
@@ -346,19 +351,23 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
               ),
             ),
           const Divider(height: 1),
-          Expanded(child: _buildBody(loggedIn, isDark)),
+          Expanded(child: _buildBody(loggedIn, colorScheme)),
         ],
       ),
     );
   }
 
-  Widget _buildBody(bool loggedIn, bool isDark) {
+  Widget _buildBody(bool loggedIn, ColorScheme colorScheme) {
     if (!loggedIn) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.account_circle, size: 64, color: Colors.grey),
+            Icon(
+              Icons.account_circle,
+              size: 64,
+              color: colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 16),
             const Text('Google アカウントに連携してください'),
             const SizedBox(height: 16),
@@ -379,13 +388,17 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
       return RefreshIndicator(
         onRefresh: _loadBackups,
         child: ListView(
-          children: const [
+          children: [
             SizedBox(height: 80),
             Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.cloud_off, size: 64, color: Colors.grey),
+                  Icon(
+                    Icons.cloud_off,
+                    size: 64,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                   SizedBox(height: 16),
                   Text('バックアップがまだありません'),
                   SizedBox(height: 8),
@@ -406,7 +419,7 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
         itemBuilder: (context, index) {
           final file = _backups[index];
           return ListTile(
-            leading: const Icon(Icons.backup, color: Colors.pinkAccent),
+            leading: Icon(Icons.backup, color: colorScheme.primary),
             title: Text(file.name ?? 'バックアップ'),
             subtitle: Text(
               '${_formatDate(file.modifiedTime)} ・ ${_formatSize(file.size)}',
@@ -415,14 +428,14 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  icon: const Icon(Icons.restore, color: Colors.blue),
+                  icon: Icon(Icons.restore, color: colorScheme.tertiary),
                   tooltip: '復元',
                   onPressed: (_isProcessing || _isLoading)
                       ? null
                       : () => _restoreBackup(file),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
+                  icon: Icon(Icons.delete, color: colorScheme.error),
                   tooltip: '削除',
                   onPressed: (_isProcessing || _isLoading)
                       ? null

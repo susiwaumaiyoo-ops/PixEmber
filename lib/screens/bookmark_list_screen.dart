@@ -122,6 +122,7 @@ class _BookmarkListScreenState extends State<BookmarkListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
         title: const Text('しおり一覧'),
@@ -134,23 +135,24 @@ class _BookmarkListScreenState extends State<BookmarkListScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Colors.pinkAccent),
-            )
+          ? const Center(child: CircularProgressIndicator())
           : _errorMessage != null
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
                 child: Text(
                   _errorMessage!,
-                  style: const TextStyle(color: Colors.grey),
+                  style: TextStyle(color: colorScheme.onSurfaceVariant),
                   textAlign: TextAlign.center,
                 ),
               ),
             )
           : _novels.isEmpty
-          ? const Center(
-              child: Text('しおりはありません。', style: TextStyle(color: Colors.grey)),
+          ? Center(
+              child: Text(
+                'しおりはありません。',
+                style: TextStyle(color: colorScheme.onSurfaceVariant),
+              ),
             )
           : ListView.builder(
               padding: const EdgeInsets.all(8.0),
@@ -158,14 +160,14 @@ class _BookmarkListScreenState extends State<BookmarkListScreen> {
               itemBuilder: (context, index) {
                 final novel = _novels[index];
                 return Card(
-                  color: const Color(0xFF1E1E1E),
+                  color: colorScheme.surfaceContainerHigh,
                   margin: const EdgeInsets.symmetric(vertical: 4.0),
                   child: ListTile(
                     leading: Container(
                       width: 54,
                       height: 81,
                       decoration: BoxDecoration(
-                        color: Colors.black,
+                        color: colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       clipBehavior: Clip.antiAlias,
@@ -175,12 +177,15 @@ class _BookmarkListScreenState extends State<BookmarkListScreen> {
                               fit: BoxFit.cover,
                               isThumbnail: true,
                             )
-                          : const Icon(Icons.book, color: Colors.grey),
+                          : Icon(
+                              Icons.book,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
                     ),
                     title: Text(
                       novel.title,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
                       ),
@@ -193,8 +198,8 @@ class _BookmarkListScreenState extends State<BookmarkListScreen> {
                         const SizedBox(height: 4),
                         Text(
                           '✍️ ${novel.author.name}',
-                          style: const TextStyle(
-                            color: Colors.grey,
+                          style: TextStyle(
+                            color: colorScheme.onSurfaceVariant,
                             fontSize: 11,
                           ),
                         ),
@@ -204,8 +209,8 @@ class _BookmarkListScreenState extends State<BookmarkListScreen> {
                             Text(
                               '📄 ${novel.pageCount}P  |  '
                               '✍️ ${novel.textLength}文字',
-                              style: const TextStyle(
-                                color: Colors.grey,
+                              style: TextStyle(
+                                color: colorScheme.onSurfaceVariant,
                                 fontSize: 11,
                               ),
                             ),
@@ -216,9 +221,9 @@ class _BookmarkListScreenState extends State<BookmarkListScreen> {
                       ],
                     ),
                     trailing: IconButton(
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.delete_outline,
-                        color: Colors.redAccent,
+                        color: colorScheme.error,
                       ),
                       onPressed: () => _confirmDelete(novel),
                       tooltip: 'しおりを削除',
@@ -331,6 +336,7 @@ class _BookmarkProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return FutureBuilder<double?>(
       future: SharedPreferences.getInstance().then(
         (prefs) => prefs.getDouble('novel_progress_$id'),
@@ -343,20 +349,20 @@ class _BookmarkProgress extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
           decoration: BoxDecoration(
-            color: Colors.pink.withValues(alpha: 0.15),
+            color: colorScheme.primary.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(3),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.bookmark, size: 9, color: Colors.pinkAccent),
+              Icon(Icons.bookmark, size: 9, color: colorScheme.primary),
               const SizedBox(width: 2),
               Text(
                 '${progress.toStringAsFixed(0)}%',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 9,
                   fontWeight: FontWeight.bold,
-                  color: Colors.pinkAccent,
+                  color: colorScheme.primary,
                 ),
               ),
             ],

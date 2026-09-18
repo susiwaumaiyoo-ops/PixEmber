@@ -213,18 +213,17 @@ class _DuplicateFinderScreenState extends State<DuplicateFinderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
     final unscanned = _unscannedCount;
     return DefaultTabController(
       length: 2,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('重複画像の検出'),
-          backgroundColor: isDark ? const Color(0xFF222222) : Colors.white,
-          foregroundColor: isDark ? Colors.white : Colors.black,
           elevation: 0.5,
           bottom: TabBar(
-            labelColor: isDark ? Colors.white : Colors.black,
+            labelColor: colorScheme.primary,
+            unselectedLabelColor: colorScheme.onSurfaceVariant,
             tabs: [
               Tab(text: '完全一致 (${_exactGroups.length})'),
               Tab(text: '近似 (${_nearGroups.length})'),
@@ -239,7 +238,10 @@ class _DuplicateFinderScreenState extends State<DuplicateFinderScreen> {
             ? Center(
                 child: Text(
                   'ダウンロード済み画像がありません',
-                  style: TextStyle(color: Colors.grey, fontSize: 14),
+                  style: TextStyle(
+                    color: colorScheme.onSurfaceVariant,
+                    fontSize: 14,
+                  ),
                 ),
               )
             : _items.length == 1
@@ -247,7 +249,10 @@ class _DuplicateFinderScreenState extends State<DuplicateFinderScreen> {
                 child: Text(
                   buildEmptyImageMessage(_items.length, '重複検出')!,
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey, fontSize: 14),
+                  style: TextStyle(
+                    color: colorScheme.onSurfaceVariant,
+                    fontSize: 14,
+                  ),
                 ),
               )
             : TabBarView(
@@ -290,13 +295,14 @@ class _DuplicateFinderScreenState extends State<DuplicateFinderScreen> {
   }
 
   Widget _buildGroupList(List<DuplicateGroup> groups, {required bool exact}) {
+    final colorScheme = Theme.of(context).colorScheme;
     if (groups.isEmpty) {
       final scanned = _prints.length;
       return Center(
         child: Text(
           scanned == 0 ? '未スキャンです\n「スキャン」ボタンで重複を検出できます' : '重複は見つかりませんでした',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey, fontSize: 14),
+          style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14),
         ),
       );
     }
@@ -306,7 +312,7 @@ class _DuplicateFinderScreenState extends State<DuplicateFinderScreen> {
       itemBuilder: (context, index) {
         final group = groups[index];
         return Card(
-          color: const Color(0xFF1E1E1E),
+          color: colorScheme.surfaceContainerHigh,
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
@@ -316,8 +322,8 @@ class _DuplicateFinderScreenState extends State<DuplicateFinderScreen> {
                   exact
                       ? '完全一致（${group.members.length} 枚）'
                       : '近似（${group.members.length} 枚・類似度参照）',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                   ),
@@ -334,6 +340,7 @@ class _DuplicateFinderScreenState extends State<DuplicateFinderScreen> {
   }
 
   Widget _buildMemberTile(DuplicateGroup group, int index) {
+    final colorScheme = Theme.of(context).colorScheme;
     final fp = group.members[index];
     final reference = group.members.first.dhash;
     final ham = hammingDistance(reference, fp.dhash);
@@ -349,8 +356,11 @@ class _DuplicateFinderScreenState extends State<DuplicateFinderScreen> {
               File(fp.localPath),
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => Container(
-                color: Colors.grey.shade800,
-                child: const Icon(Icons.broken_image, color: Colors.grey),
+                color: colorScheme.surfaceContainerHighest,
+                child: Icon(
+                  Icons.broken_image,
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           ),
@@ -361,17 +371,20 @@ class _DuplicateFinderScreenState extends State<DuplicateFinderScreen> {
               children: [
                 Text(
                   'ID: ${fp.illustId}',
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  style: TextStyle(color: colorScheme.onSurface, fontSize: 13),
                 ),
                 Text(
                   !group.exact && index > 0 ? '類似度: $sim%' : 'SHA-256 一致',
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  style: TextStyle(
+                    color: colorScheme.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+            icon: Icon(Icons.delete_outline, color: colorScheme.error),
             tooltip: 'この画像を削除',
             onPressed: () => _confirmAndDelete(fp),
           ),
