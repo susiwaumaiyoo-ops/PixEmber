@@ -656,7 +656,7 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
     } on Exception catch (e) {
       // 404（小説が削除された / データが古い）の場合のみ、以降検索に出ないよう遅延削除する。
       final msg = e.toString();
-      if (DatabaseService.isGenuineNovelMissing(msg)) {
+      if (DatabaseServiceIntegrity.isGenuineNovelMissing(msg)) {
         isGone = true;
         await DatabaseService().removeInvalidNovel(id, errorMessage: msg);
       }

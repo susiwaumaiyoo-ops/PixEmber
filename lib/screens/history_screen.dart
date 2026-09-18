@@ -166,7 +166,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       // エンドポイント不存在・通信失敗・認証失敗・レート制限等は削除しない。
       final isGone =
           workType == 'novel' &&
-          DatabaseService.isGenuineNovelMissing(e.toString());
+          DatabaseServiceIntegrity.isGenuineNovelMissing(e.toString());
       if (isGone) {
         await _databaseService.removeInvalidNovel(
           workId,

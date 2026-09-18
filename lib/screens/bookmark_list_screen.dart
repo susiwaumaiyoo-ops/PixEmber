@@ -251,9 +251,10 @@ class _BookmarkListScreenState extends State<BookmarkListScreen> {
                         return;
                       } on Exception catch (e) {
                         // 真に削除された小説（404/見つかりませんでした）のみ一覧から削除。
-                        final isGone = DatabaseService.isGenuineNovelMissing(
-                          e.toString(),
-                        );
+                        final isGone =
+                            DatabaseServiceIntegrity.isGenuineNovelMissing(
+                              e.toString(),
+                            );
                         if (isGone) {
                           await DatabaseService().removeInvalidNovel(
                             id,
