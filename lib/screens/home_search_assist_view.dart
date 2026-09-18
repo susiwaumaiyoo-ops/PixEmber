@@ -383,28 +383,32 @@ class _SearchAssistViewState extends State<SearchAssistView> {
     }
   }
 
-  ({IconData icon, Color accent}) _discoveryStyle(DiscoveryCardKind kind) {
+  ({IconData icon, Color accent}) _discoveryStyle(
+    DiscoveryCardKind kind,
+    ColorScheme colorScheme,
+  ) {
     switch (kind) {
       case DiscoveryCardKind.dormantTag:
-        return (icon: Icons.tag, accent: Colors.tealAccent);
+        return (icon: Icons.tag, accent: colorScheme.tertiary);
       case DiscoveryCardKind.seriesNext:
-        return (icon: Icons.auto_stories, accent: Colors.pinkAccent);
+        return (icon: Icons.auto_stories, accent: colorScheme.primary);
       case DiscoveryCardKind.longUnseenAuthor:
-        return (icon: Icons.person_search, accent: Colors.amberAccent);
+        return (icon: Icons.person_search, accent: colorScheme.secondary);
       case DiscoveryCardKind.downloadedUnread:
-        return (icon: Icons.download_done, accent: Colors.greenAccent);
+        return (icon: Icons.download_done, accent: colorScheme.primary);
     }
   }
 
   Widget _buildDiscoveryCard(DiscoveryCard c) {
-    final style = _discoveryStyle(c.kind);
+    final colorScheme = Theme.of(context).colorScheme;
+    final style = _discoveryStyle(c.kind, colorScheme);
     return InkWell(
       onTap: () => _openDiscovery(c),
       child: Container(
         margin: const EdgeInsets.only(bottom: 6),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
+          color: colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: style.accent.withValues(alpha: 0.3)),
         ),
@@ -420,8 +424,8 @@ class _SearchAssistViewState extends State<SearchAssistView> {
                     c.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: colorScheme.onSurface,
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
@@ -431,12 +435,19 @@ class _SearchAssistViewState extends State<SearchAssistView> {
                     c.subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.grey, fontSize: 11),
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 11,
+                    ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, size: 18, color: Colors.grey),
+            Icon(
+              Icons.chevron_right,
+              size: 18,
+              color: colorScheme.onSurfaceVariant,
+            ),
           ],
         ),
       ),
@@ -449,6 +460,7 @@ class _SearchAssistViewState extends State<SearchAssistView> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final typing = _lastQuery.isNotEmpty;
     final body = AnimatedOpacity(
       opacity: _initialFadedIn ? 1.0 : 0.0,
@@ -472,11 +484,14 @@ class _SearchAssistViewState extends State<SearchAssistView> {
                 if (typing) ...[
                   _buildSectionHeader('候補', icon: Icons.search),
                   if (_typedSuggestions.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Text(
                         '一致する履歴はありません',
-                        style: TextStyle(color: Colors.grey, fontSize: 13),
+                        style: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 13,
+                        ),
                       ),
                     )
                   else
@@ -486,7 +501,7 @@ class _SearchAssistViewState extends State<SearchAssistView> {
                           .where((k) => k.isNotEmpty)
                           .toList(),
                       icon: Icons.history,
-                      accent: const Color(0xFFB0BEC5),
+                      accent: colorScheme.onSurfaceVariant,
                       deletable: true,
                     ),
                 ],
@@ -501,10 +516,10 @@ class _SearchAssistViewState extends State<SearchAssistView> {
                       ),
                       TextButton(
                         onPressed: _confirmClearAll,
-                        child: const Text(
+                        child: Text(
                           'すべて削除',
                           style: TextStyle(
-                            color: Colors.redAccent,
+                            color: colorScheme.error,
                             fontSize: 12,
                           ),
                         ),
@@ -517,7 +532,7 @@ class _SearchAssistViewState extends State<SearchAssistView> {
                         .where((k) => k.isNotEmpty)
                         .toList(),
                     icon: Icons.history,
-                    accent: const Color(0xFFB0BEC5),
+                    accent: colorScheme.onSurfaceVariant,
                     deletable: true,
                   ),
                 ],
@@ -542,7 +557,7 @@ class _SearchAssistViewState extends State<SearchAssistView> {
                         .where((k) => k.isNotEmpty)
                         .toList(),
                     icon: Icons.star,
-                    accent: Colors.amberAccent,
+                    accent: colorScheme.secondary,
                     emphasized: true,
                   ),
                 ],
@@ -555,7 +570,7 @@ class _SearchAssistViewState extends State<SearchAssistView> {
                   _buildChipWrap(
                     _trending.map((t) => t.tag).toList(),
                     icon: Icons.tag,
-                    accent: Colors.deepOrangeAccent,
+                    accent: colorScheme.tertiary,
                     saturated: true,
                   ),
                 ],
@@ -570,16 +585,17 @@ class _SearchAssistViewState extends State<SearchAssistView> {
       ((row['keyword'] as String?) ?? '').trim();
 
   Widget _buildSectionHeader(String title, {required IconData icon}) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(top: 8, bottom: 4),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: Colors.grey),
+          Icon(icon, size: 14, color: colorScheme.onSurfaceVariant),
           const SizedBox(width: 6),
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.grey,
+            style: TextStyle(
+              color: colorScheme.onSurfaceVariant,
               fontSize: 12,
               fontWeight: FontWeight.bold,
             ),
@@ -630,15 +646,18 @@ class _SearchAssistViewState extends State<SearchAssistView> {
     required bool emphasized,
     required bool saturated,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
     final chipColor = saturated
         ? accent.withValues(alpha: 0.18)
         : emphasized
-        ? Colors.white.withValues(alpha: 0.14)
-        : Colors.white.withValues(alpha: 0.08);
+        ? colorScheme.surfaceContainerHighest
+        : colorScheme.surfaceContainerHigh;
     final label = Text(
       keyword,
       style: TextStyle(
-        color: emphasized ? Colors.white : const Color(0xFFDDDDDD),
+        color: emphasized
+            ? colorScheme.onSurface
+            : colorScheme.onSurfaceVariant,
         fontSize: 12,
         fontWeight: emphasized ? FontWeight.w600 : FontWeight.normal,
       ),
@@ -651,7 +670,7 @@ class _SearchAssistViewState extends State<SearchAssistView> {
         label: label,
         backgroundColor: chipColor,
         side: side,
-        deleteIconColor: Colors.grey,
+        deleteIconColor: colorScheme.onSurfaceVariant,
         onPressed: () => _runSearch(keyword),
         onDeleted: () => _deleteOne(keyword),
       );

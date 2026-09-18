@@ -18,6 +18,7 @@ class HomeSearchSourceChips extends StatelessWidget {
     const sources = HomeContentSource.values;
     // ランキング・検索結果中は選択なし（null）で表示する。
     final selected = state.activeContentSource;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return SizedBox(
       height: 44,
@@ -41,16 +42,18 @@ class HomeSearchSourceChips extends StatelessWidget {
                     fontWeight: isSelected
                         ? FontWeight.bold
                         : FontWeight.normal,
-                    color: isSelected ? Colors.white : Colors.grey[400],
+                    color: isSelected
+                        ? colorScheme.onPrimary
+                        : colorScheme.onSurfaceVariant,
                   ),
                 ),
                 selected: isSelected,
-                selectedColor: Colors.pinkAccent.withValues(alpha: 0.35),
-                backgroundColor: Colors.white.withValues(alpha: 0.06),
+                selectedColor: colorScheme.primary.withValues(alpha: 0.35),
+                backgroundColor: colorScheme.surfaceContainerHighest,
                 elevation: isSelected ? 2 : 0,
                 side: BorderSide(
                   color: isSelected
-                      ? Colors.pinkAccent.withValues(alpha: 0.6)
+                      ? colorScheme.primary.withValues(alpha: 0.6)
                       : Colors.transparent,
                 ),
                 onSelected: (sel) {

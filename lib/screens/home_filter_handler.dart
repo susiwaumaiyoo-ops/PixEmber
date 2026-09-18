@@ -365,6 +365,7 @@ class HomeFilterHandler {
   Widget _buildCommonFilterSection(
     void Function(void Function()) setModalState,
   ) {
+    final colorScheme = Theme.of(state.uiContext).colorScheme;
     // 日付範囲が有効なら duration を無視するため、その旨を補足表示する
     final dateRangeActive =
         state.useStartDate && state.startDateTime != null ||
@@ -444,7 +445,7 @@ class HomeFilterHandler {
           dateRangeActive
               ? '※ 日付範囲が設定されているため、期間は無視されます'
               : 'API の duration パラメータとして送信されます',
-          style: TextStyle(color: Colors.grey[500], fontSize: 11),
+          style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 11),
         ),
         const SizedBox(height: 24),
 
@@ -528,7 +529,7 @@ class HomeFilterHandler {
         const SizedBox(height: 12),
         Text(
           '従来の「Nusers入り」フィルターとは別の数値範囲指定です（API パラメータ bookmark_num_min / bookmark_num_max）',
-          style: TextStyle(color: Colors.grey[500], fontSize: 11),
+          style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 11),
         ),
       ],
     );
@@ -539,9 +540,10 @@ class HomeFilterHandler {
 
   // 小説専用検索フィルターボトムシートの表示
   void showNovelFilterBottomSheet() {
+    final colorScheme = Theme.of(state.uiContext).colorScheme;
     showModalBottomSheet(
       context: state.uiContext,
-      backgroundColor: const Color(0xFF161616),
+      backgroundColor: colorScheme.surfaceContainerHigh,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -566,7 +568,7 @@ class HomeFilterHandler {
                           width: 40,
                           height: 5,
                           decoration: BoxDecoration(
-                            color: Colors.grey[700],
+                            color: colorScheme.outlineVariant,
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
@@ -990,9 +992,10 @@ class HomeFilterHandler {
 
   // フィルターボトムシートの表示
   void showFilterBottomSheet() {
+    final colorScheme = Theme.of(state.uiContext).colorScheme;
     showModalBottomSheet(
       context: state.uiContext,
-      backgroundColor: const Color(0xFF1A1A1A),
+      backgroundColor: colorScheme.surfaceContainerHigh,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -1017,7 +1020,7 @@ class HomeFilterHandler {
                           width: 40,
                           height: 5,
                           decoration: BoxDecoration(
-                            color: Colors.grey[700],
+                            color: colorScheme.outlineVariant,
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
@@ -1211,18 +1214,18 @@ class HomeFilterHandler {
                             child: TextField(
                               controller: state.minBookmarkController,
                               keyboardType: TextInputType.number,
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: colorScheme.onSurface,
                                 fontSize: 13,
                               ),
                               decoration: InputDecoration(
                                 hintText: '例: 1000',
                                 hintStyle: TextStyle(
-                                  color: Colors.grey[500],
+                                  color: colorScheme.onSurfaceVariant,
                                   fontSize: 13,
                                 ),
                                 filled: true,
-                                fillColor: const Color(0xFF2E2E2E),
+                                fillColor: colorScheme.surfaceContainerHighest,
                                 contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 12,
                                   vertical: 8,
@@ -1238,7 +1241,7 @@ class HomeFilterHandler {
                           Text(
                             '以上',
                             style: TextStyle(
-                              color: Colors.grey[400],
+                              color: colorScheme.onSurfaceVariant,
                               fontSize: 13,
                             ),
                           ),
@@ -1378,7 +1381,7 @@ class HomeFilterHandler {
                         width: double.infinity,
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Colors.pinkAccent),
+                            side: BorderSide(color: colorScheme.primary),
                           ),
                           onPressed: () {
                             setModalState(() {
@@ -1396,9 +1399,9 @@ class HomeFilterHandler {
                             });
                             persistFilterPrefs();
                           },
-                          child: const Text(
+                          child: Text(
                             'フィルターをリセット',
-                            style: TextStyle(color: Colors.pinkAccent),
+                            style: TextStyle(color: colorScheme.primary),
                           ),
                         ),
                       ),
@@ -1440,10 +1443,11 @@ class HomeFilterHandler {
 
   // ボトムシートセクションタイトルビルダー
   Widget _buildFilterSectionTitle(String title) {
+    final colorScheme = Theme.of(state.uiContext).colorScheme;
     return Text(
       title,
-      style: const TextStyle(
-        color: Colors.white,
+      style: TextStyle(
+        color: colorScheme.onSurface,
         fontWeight: FontWeight.bold,
         fontSize: 13,
       ),
@@ -1456,26 +1460,31 @@ class HomeFilterHandler {
     required bool isSelected,
     required ValueChanged<bool> onSelected,
   }) {
+    final colorScheme = Theme.of(state.uiContext).colorScheme;
     return ChoiceChip(
       label: Text(
         label,
         style: TextStyle(
-          color: isSelected ? Colors.white : Colors.grey[400],
+          color: isSelected
+              ? colorScheme.onPrimary
+              : colorScheme.onSurfaceVariant,
           fontSize: 12,
           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
         ),
       ),
       selected:
           isSelected, // ← ここが `isSelected:` だった。ChoiceChip API では `selected:` が正しい
-      selectedColor: Colors.pinkAccent.withValues(alpha: 0.8),
-      backgroundColor: const Color(0xFF2E2E2E),
+      selectedColor: colorScheme.primary.withValues(alpha: 0.35),
+      backgroundColor: colorScheme.surfaceContainerHighest,
       elevation: isSelected ? 2 : 0,
       pressElevation: 4,
       onSelected: onSelected,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(
-          color: isSelected ? Colors.pinkAccent : Colors.transparent,
+          color: isSelected
+              ? colorScheme.primary.withValues(alpha: 0.6)
+              : Colors.transparent,
           width: 1,
         ),
       ),

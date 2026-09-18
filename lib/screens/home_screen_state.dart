@@ -1647,6 +1647,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;
     int crossAxisCount = 2;
     if (screenWidth > 1200) {
@@ -1671,7 +1672,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                   : currentIndex == novelIndex
                   ? Icons.menu_book
                   : Icons.auto_awesome,
-              color: Colors.pinkAccent,
+              color: colorScheme.primary,
             ),
             const SizedBox(width: 8),
             Text(
@@ -1732,7 +1733,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.history, color: Colors.pinkAccent),
+              leading: Icon(Icons.history, color: colorScheme.primary),
               title: const Text('閲覧履歴 (History)'),
               onTap: () {
                 Navigator.pop(context);
@@ -1745,7 +1746,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.folder, color: Colors.pinkAccent),
+              leading: Icon(Icons.folder, color: colorScheme.primary),
               title: const Text('お気に入りフォルダ'),
               onTap: () {
                 Navigator.pop(context);
@@ -1758,7 +1759,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.block, color: Colors.pinkAccent),
+              leading: Icon(Icons.block, color: colorScheme.primary),
               title: const Text('ミュート（ブラックリスト）管理'),
               onTap: () {
                 Navigator.pop(context);
@@ -1776,7 +1777,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               builder: (context, snapshot) {
                 final unread = snapshot.data ?? 0;
                 return ListTile(
-                  leading: const Icon(Icons.stars, color: Colors.pinkAccent),
+                  leading: Icon(Icons.stars, color: colorScheme.primary),
                   title: const Text('購読タグ'),
                   trailing: unread > 0
                       ? Container(
@@ -1785,13 +1786,13 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.pinkAccent,
+                            color: colorScheme.primary,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
                             unread > 999 ? '999+' : unread.toString(),
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: colorScheme.onPrimary,
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
                             ),
@@ -1822,9 +1823,9 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               builder: (context, snapshot) {
                 final unread = snapshot.data ?? 0;
                 return ListTile(
-                  leading: const Icon(
+                  leading: Icon(
                     Icons.bookmark_add_outlined,
-                    color: Colors.pinkAccent,
+                    color: colorScheme.primary,
                   ),
                   title: const Text('あとで読む'),
                   trailing: unread > 0
@@ -1834,13 +1835,13 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.pinkAccent,
+                            color: colorScheme.primary,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
                             unread > 999 ? '999+' : unread.toString(),
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: colorScheme.onPrimary,
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
                             ),
@@ -1860,7 +1861,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.settings, color: Colors.pinkAccent),
+              leading: Icon(Icons.settings, color: colorScheme.primary),
               title: const Text('設定'),
               subtitle: const Text('検索・リーダー・バックアップ'),
               onTap: () {
@@ -1871,20 +1872,20 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                 );
               },
             ),
-            const Divider(height: 1, color: Colors.grey),
+            Divider(height: 1, color: colorScheme.outlineVariant),
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Text(
                 'AI 機能',
                 style: TextStyle(
-                  color: Colors.white70,
+                  color: colorScheme.onSurfaceVariant,
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.recommend, color: Colors.pinkAccent),
+              leading: Icon(Icons.recommend, color: colorScheme.primary),
               title: const Text('AIレコメンド'),
               subtitle: const Text('あなたの好みに合わせた推薦'),
               onTap: () {
@@ -1898,7 +1899,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.image_search, color: Colors.pinkAccent),
+              leading: Icon(Icons.image_search, color: colorScheme.primary),
               title: const Text('似た画像を探す'),
               subtitle: const Text('ダウンロード済み画像から似た作品を探す'),
               onTap: () {
