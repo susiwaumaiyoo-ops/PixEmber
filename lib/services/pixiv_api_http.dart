@@ -96,6 +96,11 @@ class PixivHttpClient {
   /// キャッシュされたアクセストークン（force: false 時に再利用）。
   String? _cachedAccessToken;
 
+  /// キャッシュを取得するのに使ったリフレッシュトークン（Phase 9b-2）。
+  /// これが異なればキャッシュは使い回さない（アカウント切り替えで
+  /// 前のアカウントのアクセストークンを送信するバグ B-2 の対策）。
+  String? _cachedRefreshToken;
+
   /// キャッシュの有効期限（UTC）。この時刻を過ぎたら再取得する。
   DateTime? _tokenExpiry;
 
@@ -105,14 +110,20 @@ class PixivHttpClient {
   static const int _tokenSafetyMarginSeconds = 300;
 
   /// キャッシュされたトークンが有効かどうか。
-  bool get _hasValidCachedToken {
+  ///
+  /// Phase 9b-2: [refreshToken] がキャッシュしたときと同一でなければ
+  /// 使い回さない。リフレッシュトークンが切り替わった（アカウント A→B）
+  /// 後に A のアクセストークンを送信するバグ B-2 を防ぐ。
+  bool _hasValidCachedTokenFor(String refreshToken) {
     if (_cachedAccessToken == null || _tokenExpiry == null) return false;
+    if (_cachedRefreshToken != refreshToken) return false;
     return _now().isBefore(_tokenExpiry!);
   }
 
   /// トークンキャッシュをクリアする（ログアウト時や 401 リフレッシュ失敗時に呼ぶ）。
   void clearTokenCache() {
     _cachedAccessToken = null;
+    _cachedRefreshToken = null;
     _tokenExpiry = null;
   }
 
@@ -151,7 +162,7 @@ class PixivHttpClient {
     String refreshToken, {
     bool force = false,
   }) async {
-    if (!force && _hasValidCachedToken) {
+    if (!force && _hasValidCachedTokenFor(refreshToken)) {
       return _cachedAccessToken!;
     }
     final now = _now();
@@ -200,11 +211,13 @@ class PixivHttpClient {
       throw Exception('レスポンス内に access_token が見つかりませんでした。');
     }
     // トークンをキャッシュし、有効期限を設定する。
+    // Phase 9b-2: キャッシュを識別するためのリフレッシュトークンも保存する。
     final expiresIn = payload?['expires_in'] as int? ?? _tokenTtlSeconds;
     final effectiveTtl = expiresIn > _tokenSafetyMarginSeconds
         ? expiresIn - _tokenSafetyMarginSeconds
         : expiresIn;
     _cachedAccessToken = accessToken;
+    _cachedRefreshToken = refreshToken;
     _tokenExpiry = _now().add(Duration(seconds: effectiveTtl));
     return accessToken;
   }

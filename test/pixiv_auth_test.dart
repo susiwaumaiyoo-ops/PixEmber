@@ -249,13 +249,15 @@ void main() {
 
     test('API GET 呼び出しはトークン取得とは別物として計測される', () async {
       // 1) トークン取得用クライアントで access-token を取得
+      //    ※ get() は prefs の 'test-refresh-token-A' でキャッシュを引くため、
+      //    ここでも同じトークンを使う（Phase 9b-2 でキャッシュが識別される）。
       httpClient.setTestClient(
         mockTokenClient(
           statusCode: 200,
           body: tokenResponseBody(accessToken: 'access-1', expiresIn: 3600),
         ),
       );
-      await httpClient.getAccessToken('refresh-A');
+      await httpClient.getAccessToken('test-refresh-token-A');
       expect(tokenCalls.length, 1);
 
       // 2) API 呼び出し用クライアントに差し替え、GET を1回だけ行う。
@@ -414,9 +416,10 @@ void main() {
       expect(tokenCalls.length, 1);
     });
 
-    test('異なるトークンを渡しても保存済みキャッシュが優先される（識別しない設計）', () async {
-      // 現在の実装はキャッシュを「リフレッシュトークン」で識別していない。
-      // このテストは現状の挙動を記録するものであり、仕様として是認するものではない。
+    test('異なるトークンではキャッシュを使わず再取得する（B-2 修正）', () async {
+      // Phase 9b-2: キャッシュはリフレッシュトークンで識別する。
+      // アカウントを切り替えた場合に前のアカウントのアクセストークンを
+      // 使い回すバグ（B-2）を防ぐ。
       httpClient.setTestClient(
         mockTokenClient(
           statusCode: 200,
@@ -427,18 +430,40 @@ void main() {
       await httpClient.getAccessToken('token-A');
       await httpClient.getAccessToken('token-B');
 
-      expect(tokenCalls.length, 1);
+      expect(tokenCalls.length, 2);
     });
 
-    test('保存済みトークンを使った API 呼び出しが 401 のときキャッシュを破棄する', () async {
-      // 1) トークンを取得してキャッシュする。
+    test('異なるトークンで上書きされた後、元のトークンは再取得する（A→B→A）', () async {
+      // 単一エントリキャッシュ: 最後に取得した内容で上書きされる。
+      // A→B→A の順で呼ぶと、3 回目の A は B で上書きされたキャッシュと
+      // トークンが異なるため再取得する（多アカウント機能は未実装なので
+      // Map ではなく単一エントリで十分）。
       httpClient.setTestClient(
         mockTokenClient(
           statusCode: 200,
           body: tokenResponseBody(accessToken: 'access-1', expiresIn: 3600),
         ),
       );
-      await httpClient.getAccessToken('refresh-A');
+
+      await httpClient.getAccessToken('token-A');
+      await httpClient.getAccessToken('token-B');
+      await httpClient.getAccessToken('token-A');
+
+      expect(tokenCalls.length, 3);
+    });
+
+    test('保存済みトークンを使った API 呼び出しが 401 のときキャッシュを破棄する', () async {
+      // 1) トークンを取得してキャッシュする。
+      //    ※ get() は prefs のトークン（= setUp の 'test-refresh-token-A'）で
+      //    キャッシュを引くため、取得時も同じトークンを使う（Phase 9b-2 で
+      //    キャッシュがリフレッシュトークンで識別されるようになったため）。
+      httpClient.setTestClient(
+        mockTokenClient(
+          statusCode: 200,
+          body: tokenResponseBody(accessToken: 'access-1', expiresIn: 3600),
+        ),
+      );
+      await httpClient.getAccessToken('test-refresh-token-A');
 
       // 2) API クライアントを 401 で差し替え、キャッシュ破棄を確認する。
       httpClient.setTestClient(mockApiClient(statusCode: 401, body: ''));
@@ -453,7 +478,7 @@ void main() {
           body: tokenResponseBody(accessToken: 'access-2', expiresIn: 3600),
         ),
       );
-      final token = await httpClient.getAccessToken('refresh-A');
+      final token = await httpClient.getAccessToken('test-refresh-token-A');
       expect(token, 'access-2');
     });
   });
