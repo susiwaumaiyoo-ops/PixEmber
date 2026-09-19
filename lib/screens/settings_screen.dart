@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../theme/app_spacing.dart';
 import '../services/auto_summary_bridge_controller.dart';
 import '../services/auto_summary_controller.dart';
 import '../services/auto_summary_settings.dart';
@@ -219,18 +220,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// 非 Android 向けの案内ダイアログ。
   void _showLlmUnsupportedDialog() {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: colorScheme.surfaceContainerHigh,
         title: Text(
           'AI要約（実験）',
-          style: TextStyle(color: colorScheme.onSurface, fontSize: 16),
+          style: theme.textTheme.titleLarge?.copyWith(
+            color: colorScheme.onSurface,
+          ),
         ),
         content: Text(
           'この機能は実験中です。現時点では Android のみ利用できます。',
-          style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 13),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
         ),
         actions: [
           TextButton(
@@ -346,7 +352,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: Text('設定', style: theme.textTheme.titleLarge),
       ),
       body: ListView(
-        padding: const EdgeInsets.only(bottom: 32),
+        padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
         children: [
           _sectionHeader('外観'),
           _themeSelectorCard(colorScheme),
@@ -458,13 +464,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
       (ThemeMode.dark, 'ダーク', Icons.dark_mode_outlined),
     ];
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      margin: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       width: double.infinity,
       child: Material(
         color: colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md - 2,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -476,20 +488,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   color: colorScheme.onSurfaceVariant,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               Wrap(
-                spacing: 8,
+                spacing: AppSpacing.sm,
                 children: [
                   for (final (mode, label, icon) in modes)
                     ChoiceChip(
                       avatar: Icon(icon, size: 18),
                       label: Text(
                         label,
-                        style: TextStyle(
+                        style: theme.textTheme.bodySmall?.copyWith(
                           color: _appThemeMode == mode
                               ? colorScheme.onPrimary
                               : colorScheme.onSurfaceVariant,
-                          fontSize: 12,
                         ),
                       ),
                       selected: _appThemeMode == mode,
@@ -515,13 +526,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12),
+      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
       width: double.infinity,
       child: Material(
         color: colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md - 2,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -534,9 +548,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   color: colorScheme.onSurfaceVariant,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               Wrap(
-                spacing: 8,
+                spacing: AppSpacing.sm,
                 children: [
                   for (final (value, label) in const [
                     (LlmBackend.auto, '自動'),
@@ -547,11 +561,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ChoiceChip(
                       label: Text(
                         label,
-                        style: TextStyle(
+                        style: theme.textTheme.bodySmall?.copyWith(
                           color: _llmRuntime.backend == value
                               ? colorScheme.onPrimary
                               : colorScheme.onSurfaceVariant,
-                          fontSize: 12,
                         ),
                       ),
                       selected: _llmRuntime.backend == value,
@@ -561,7 +574,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: AppSpacing.sm - 2),
               Divider(color: colorScheme.outlineVariant, height: 16),
               Text('CPU スレッド数（要求値）', style: theme.textTheme.titleSmall),
               const SizedBox(height: 2),
@@ -572,19 +585,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   color: colorScheme.onSurfaceVariant,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               Wrap(
-                spacing: 8,
+                spacing: AppSpacing.sm,
                 children: [
                   for (final t in LlmRuntimeSettings.cpuThreadChoices)
                     ChoiceChip(
                       label: Text(
                         t == 0 ? '自動' : '$t',
-                        style: TextStyle(
+                        style: theme.textTheme.bodySmall?.copyWith(
                           color: _llmRuntime.cpuThreads == t
                               ? colorScheme.onPrimary
                               : colorScheme.onSurfaceVariant,
-                          fontSize: 12,
                         ),
                       ),
                       selected: _llmRuntime.cpuThreads == t,
@@ -594,7 +606,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: AppSpacing.sm - 2),
               Text(
                 '次回のモデルロードから反映（要約シート再表示で再ロードされます）。',
                 style: theme.textTheme.bodySmall?.copyWith(
@@ -614,13 +626,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      margin: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       width: double.infinity,
       child: Material(
         color: colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md - 2,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -644,20 +662,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   color: colorScheme.onSurfaceVariant,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               _autoSummaryStatusRow(),
-              const SizedBox(height: 4),
+              const SizedBox(height: AppSpacing.xs),
               Text('対象タグ', style: theme.textTheme.bodyMedium),
-              const SizedBox(height: 4),
+              const SizedBox(height: AppSpacing.xs),
               Wrap(
-                spacing: 6,
-                runSpacing: 6,
+                spacing: AppSpacing.sm - 2,
+                runSpacing: AppSpacing.sm - 2,
                 children: [
                   for (final t in s.tags)
                     InputChip(
                       label: Text(
                         t,
-                        style: TextStyle(color: colorScheme.onSurfaceVariant),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                       ),
                       backgroundColor: colorScheme.surfaceContainerHighest,
                       onDeleted: () => _removeAutoSummaryTag(t),
@@ -671,14 +691,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     label: Text(
                       '追加',
-                      style: TextStyle(color: colorScheme.primary),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.primary,
+                      ),
                     ),
                     backgroundColor: colorScheme.surfaceContainerHighest,
                     onPressed: _addAutoSummaryTag,
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               Divider(color: colorScheme.outlineVariant, height: 16),
               _autoSummaryToggleRow(
                 '充電中のみ実行',
@@ -695,7 +717,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 s.keepScreenOn,
                 (v) => s.copyWith(keepScreenOn: v),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: AppSpacing.xs),
               _autoSummaryChipRow<int>(
                 label: '1セッション最大件数',
                 choices: AutoSummarySettings.maxChoices,
@@ -717,7 +739,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 display: (v) => '${v.toInt()}℃',
                 onSelect: (v) => s.copyWith(temperatureLimitCelsius: v),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: AppSpacing.sm - 2),
               Text(
                 '最終実行: ${s.lastRunAtMillis == 0 ? '未実行' : _fmtEpoch(s.lastRunAtMillis)}'
                 '　累計処理: ${s.totalProcessed}件',
@@ -725,7 +747,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   color: colorScheme.onSurfaceVariant,
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: AppSpacing.sm - 2),
               Row(
                 children: [
                   Expanded(
@@ -757,7 +779,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final theme = Theme.of(context);
         final colorScheme = theme.colorScheme;
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md - 2,
+            vertical: AppSpacing.sm,
+          ),
           decoration: BoxDecoration(
             color: colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(8),
@@ -776,17 +801,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     Text(
                       '${autoSummaryRunStateLabel(s)}　${s.savedCount}/${s.targetCount}件保存',
-                      style: TextStyle(
+                      style: theme.textTheme.bodySmall?.copyWith(
                         color: colorScheme.onSurface,
-                        fontSize: 13,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       autoSummaryStatusLabel(s),
-                      style: TextStyle(
+                      style: theme.textTheme.bodySmall?.copyWith(
                         color: colorScheme.onSurfaceVariant,
-                        fontSize: 11,
                       ),
                     ),
                   ],
@@ -796,7 +819,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onPressed: _openAutoSummaryStatus,
                 child: Text(
                   '状況を見る',
-                  style: TextStyle(color: colorScheme.primary, fontSize: 12),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.primary,
+                  ),
                 ),
               ),
             ],
@@ -811,13 +836,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     bool value,
     AutoSummarySettings Function(bool) apply,
   ) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Row(
       children: [
         Expanded(
           child: Text(
             label,
-            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 13),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
         Switch(
@@ -836,29 +864,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String Function(T) display,
     required AutoSummarySettings Function(T) onSelect,
   }) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 13),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Wrap(
-            spacing: 8,
+            spacing: AppSpacing.sm,
             children: [
               for (final c in choices)
                 ChoiceChip(
                   label: Text(
                     display(c),
-                    style: TextStyle(
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: c == selected
                           ? colorScheme.onPrimary
                           : colorScheme.onSurfaceVariant,
-                      fontSize: 12,
                     ),
                   ),
                   selected: c == selected,
@@ -881,14 +911,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _sectionHeader(String title) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(left: 16, top: 16, bottom: 6),
+      padding: const EdgeInsets.only(
+        left: AppSpacing.lg,
+        top: AppSpacing.lg,
+        bottom: AppSpacing.sm - 2,
+      ),
       child: Text(
         title,
-        style: TextStyle(
+        style: theme.textTheme.bodySmall?.copyWith(
           color: colorScheme.onSurfaceVariant,
-          fontSize: 12,
           fontWeight: FontWeight.bold,
         ),
       ),
@@ -901,16 +935,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String subtitle,
     required VoidCallback onTap,
   }) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return ListTile(
       leading: Icon(icon, color: colorScheme.primary),
       title: Text(
         title,
-        style: TextStyle(color: colorScheme.onSurface, fontSize: 15),
+        style: theme.textTheme.bodyLarge?.copyWith(
+          color: colorScheme.onSurface,
+        ),
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12.5),
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: colorScheme.onSurfaceVariant,
+        ),
       ),
       trailing: Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant),
       onTap: onTap,
@@ -919,14 +958,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// 小説リーダー設定（novel_pref_* を直接読み書き）。
   Widget _readerSection() {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12),
+      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
       child: Material(
         color: colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md - 2,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1000,7 +1043,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 secondary: Icon(Icons.timer, color: colorScheme.primary),
                 title: Text(
                   '読書時間を表示',
-                  style: TextStyle(fontSize: 14, color: colorScheme.onSurface),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface,
+                  ),
                 ),
                 activeThumbColor: colorScheme.primary,
                 activeTrackColor: colorScheme.primary.withValues(alpha: 0.3),
@@ -1015,7 +1060,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 secondary: Icon(Icons.color_lens, color: colorScheme.primary),
                 title: Text(
                   '感情カラーを表示',
-                  style: TextStyle(fontSize: 14, color: colorScheme.onSurface),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface,
+                  ),
                 ),
                 activeThumbColor: colorScheme.primary,
                 activeTrackColor: colorScheme.primary.withValues(alpha: 0.3),
@@ -1033,7 +1080,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 title: Text(
                   'TTS でルビも読み上げる',
-                  style: TextStyle(fontSize: 14, color: colorScheme.onSurface),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface,
+                  ),
                 ),
                 activeThumbColor: colorScheme.primary,
                 activeTrackColor: colorScheme.primary.withValues(alpha: 0.3),
@@ -1043,12 +1092,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _saveBool('novel_pref_tts_read_ruby', v);
                 },
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: AppSpacing.sm - 2),
               Text(
                 'リーダー内の HUD でも同じ値を変更できます（値は共有されます）。',
-                style: TextStyle(
+                style: theme.textTheme.bodySmall?.copyWith(
                   color: colorScheme.onSurfaceVariant,
-                  fontSize: 11,
                 ),
               ),
             ],
@@ -1067,7 +1115,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required ValueChanged<double> onChanged,
     required ValueChanged<double> onChangeEnd,
   }) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1076,16 +1125,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             Text(
               label,
-              style: TextStyle(
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
-                fontSize: 13,
               ),
             ),
             Text(
               value.toStringAsFixed(decimals),
-              style: TextStyle(
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.primary,
-                fontSize: 13,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -1110,20 +1157,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required List<DropdownMenuItem<dynamic>> items,
     required ValueChanged<dynamic> onChanged,
   }) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             label,
-            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 13),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
           DropdownButton<dynamic>(
             value: value,
             underline: const SizedBox.shrink(),
-            style: TextStyle(color: colorScheme.onSurface, fontSize: 13),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurface,
+            ),
             icon: Icon(
               Icons.arrow_drop_down,
               color: colorScheme.onSurfaceVariant,
@@ -1137,10 +1189,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _licenseBlock() {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12),
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.md + 2),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(12),
@@ -1150,27 +1203,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Text(
             'PixEmber',
-            style: TextStyle(
+            style: theme.textTheme.bodyMedium?.copyWith(
               color: colorScheme.onSurface,
-              fontSize: 14,
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Text(
             'このアプリは、検索・推薦・統計・読書・バックアップ管理のすべての機能'
             'を端末内で処理します。Pixiv API への要求と Google Drive バックアップ'
             'を除き、個人データは外部サーバーへ送信されません。',
-            style: TextStyle(
+            style: theme.textTheme.bodySmall?.copyWith(
               color: colorScheme.onSurfaceVariant,
-              fontSize: 12,
               height: 1.6,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Text(
             'Version 3.1.0',
-            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 11),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -1230,14 +1283,22 @@ class _PresetManagerSheetState extends State<_PresetManagerSheet> {
     final result = await showDialog<String>(
       context: context,
       builder: (dialogContext) {
-        final colorScheme = Theme.of(dialogContext).colorScheme;
+        final theme = Theme.of(dialogContext);
+        final colorScheme = theme.colorScheme;
         return AlertDialog(
           backgroundColor: colorScheme.surfaceContainerHigh,
-          title: const Text('名前を変更', style: TextStyle(fontSize: 16)),
+          title: Text(
+            '名前を変更',
+            style: theme.textTheme.titleLarge?.copyWith(
+              color: colorScheme.onSurface,
+            ),
+          ),
           content: TextField(
             controller: controller,
             autofocus: true,
-            style: TextStyle(color: colorScheme.onSurface),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurface,
+            ),
             decoration: const InputDecoration(hintText: '新しい名前'),
           ),
           actions: [
@@ -1268,7 +1329,8 @@ class _PresetManagerSheetState extends State<_PresetManagerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return SizedBox(
       height: MediaQuery.of(context).size.height * 0.6,
       child: SafeArea(
@@ -1277,17 +1339,21 @@ class _PresetManagerSheetState extends State<_PresetManagerSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.md,
+                AppSpacing.sm,
+                AppSpacing.sm,
+              ),
               child: Row(
                 children: [
                   Icon(Icons.search, color: colorScheme.primary),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
                       _loading ? '読み込み中…' : '保存した検索（${_presets.length}件）',
-                      style: TextStyle(
+                      style: theme.textTheme.bodyLarge?.copyWith(
                         color: colorScheme.onSurface,
-                        fontSize: 15,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1315,9 +1381,8 @@ class _PresetManagerSheetState extends State<_PresetManagerSheet> {
                         '保存した検索はありません。\n'
                         '検索バーから保存するとここに表示されます。',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: theme.textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
-                          fontSize: 13,
                         ),
                       ),
                     )
@@ -1328,12 +1393,14 @@ class _PresetManagerSheetState extends State<_PresetManagerSheet> {
                     ),
             ),
             Padding(
-              padding: const EdgeInsets.only(left: 16, bottom: 8),
+              padding: const EdgeInsets.only(
+                left: AppSpacing.lg,
+                bottom: AppSpacing.sm,
+              ),
               child: Text(
                 '検索アシストビューからも管理できます。',
-                style: TextStyle(
+                style: theme.textTheme.bodySmall?.copyWith(
                   color: colorScheme.onSurfaceVariant,
-                  fontSize: 11,
                 ),
               ),
             ),
@@ -1345,10 +1412,17 @@ class _PresetManagerSheetState extends State<_PresetManagerSheet> {
 
   Widget _buildPresetRow(SearchPreset preset) {
     final isNovel = preset.category == 'novel';
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      margin: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.xs - 1,
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(10),
@@ -1356,7 +1430,10 @@ class _PresetManagerSheetState extends State<_PresetManagerSheet> {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm - 2,
+              vertical: 2,
+            ),
             decoration: BoxDecoration(
               color: isNovel
                   ? colorScheme.tertiaryContainer
@@ -1365,13 +1442,12 @@ class _PresetManagerSheetState extends State<_PresetManagerSheet> {
             ),
             child: Text(
               isNovel ? '小説' : 'イラスト',
-              style: TextStyle(
-                fontSize: 11,
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onPrimaryContainer,
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1380,9 +1456,8 @@ class _PresetManagerSheetState extends State<_PresetManagerSheet> {
                   preset.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
+                  style: theme.textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurface,
-                    fontSize: 13.5,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -1391,9 +1466,8 @@ class _PresetManagerSheetState extends State<_PresetManagerSheet> {
                     preset.keyword,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
-                      fontSize: 12,
                     ),
                   ),
               ],
@@ -1559,17 +1633,20 @@ class _LlmModelSheetState extends State<_LlmModelSheet> {
     showDialog<void>(
       context: context,
       builder: (context) {
-        final colorScheme = Theme.of(context).colorScheme;
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
         return AlertDialog(
           backgroundColor: colorScheme.surfaceContainerHigh,
           title: Row(
             children: [
               Icon(Icons.warning_amber_rounded, color: colorScheme.error),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   'NPU 非対応の量子化形式',
-                  style: TextStyle(color: colorScheme.onSurface, fontSize: 15),
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: colorScheme.onSurface,
+                  ),
                 ),
               ),
             ],
@@ -1578,16 +1655,20 @@ class _LlmModelSheetState extends State<_LlmModelSheet> {
             'このモデル（${quantization ?? '不明'}）はNPU(HTP)非対応の量子化形式です。\n'
             'CPU実行になり生成速度が大幅に低下します。\n'
             'Q4_0 または Q8_0 形式を推奨します。',
-            style: TextStyle(
+            style: theme.textTheme.bodySmall?.copyWith(
               color: colorScheme.onSurfaceVariant,
-              fontSize: 13,
               height: 1.5,
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text('OK', style: TextStyle(color: colorScheme.primary)),
+              child: Text(
+                'OK',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.primary,
+                ),
+              ),
             ),
           ],
         );
@@ -1628,7 +1709,8 @@ class _LlmModelSheetState extends State<_LlmModelSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.8,
@@ -1641,15 +1723,18 @@ class _LlmModelSheetState extends State<_LlmModelSheet> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.sm,
+            ),
             child: Row(
               children: [
                 Text(
                   'ローカルAIモデル（実験）',
-                  style: TextStyle(
+                  style: theme.textTheme.titleLarge?.copyWith(
                     color: colorScheme.onSurface,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
                   ),
                 ),
                 const Spacer(),
@@ -1664,7 +1749,7 @@ class _LlmModelSheetState extends State<_LlmModelSheet> {
           Divider(height: 1, color: colorScheme.outlineVariant),
           Flexible(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(AppSpacing.lg),
               child: _loading
                   ? Center(
                       child: CircularProgressIndicator(
@@ -1680,37 +1765,44 @@ class _LlmModelSheetState extends State<_LlmModelSheet> {
   }
 
   Widget _buildBody() {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (_importing) ...[
           Text(
             'モデルを取り込んでいます…',
-            style: TextStyle(color: colorScheme.onSurface, fontSize: 13),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurface,
+            ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           LinearProgressIndicator(
             value: _importTotal > 0 ? _importCopied / _importTotal : null,
             backgroundColor: colorScheme.surfaceContainerHighest,
             color: colorScheme.primary,
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: AppSpacing.sm - 2),
           Text(
             _importTotal > 0
                 ? '${(_importCopied / (1024 * 1024)).toStringAsFixed(0)} MB / '
                       '${(_importTotal / (1024 * 1024)).toStringAsFixed(0)} MB'
                 : 'ファイルを確認中…',
-            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 11),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
               onPressed: _cancelImport,
               child: Text(
                 'キャンセル',
-                style: TextStyle(color: colorScheme.error, fontSize: 12),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.error,
+                ),
               ),
             ),
           ),
@@ -1719,8 +1811,8 @@ class _LlmModelSheetState extends State<_LlmModelSheet> {
         if (_importSuccess != null) ...[
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(10),
-            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(AppSpacing.md - 2),
+            margin: const EdgeInsets.only(bottom: AppSpacing.md),
             decoration: BoxDecoration(
               color: colorScheme.primaryContainer.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(8),
@@ -1730,9 +1822,8 @@ class _LlmModelSheetState extends State<_LlmModelSheet> {
             ),
             child: Text(
               _importSuccess!,
-              style: TextStyle(
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onPrimaryContainer,
-                fontSize: 12,
               ),
             ),
           ),
@@ -1742,13 +1833,12 @@ class _LlmModelSheetState extends State<_LlmModelSheet> {
               ? '端末内の .gguf ファイルを選択して取り込むか、'
                     '下記ディレクトリに手動で配置してください。'
               : '端末内の .gguf ファイルを追加で取り込めます。',
-          style: TextStyle(
+          style: theme.textTheme.bodySmall?.copyWith(
             color: colorScheme.onSurfaceVariant,
-            fontSize: 12,
             height: 1.5,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
@@ -1756,31 +1846,40 @@ class _LlmModelSheetState extends State<_LlmModelSheet> {
             style: OutlinedButton.styleFrom(
               foregroundColor: colorScheme.primary,
               side: BorderSide(color: colorScheme.primary),
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
             ),
             icon: const Icon(Icons.file_open, size: 20),
-            label: const Text('モデルをインポート', style: TextStyle(fontSize: 13)),
+            label: Text(
+              'モデルをインポート',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.primary,
+              ),
+            ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         Text(
           '手動配置用ディレクトリ',
-          style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: AppSpacing.sm - 2),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(AppSpacing.md - 2),
           decoration: BoxDecoration(
             color: colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(8),
           ),
           child: SelectableText(
             _defaultDirPath ?? '',
-            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 11),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         RadioGroup<String?>(
           groupValue: _selected,
           onChanged: (v) {
@@ -1791,7 +1890,9 @@ class _LlmModelSheetState extends State<_LlmModelSheet> {
               RadioListTile<String?>(
                 title: Text(
                   '自動（既定ディレクトリの唯一のモデルを使用）',
-                  style: TextStyle(color: colorScheme.onSurface, fontSize: 13),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurface,
+                  ),
                 ),
                 secondary: Icon(
                   Icons.auto_fix_high,
@@ -1806,17 +1907,15 @@ class _LlmModelSheetState extends State<_LlmModelSheet> {
                 RadioListTile<String?>(
                   title: Text(
                     p.basename(m),
-                    style: TextStyle(
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurface,
-                      fontSize: 13,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
                   subtitle: Text(
                     m,
-                    style: TextStyle(
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
-                      fontSize: 10,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1830,8 +1929,8 @@ class _LlmModelSheetState extends State<_LlmModelSheet> {
         if (_models.isEmpty)
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            margin: const EdgeInsets.only(top: 4),
+            padding: const EdgeInsets.all(AppSpacing.md),
+            margin: const EdgeInsets.only(top: AppSpacing.xs),
             decoration: BoxDecoration(
               color: colorScheme.errorContainer.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(8),
@@ -1843,24 +1942,27 @@ class _LlmModelSheetState extends State<_LlmModelSheet> {
               'GGUFファイルが未配置です。'
               '「モデルをインポート」から端末内の .gguf を取り込むか、'
               '下記ディレクトリに手動で配置して再読み込みしてください。',
-              style: TextStyle(
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onErrorContainer,
-                fontSize: 12,
               ),
             ),
           ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         Text(
           '手動でパスを指定',
-          style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: AppSpacing.sm - 2),
         Row(
           children: [
             Expanded(
               child: TextField(
                 controller: _manualPathController,
-                style: TextStyle(color: colorScheme.onSurface, fontSize: 12),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
                 decoration: InputDecoration(
                   hintText: 'ファイル名または絶対パス',
                   hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
@@ -1895,18 +1997,22 @@ class _LlmModelSheetState extends State<_LlmModelSheet> {
           ],
         ),
         if (_error != null) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Text(
             _error!,
-            style: TextStyle(color: colorScheme.error, fontSize: 12),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.error,
+            ),
           ),
         ],
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         TextButton(
           onPressed: _loading || _saving ? null : _load,
           child: Text(
             '再読み込み',
-            style: TextStyle(color: colorScheme.primary, fontSize: 12),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.primary,
+            ),
           ),
         ),
       ],

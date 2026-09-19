@@ -9,6 +9,7 @@
 // - 色に依存せずアイコン＋テキストで状態を判別（§3-D）。
 import 'package:flutter/material.dart';
 
+import '../theme/app_spacing.dart';
 import '../services/auto_summary_controller.dart';
 import '../services/auto_summary_snapshot.dart';
 
@@ -43,7 +44,7 @@ class AutoSummaryStatusScreen extends StatelessWidget {
               color: colorScheme.primary,
               backgroundColor: colorScheme.surfaceContainer,
               child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
                 children: [
                   _HeaderCard(controller: controller, snapshot: s),
                   _CountsCard(snapshot: s),
@@ -90,49 +91,55 @@ class _HeaderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = snapshot;
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      margin: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(12),
       ),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Icon(autoSummaryPhaseIcon(s.phase), color: colorScheme.primary),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   autoSummaryRunStateLabel(s),
-                  style: TextStyle(
+                  style: theme.textTheme.titleMedium?.copyWith(
                     color: colorScheme.onSurface,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: AppSpacing.sm - 2),
           Text(
             autoSummaryStatusLabel(s),
-            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
           if (s.stopReason != null && s.stopReason!.isNotEmpty) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               s.stopReason!,
-              style: TextStyle(color: colorScheme.tertiary, fontSize: 12),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.tertiary,
+              ),
             ),
           ],
-          const SizedBox(height: 14),
+          const SizedBox(height: AppSpacing.md + 2),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
             children: [
               FilledButton.icon(
                 style: FilledButton.styleFrom(
@@ -186,22 +193,28 @@ class _CountsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = snapshot;
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      margin: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(12),
       ),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '対象 ${s.targetCount}件 ＝ 保存 ${s.savedCount} ＋ 処理中 ${s.processingCount} ＋ 待ち ${s.waitingCount} ＋ 失敗 ${s.failedCount} ＋ スキップ ${s.skippedCount}',
-            style: TextStyle(color: colorScheme.onSurface, fontSize: 13),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurface,
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           Row(
             children: [
               _CountChip(
@@ -237,7 +250,7 @@ class _CountsCard extends StatelessWidget {
             ],
           ),
           if (s.targetCount > 0) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: LinearProgressIndicator(
@@ -269,7 +282,8 @@ class _CountChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Expanded(
       child: Column(
         children: [
@@ -277,15 +291,16 @@ class _CountChip extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             '$value',
-            style: TextStyle(
+            style: theme.textTheme.bodyMedium?.copyWith(
               color: color,
-              fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
           ),
           Text(
             label,
-            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 10),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -335,33 +350,37 @@ class _CurrentWorkCard extends StatelessWidget {
     }
     final title = s.currentWorkTitle ?? '（作品名は非表示）';
     final progress = _workProgress;
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      margin: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(12),
       ),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '現在の処理',
-            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             title,
-            style: TextStyle(
+            style: theme.textTheme.bodyLarge?.copyWith(
               color: colorScheme.onSurface,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: AppSpacing.sm - 2),
           Row(
             children: [
               Icon(
@@ -369,7 +388,7 @@ class _CurrentWorkCard extends StatelessWidget {
                 size: 16,
                 color: colorScheme.primary,
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: AppSpacing.sm - 2),
               Expanded(
                 child: Text(
                   s.workStage == AutoSummaryWorkStage.none
@@ -378,15 +397,14 @@ class _CurrentWorkCard extends StatelessWidget {
                             (s.chunkTotal > 0 && s.chunkCurrent > 0
                                 ? ' ${s.chunkCurrent}/${s.chunkTotal}ブロック'
                                 : ''),
-                  style: TextStyle(
+                  style: theme.textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
-                    fontSize: 13,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpacing.md - 2),
           if (progress != null)
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
@@ -406,20 +424,21 @@ class _CurrentWorkCard extends StatelessWidget {
                 valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
               ),
             ),
-          const SizedBox(height: 6),
+          const SizedBox(height: AppSpacing.sm - 2),
           Text(
             progress == null
                 ? '進捗は取得できません（推定なし）'
                 : '（統合・保存が完了するまで 100% にはなりません）',
-            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 10),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
           if (s.modelLabel != null || s.backendName != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: AppSpacing.sm - 2),
             Text(
               'モデル: ${s.modelLabel ?? '—'} / バックエンド: ${s.backendName ?? '—'}',
-              style: TextStyle(
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
-                fontSize: 11,
               ),
             ),
           ],
@@ -440,7 +459,8 @@ class _TagStatsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final stats = snapshot.tagStats;
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     if (stats.isEmpty) return const SizedBox.shrink();
     return _Section(
       title: 'タグ別内訳',
@@ -448,33 +468,30 @@ class _TagStatsSection extends StatelessWidget {
         children: [
           for (final t in stats)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm - 2),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     '#${t.tag}',
-                    style: TextStyle(
+                    style: theme.textTheme.bodyMedium?.copyWith(
                       color: colorScheme.onSurface,
-                      fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: AppSpacing.xs - 1),
                   Text(
                     '確認 ${t.candidatesChecked}件 / 既存 ${t.existingValid}件 / 生成 ${t.generatedSaved}件 / 失敗 ${t.failed}件',
-                    style: TextStyle(
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
-                      fontSize: 12,
                     ),
                   ),
                   Text(
                     _candidateNote(t),
-                    style: TextStyle(
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: t.hasMoreCandidates
                           ? colorScheme.tertiary
                           : colorScheme.onSurfaceVariant,
-                      fontSize: 11,
                     ),
                   ),
                 ],
@@ -511,7 +528,8 @@ class _ItemListSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = snapshot.items;
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     if (items.isEmpty) return const SizedBox.shrink();
     return _Section(
       title: '今回の処理対象（${items.length}件）',
@@ -520,24 +538,29 @@ class _ItemListSection extends StatelessWidget {
           for (final it in items)
             ListTile(
               dense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.xs,
+              ),
               leading: _statusIcon(it.status, colorScheme),
               title: Text(
                 it.title.isEmpty ? '作品 ${it.workId}' : it.title,
-                style: TextStyle(color: colorScheme.onSurface, fontSize: 13),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
               subtitle: it.errorReason != null
                   ? Text(
                       it.errorReason!,
-                      style: TextStyle(color: colorScheme.error, fontSize: 11),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.error,
+                      ),
                     )
                   : Text(
                       it.tags.map((e) => '#$e').join(' '),
-                      style: TextStyle(
+                      style: theme.textTheme.bodySmall?.copyWith(
                         color: colorScheme.onSurfaceVariant,
-                        fontSize: 11,
                       ),
                     ),
               onTap: it.status == AutoSummaryItemStatus.saved && onOpen != null
@@ -545,9 +568,8 @@ class _ItemListSection extends StatelessWidget {
                   : null,
               trailing: Text(
                 _statusLabel(it.status),
-                style: TextStyle(
+                style: theme.textTheme.bodySmall?.copyWith(
                   color: _statusColor(it.status, colorScheme),
-                  fontSize: 11,
                 ),
               ),
             ),
@@ -621,21 +643,22 @@ class _DiagnosticsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = snapshot;
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return _Section(
       title: '診断（タップで展開）',
       child: ExpansionTile(
         tilePadding: EdgeInsets.zero,
-        childrenPadding: const EdgeInsets.only(bottom: 8),
+        childrenPadding: const EdgeInsets.only(bottom: AppSpacing.sm),
         iconColor: colorScheme.onSurfaceVariant,
         collapsedIconColor: colorScheme.onSurfaceVariant,
         textColor: colorScheme.onSurfaceVariant,
-        title: const Text('実行詳細', style: TextStyle(fontSize: 12)),
+        title: Text('実行詳細', style: theme.textTheme.bodySmall),
         children: [
           Align(
             alignment: Alignment.centerLeft,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
               child: SelectableText(
                 [
                   'runId: ${s.runId}',
@@ -650,9 +673,8 @@ class _DiagnosticsSection extends StatelessWidget {
                   if (s.cooldownUntilMillis > 0)
                     'クールダウン終了予定: ${_fmt(s.cooldownUntilMillis)}',
                 ].join('\n'),
-                style: TextStyle(
+                style: theme.textTheme.bodySmall?.copyWith(
                   color: colorScheme.onSurfaceVariant,
-                  fontSize: 11,
                   fontFamily: 'monospace',
                 ),
               ),
@@ -679,27 +701,30 @@ class _Section extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm - 2,
+      ),
       child: Material(
         color: colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(12),
         clipBehavior: Clip.antiAlias,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 title,
-                style: TextStyle(
+                style: theme.textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurface,
-                  fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               child,
             ],
           ),
