@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/database_service.dart';
 import '../services/download_service.dart';
 import '../theme/app_spacing.dart';
+import '../widgets/design_system/app_state_view.dart';
 
 /// ダウンロードキュー管理画面
 ///
@@ -292,7 +293,7 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppStateView(type: AppStateViewType.loading)
           : kIsWeb
           ? _buildWebUnsupported()
           : _groups.isEmpty
@@ -302,59 +303,22 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
   }
 
   Widget _buildWebUnsupported() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xxl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.cloud_off,
-              size: 64,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Text(
-              'Web版ではダウンロードできません',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'この環境ではファイル保存がサポートされていません。\n'
-              'ネイティブアプリ（Android / iOS / デスクトップ）でご利用ください。',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
+    return const AppStateView(
+      type: AppStateViewType.empty,
+      icon: Icons.cloud_off,
+      title: 'Web版ではダウンロードできません',
+      message:
+          'この環境ではファイル保存がサポートされていません。\n'
+          'ネイティブアプリ（Android / iOS / デスクトップ）でご利用ください。',
     );
   }
 
   Widget _buildEmpty(ThemeData theme) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.download_done,
-            size: 64,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          Text('ダウンロードキューは空です', style: theme.textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'イラスト詳細画面や小説詳細画面から\nダウンロードできます',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
+    return const AppStateView(
+      type: AppStateViewType.empty,
+      icon: Icons.download_done,
+      title: 'ダウンロードキューは空です',
+      message: 'イラスト詳細画面や小説詳細画面から\nダウンロードできます',
     );
   }
 

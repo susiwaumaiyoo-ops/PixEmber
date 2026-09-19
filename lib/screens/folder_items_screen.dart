@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../theme/app_spacing.dart';
+import '../widgets/design_system/app_state_view.dart';
 import '../widgets/pixiv_image.dart';
 import '../illust_model.dart';
 import '../novel_model.dart';
@@ -158,50 +160,25 @@ class _FolderItemsScreenState extends State<FolderItemsScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(widget.folderName)),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppStateView(type: AppStateViewType.loading)
           : _error != null
-          ? Center(
-              child: Text(
-                'エラー: $_error',
-                style: TextStyle(color: colorScheme.onSurfaceVariant),
-              ),
-            )
+          ? AppStateView(type: AppStateViewType.error, message: 'エラー: $_error')
           : _items.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.bookmarks,
-                    size: 64,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'このフォルダには作品が登録されていません。',
-                    style: TextStyle(color: colorScheme.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '詳細画面でお気に入り（ハート）を長押しして登録できます。',
-                    style: TextStyle(
-                      color: colorScheme.onSurfaceVariant,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
+          ? const AppStateView(
+              type: AppStateViewType.empty,
+              icon: Icons.bookmarks,
+              title: 'このフォルダには作品が登録されていません。',
+              message: '詳細画面でお気に入り（ハート）を長押しして登録できます。',
             )
           : ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
               itemCount: _items.length,
               itemBuilder: (context, idx) {
                 final item = _items[idx];
                 return Card(
-                  color: colorScheme.surfaceContainerHigh,
                   margin: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.xs,
                   ),
                   child: ListTile(
                     leading: Container(

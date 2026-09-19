@@ -5,6 +5,7 @@ import '../novel_model.dart';
 import '../services/pixiv_api_service.dart';
 import '../services/database_service.dart';
 import '../theme/app_spacing.dart';
+import '../widgets/design_system/app_state_view.dart';
 import '../widgets/pixiv_image.dart';
 import 'novel_detail_screen.dart';
 
@@ -137,28 +138,13 @@ class _BookmarkListScreenState extends State<BookmarkListScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppStateView(type: AppStateViewType.loading)
           : _errorMessage != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.xl),
-                child: Text(
-                  _errorMessage!,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            )
+          ? AppStateView(type: AppStateViewType.error, message: _errorMessage!)
           : _novels.isEmpty
-          ? Center(
-              child: Text(
-                'しおりはありません。',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
+          ? const AppStateView(
+              type: AppStateViewType.empty,
+              title: 'しおりはありません。',
             )
           : ListView.builder(
               padding: const EdgeInsets.all(AppSpacing.sm),
@@ -166,7 +152,6 @@ class _BookmarkListScreenState extends State<BookmarkListScreen> {
               itemBuilder: (context, index) {
                 final novel = _novels[index];
                 return Card(
-                  color: colorScheme.surfaceContainerHigh,
                   margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
                   child: ListTile(
                     leading: Container(

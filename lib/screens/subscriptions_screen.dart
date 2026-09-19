@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_spacing.dart';
+import '../widgets/design_system/app_state_view.dart';
 import '../services/database_service.dart';
 import '../services/subscription_sync_service.dart';
 import '../utils/datetime_format.dart';
@@ -341,16 +343,13 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Colors.pinkAccent),
-            )
+          ? const AppStateView(type: AppStateViewType.loading)
           : _tags.isEmpty
           ? _buildEmptyState()
           : RefreshIndicator(
               onRefresh: _syncAll,
-              color: Colors.pinkAccent,
               child: ListView.separated(
-                padding: const EdgeInsets.all(12.0),
+                padding: const EdgeInsets.all(AppSpacing.md),
                 itemCount: _tags.length,
                 separatorBuilder: (_, _) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
@@ -362,7 +361,6 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                   );
 
                   return Card(
-                    color: const Color(0xFF1E1E1E),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                       side: BorderSide(
@@ -491,35 +489,14 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.stars_outlined, size: 80, color: Colors.pink.shade200),
-            const SizedBox(height: 16),
-            const Text(
-              '購読中のタグはありません',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'イラスト・小説の詳細画面でタグを長押しすると、\nこの端末内（ローカル）に購読タグとして保存できます。\nタップでそのタグの検索ができます。',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.grey.shade400,
-                fontSize: 13,
-                height: 1.5,
-              ),
-            ),
-          ],
-        ),
-      ),
+    return const AppStateView(
+      type: AppStateViewType.empty,
+      icon: Icons.stars_outlined,
+      title: '購読中のタグはありません',
+      message:
+          'イラスト・小説の詳細画面でタグを長押しすると、\n'
+          'この端末内（ローカル）に購読タグとして保存できます。\n'
+          'タップでそのタグの検索ができます。',
     );
   }
 

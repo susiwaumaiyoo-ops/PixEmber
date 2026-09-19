@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../services/database_service.dart';
 import '../services/pixiv_api_service.dart';
+import '../theme/app_spacing.dart';
 import '../utils/datetime_format.dart';
+import '../widgets/design_system/app_state_view.dart';
 import '../widgets/pixiv_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'novel_detail_screen.dart';
@@ -216,9 +218,7 @@ class _ReadLaterScreenState extends State<ReadLaterScreen>
         ],
       ),
       body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Colors.pinkAccent),
-            )
+          ? const AppStateView(type: AppStateViewType.loading)
           : TabBarView(
               controller: _tabController,
               children: _tabs.map((status) => _buildList(status)).toList(),
@@ -230,13 +230,11 @@ class _ReadLaterScreenState extends State<ReadLaterScreen>
     final items = _visibleItems(status);
     if (items.isEmpty) return _buildEmptyState(status);
     return RefreshIndicator(
-      color: Colors.pinkAccent,
       onRefresh: () => _load(status),
       child: ListView.separated(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
         itemCount: items.length,
-        separatorBuilder: (_, index) =>
-            const Divider(height: 1, color: Colors.grey),
+        separatorBuilder: (_, index) => const Divider(height: 1),
         itemBuilder: (context, index) => _buildItemTile(items[index]),
       ),
     );
@@ -250,15 +248,10 @@ class _ReadLaterScreenState extends State<ReadLaterScreen>
         : status == 2
         ? '読了した作品'
         : '作品';
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.menu_book, size: 48, color: Colors.grey),
-          const SizedBox(height: 12),
-          Text('$label はまだありません', style: const TextStyle(color: Colors.grey)),
-        ],
-      ),
+    return AppStateView(
+      type: AppStateViewType.empty,
+      icon: Icons.menu_book,
+      title: '$label はまだありません',
     );
   }
 
