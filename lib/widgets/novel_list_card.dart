@@ -197,10 +197,10 @@ class NovelListCard extends StatelessWidget {
       children.add(
         Row(
           children: [
-            const Icon(
+            Icon(
               Icons.collections_bookmark,
               size: 13,
-              color: Colors.blueAccent,
+              color: colorScheme.secondary,
             ),
             const SizedBox(width: 4),
             Expanded(
