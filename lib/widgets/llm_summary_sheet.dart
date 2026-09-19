@@ -13,6 +13,7 @@ import '../services/local_llm_service.dart';
 import '../services/llm_model_preset.dart' show LlmModelChoice;
 import '../services/llm_summary_cache_service.dart';
 import '../services/llm_summary_service.dart';
+import '../theme/app_spacing.dart';
 
 /// 小説のAI要約を表示するボトムシート（実験機能）。
 ///
@@ -485,7 +486,8 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
         _stageText = 'PCサーバーとの通信を再試行しています…（PC側の生成は継続します）';
       });
       _companionBackoff = Duration(
-          seconds: (_companionBackoff.inSeconds * 2).clamp(4, 30));
+        seconds: (_companionBackoff.inSeconds * 2).clamp(4, 30),
+      );
       _scheduleCompanionPoll();
     }
   }
@@ -637,20 +639,21 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
 
   /// M5: 別モデル選択シート → 選択で再生成。
   Future<void> _showModelPicker() async {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     final picked = await showModalBottomSheet<LlmModelChoice>(
       context: context,
-      backgroundColor: const Color(0xFF1C1C1C),
+      backgroundColor: colorScheme.surfaceContainerHigh,
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
               child: Text(
                 '別のモデルで再生成',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
+                style: textTheme.titleLarge?.copyWith(
+                  color: colorScheme.onSurface,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -659,16 +662,20 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
               ListTile(
                 title: Text(
                   m.label,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface,
+                  ),
                 ),
                 subtitle: Text(
                   p.basename(m.path),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white38, fontSize: 11),
+                  style: textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 trailing: m.path == _activeModelPath
-                    ? const Icon(Icons.check, color: Colors.pinkAccent)
+                    ? Icon(Icons.check, color: colorScheme.primary)
                     : null,
                 onTap: () => Navigator.of(context).pop(m),
               ),
@@ -689,80 +696,93 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     void closeSheet() => Navigator.of(context).pop();
     return Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.75,
       ),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1C1C1C),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHigh,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.sm,
+            ),
             child: Row(
               children: [
-                const Text(
+                Text(
                   '🤖 AI要約（実験）',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              if (_companionJobId != 0) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
+                  style: textTheme.titleLarge?.copyWith(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.bold,
                   ),
-                  decoration: BoxDecoration(
-                    color: Colors.tealAccent.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: Colors.tealAccent.withValues(alpha: 0.5),
+                ),
+                if (_companionJobId != 0) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colorScheme.secondary.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: colorScheme.secondary.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: Text(
+                      'PCサーバー',
+                      style: textTheme.bodySmall?.copyWith(
+                        color: colorScheme.secondary,
+                      ),
                     ),
                   ),
-                  child: const Text(
-                    'PCサーバー',
-                    style: TextStyle(color: Colors.tealAccent, fontSize: 11),
-                  ),
-                ),
-              ],
-              const Spacer(),
+                ],
+                const Spacer(),
                 IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white70),
+                  icon: Icon(Icons.close, color: colorScheme.onSurfaceVariant),
                   tooltip: '閉じる',
                   onPressed: closeSheet,
                 ),
               ],
             ),
           ),
-          const Divider(height: 1, color: Colors.white12),
+          Divider(height: 1, color: colorScheme.outlineVariant),
           Flexible(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(AppSpacing.lg),
               child: _buildBody(),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.xs,
+              AppSpacing.lg,
+              AppSpacing.md,
+            ),
             child: Wrap(
               alignment: WrapAlignment.end,
-              spacing: 8,
-              runSpacing: 8,
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
               children: [
                 if (_phase == _SheetPhase.loading ||
                     _phase == _SheetPhase.generating)
                   OutlinedButton(
                     onPressed: _cancel,
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.redAccent,
-                      side: const BorderSide(color: Colors.redAccent),
+                      foregroundColor: colorScheme.error,
+                      side: BorderSide(color: colorScheme.error),
                     ),
                     child: const Text('キャンセル'),
                   ),
@@ -772,8 +792,8 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
                     icon: const Icon(Icons.refresh, size: 16),
                     label: Text(_noteCancelled ? 'もう一度試す' : '再試行'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.pinkAccent,
-                      side: const BorderSide(color: Colors.pinkAccent),
+                      foregroundColor: colorScheme.primary,
+                      side: BorderSide(color: colorScheme.primary),
                     ),
                   ),
                 if (_phase == _SheetPhase.error &&
@@ -788,8 +808,8 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
                     icon: const Icon(Icons.phone_android, size: 16),
                     label: const Text('端末で生成する'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.tealAccent,
-                      side: const BorderSide(color: Colors.tealAccent),
+                      foregroundColor: colorScheme.secondary,
+                      side: BorderSide(color: colorScheme.secondary),
                     ),
                   ),
                 if (_phase == _SheetPhase.done) ...[
@@ -799,8 +819,8 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
                       icon: const Icon(Icons.swap_horiz, size: 16),
                       label: const Text('別モデルで再生成'),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white70,
-                        side: const BorderSide(color: Colors.white24),
+                        foregroundColor: colorScheme.onSurfaceVariant,
+                        side: BorderSide(color: colorScheme.outlineVariant),
                       ),
                     ),
                   OutlinedButton.icon(
@@ -808,8 +828,8 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
                     icon: const Icon(Icons.refresh, size: 16),
                     label: const Text('このモデルで再生成'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.pinkAccent,
-                      side: const BorderSide(color: Colors.pinkAccent),
+                      foregroundColor: colorScheme.primary,
+                      side: BorderSide(color: colorScheme.primary),
                     ),
                   ),
                 ],
@@ -822,37 +842,44 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
   }
 
   Widget _buildBody() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     if (_noteCancelled) {
-      return const Text(
+      return Text(
         '生成をキャンセルしました。',
-        style: TextStyle(color: Colors.white70, fontSize: 13),
+        style: textTheme.bodySmall?.copyWith(
+          color: colorScheme.onSurfaceVariant,
+        ),
       );
     }
     switch (_phase) {
       case _SheetPhase.loading:
         return Column(
           children: [
-            const SizedBox(
-              height: 32,
-              child: CircularProgressIndicator(color: Colors.pinkAccent),
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 32, child: CircularProgressIndicator()),
+            const SizedBox(height: AppSpacing.lg),
             Text(
               _stageText,
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
+              style: textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
             ),
             if (_waitingForAuto) ...[
-              const SizedBox(height: 8),
-              const Text(
+              const SizedBox(height: AppSpacing.sm),
+              Text(
                 '自動要約の処理終了を待っています',
-                style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
+                style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.tertiary,
+                ),
               ),
             ],
             if (_bodyMs != null) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: AppSpacing.xs),
               Text(
                 '本文の処理（${(_bodyMs! / 1000).toStringAsFixed(1)} 秒）',
-                style: const TextStyle(color: Colors.white38, fontSize: 11),
+                style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ],
@@ -866,28 +893,29 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
                 const SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.pinkAccent,
-                  ),
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 Text(
                   _chunking ? '全文解析中 ($_chunkCurrent/$_chunkTotal)…' : '生成中…',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  style: textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             _StreamTextBlock(text: _streamText),
           ],
         );
       case _SheetPhase.done:
         final result = _result;
         if (result == null) {
-          return const Text(
+          return Text(
             '結果がありません。',
-            style: TextStyle(color: Colors.white70, fontSize: 13),
+            style: textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           );
         }
         return _buildDone(result);
@@ -897,18 +925,13 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
           children: [
             Row(
               children: [
-                const Icon(
-                  Icons.error_outline,
-                  color: Colors.redAccent,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
+                Icon(Icons.error_outline, color: colorScheme.error, size: 18),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     _errorMessage ?? '生成に失敗しました。',
-                    style: const TextStyle(
-                      color: Colors.redAccent,
-                      fontSize: 13,
+                    style: textTheme.bodySmall?.copyWith(
+                      color: colorScheme.error,
                       height: 1.5,
                     ),
                   ),
@@ -916,7 +939,7 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
               ],
             ),
             if (_streamText.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               _StreamTextBlock(text: _streamText, muted: true),
             ],
           ],
@@ -925,21 +948,29 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
   }
 
   Widget _buildDone(LlmSummaryResult result) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildModelMeta(result),
         if (result.bodySourceNote != null)
           Padding(
-            padding: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
             child: Row(
               children: [
-                const Icon(Icons.article, size: 14, color: Colors.white54),
-                const SizedBox(width: 4),
+                Icon(
+                  Icons.article,
+                  size: 14,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: AppSpacing.xs),
                 Expanded(
                   child: Text(
                     result.bodySourceNote!,
-                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                    style: textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ],
@@ -948,27 +979,28 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
         if (result.copyWarning)
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(10),
-            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            margin: const EdgeInsets.only(bottom: AppSpacing.sm),
             decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.12),
+              color: colorScheme.tertiary.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
+              border: Border.all(
+                color: colorScheme.tertiary.withValues(alpha: 0.5),
+              ),
             ),
-            child: const Row(
+            child: Row(
               children: [
                 Icon(
                   Icons.warning_amber_rounded,
                   size: 16,
-                  color: Colors.orange,
+                  color: colorScheme.tertiary,
                 ),
-                SizedBox(width: 6),
+                const SizedBox(width: AppSpacing.xs),
                 Expanded(
                   child: Text(
                     '作者紹介文・本文との重複の多い出力です（参考までに表示）。',
-                    style: TextStyle(
-                      color: Colors.orange,
-                      fontSize: 11,
+                    style: textTheme.bodySmall?.copyWith(
+                      color: colorScheme.tertiary,
                       height: 1.4,
                     ),
                   ),
@@ -978,74 +1010,65 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
           ),
         if ((result.thinking ?? '').isNotEmpty) ...[
           _buildThinking(result.thinking!),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
         ],
         _SectionLabel(label: 'あらすじ'),
         Text(
           result.synopsis,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 13,
-            height: 1.6,
-          ),
+          style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurface),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: AppSpacing.md),
         _SectionLabel(label: '紹介'),
         Text(
           result.intro,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 13,
-            height: 1.6,
-          ),
+          style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurface),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: AppSpacing.md),
         _SectionLabel(label: 'タグ候補'),
-        const SizedBox(height: 6),
+        const SizedBox(height: AppSpacing.xs),
         Wrap(
-          spacing: 6,
-          runSpacing: 6,
+          spacing: AppSpacing.xs,
+          runSpacing: AppSpacing.xs,
           children: [
             for (final tag in result.tagSuggestions)
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
+                  horizontal: AppSpacing.sm,
+                  vertical: AppSpacing.xs,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.pinkAccent.withValues(alpha: 0.15),
+                  color: colorScheme.primary.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: Colors.pinkAccent.withValues(alpha: 0.4),
+                    color: colorScheme.primary.withValues(alpha: 0.4),
                   ),
                 ),
                 child: Text(
                   tag,
-                  style: const TextStyle(
-                    color: Colors.pinkAccent,
-                    fontSize: 12,
+                  style: textTheme.bodySmall?.copyWith(
+                    color: colorScheme.primary,
                   ),
                 ),
               ),
           ],
         ),
         if (widget.description.trim().isNotEmpty) ...[
-          const SizedBox(height: 14),
+          const SizedBox(height: AppSpacing.md),
           _SectionLabel(label: '作者による紹介（AI生成に使用せず）'),
-          const SizedBox(height: 6),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             widget.description.trim(),
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              height: 1.5,
+            style: textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
             ),
           ),
         ],
-        const SizedBox(height: 14),
+        const SizedBox(height: AppSpacing.md),
         Text(
           '※ 実験機能です。内容の正確性は保証されません。',
-          style: TextStyle(color: Colors.grey[500], fontSize: 11),
+          style: textTheme.bodySmall?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
         ),
       ],
     );
@@ -1053,27 +1076,36 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
 
   /// モデルが吐いた思考プロセス（本文から分離）を折りたたみ表示する。
   Widget _buildThinking(String thinking) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: colorScheme.outlineVariant),
       ),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          iconColor: Colors.white54,
-          collapsedIconColor: Colors.white54,
-          title: const Row(
+          tilePadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          childrenPadding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            0,
+            AppSpacing.md,
+            AppSpacing.md,
+          ),
+          iconColor: colorScheme.onSurfaceVariant,
+          collapsedIconColor: colorScheme.onSurfaceVariant,
+          title: Row(
             children: [
-              Icon(Icons.psychology_alt, size: 16, color: Colors.amberAccent),
-              SizedBox(width: 6),
+              Icon(Icons.psychology_alt, size: 16, color: colorScheme.tertiary),
+              const SizedBox(width: AppSpacing.xs),
               Text(
                 '思考プロセス',
-                style: TextStyle(color: Colors.amberAccent, fontSize: 13),
+                style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.tertiary,
+                ),
               ),
             ],
           ),
@@ -1082,10 +1114,8 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
               alignment: Alignment.centerLeft,
               child: SelectableText(
                 thinking,
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 12,
-                  height: 1.5,
+                style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
                 ),
               ),
             ),
@@ -1097,6 +1127,8 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
 
   /// M5: 生成メタ情報（モデル名・日時・所要時間・速度）。
   Widget _buildModelMeta(LlmSummaryResult result) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     final label = (result.modelLabel?.isNotEmpty ?? false)
         ? result.modelLabel!
         : p.basename(_activeModelPath);
@@ -1160,10 +1192,10 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
     ];
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -1179,18 +1211,16 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
                     width: 64,
                     child: Text(
                       k,
-                      style: const TextStyle(
-                        color: Colors.white38,
-                        fontSize: 11,
+                      style: textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ),
                   Expanded(
                     child: Text(
                       v,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 11,
+                      style: textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurface,
                       ),
                     ),
                   ),
@@ -1215,11 +1245,12 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     return Text(
       '【$label】',
-      style: const TextStyle(
-        color: Colors.pinkAccent,
-        fontSize: 12,
+      style: textTheme.bodySmall?.copyWith(
+        color: colorScheme.primary,
         fontWeight: FontWeight.bold,
       ),
     );
@@ -1234,19 +1265,19 @@ class _StreamTextBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: Colors.black54,
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(10),
       ),
       child: SelectableText(
         text.isEmpty ? '…' : text,
-        style: TextStyle(
-          color: muted ? Colors.white38 : Colors.white,
-          fontSize: 12,
-          height: 1.5,
+        style: textTheme.bodySmall?.copyWith(
+          color: muted ? colorScheme.onSurfaceVariant : colorScheme.onSurface,
         ),
       ),
     );
