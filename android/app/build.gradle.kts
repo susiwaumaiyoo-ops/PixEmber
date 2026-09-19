@@ -9,7 +9,9 @@ android {
     // flutter_plugin_android_lifecycle 2.0.35（file_picker 8.1.2 の依存）が
     // compileSdk 36 以上を要求するため固定（flutter.compileSdkVersion は 35）。
     compileSdk = 36
-    ndkVersion = flutter.ndkVersion
+    // ローカルLLMネイティブビルド（libnative_llm.so）は flutter_llm 検証済みの
+    // NDK リビジョンに固定（llama.cpp プリビルト .so と ABI 互換を担保）。
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
@@ -25,6 +27,31 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // 検証済み llama.cpp .so は arm64-v8a のみ同梱（他 ABI 未ビルド）。
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
+        externalNativeBuild {
+            cmake {
+                arguments += listOf("-DANDROID_STL=none", "-DANDROID_ARM_NEON=ON")
+                cppFlags.clear()
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // FastRPC skel と ggml_backend_load_all_from_path は
+            // APK 圧縮状態では動作しない。実ファイル展開が必須。
+            useLegacyPackaging = true
+        }
     }
 
     buildTypes {

@@ -17,11 +17,20 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- Android 13(API 33)以上: 通知表示権限（ダウンロード進捗通知用） -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- ローカルLLM推論中の画面保持は KeepScreenOn(wakelock_plus)で行う。
+         画面OFF時の推論継続に WAKE_LOCK を許可（PARTIAL_WAKE_LOCK 用途）。 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:label="PixEmber"
-        android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:name=".PixEmberApplication"
+        android:icon="@mipmap/ic_launcher"
+        android:extractNativeLibs="true">
+        <!-- Hexagon HTP(NPU) 用の FastRPC 実行基盤ライブラリ。
+             非搭載デバイスでもインストール可能 required=false を明示。 -->
+        <uses-native-library
+            android:name="libcdsprpc.so"
+            android:required="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -65,6 +74,12 @@
             android:foregroundServiceType="dataSync"
             android:exported="false"
             tools:node="merge" />
+
+        <!-- flutter_foreground_task の ForegroundService（自動要約 B2-4） -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
 
         <!-- ダウンロード進捗用通知チャネル -->
         <meta-data
