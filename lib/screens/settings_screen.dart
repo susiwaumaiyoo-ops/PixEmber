@@ -11,6 +11,8 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme/app_spacing.dart';
+import '../widgets/design_system/app_panel.dart';
+import '../widgets/design_system/app_section_header.dart';
 import '../services/auto_summary_bridge_controller.dart';
 import '../services/auto_summary_controller.dart';
 import '../services/auto_summary_settings.dart';
@@ -463,56 +465,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
       (ThemeMode.light, 'ライト', Icons.light_mode_outlined),
       (ThemeMode.dark, 'ダーク', Icons.dark_mode_outlined),
     ];
-    return Container(
+    return AppPanel(
       margin: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
         vertical: AppSpacing.sm,
       ),
-      width: double.infinity,
-      child: Material(
-        color: colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.lg,
-            vertical: AppSpacing.md - 2,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.md,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('アプリテーマ', style: theme.textTheme.titleSmall),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'アプリ全体の色調を切り替えます。',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: AppSpacing.sm),
+          Wrap(
+            spacing: AppSpacing.sm,
             children: [
-              Text('アプリテーマ', style: theme.textTheme.titleSmall),
-              const SizedBox(height: 2),
-              Text(
-                'アプリ全体の色調を切り替えます。',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Wrap(
-                spacing: AppSpacing.sm,
-                children: [
-                  for (final (mode, label, icon) in modes)
-                    ChoiceChip(
-                      avatar: Icon(icon, size: 18),
-                      label: Text(
-                        label,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: _appThemeMode == mode
-                              ? colorScheme.onPrimary
-                              : colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      selected: _appThemeMode == mode,
-                      selectedColor: colorScheme.primary,
-                      backgroundColor: colorScheme.surfaceContainerHighest,
-                      onSelected: (_) => _setAppThemeMode(mode),
+              for (final (mode, label, icon) in modes)
+                ChoiceChip(
+                  avatar: Icon(icon, size: 18),
+                  label: Text(
+                    label,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: _appThemeMode == mode
+                          ? colorScheme.onPrimary
+                          : colorScheme.onSurfaceVariant,
                     ),
-                ],
-              ),
+                  ),
+                  selected: _appThemeMode == mode,
+                  selectedColor: colorScheme.primary,
+                  backgroundColor: colorScheme.surfaceContainerHighest,
+                  onSelected: (_) => _setAppThemeMode(mode),
+                ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }
@@ -525,97 +520,90 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _llmRuntimeCard() {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    return Container(
+    return AppPanel(
       margin: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-      width: double.infinity,
-      child: Material(
-        color: colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.lg,
-            vertical: AppSpacing.md - 2,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.md,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('推論バックエンド', style: theme.textTheme.titleSmall),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            '自動は NPU（Hexagon）→ GPU（OpenCL）→ CPU の順で検出します。'
+            '非対応環境は自動で CPU に戻ります。',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: AppSpacing.sm),
+          Wrap(
+            spacing: AppSpacing.sm,
             children: [
-              Text('推論バックエンド', style: theme.textTheme.titleSmall),
-              const SizedBox(height: 2),
-              Text(
-                '自動は NPU（Hexagon）→ GPU（OpenCL）→ CPU の順で検出します。'
-                '非対応環境は自動で CPU に戻ります。',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Wrap(
-                spacing: AppSpacing.sm,
-                children: [
-                  for (final (value, label) in const [
-                    (LlmBackend.auto, '自動'),
-                    (LlmBackend.npu, 'NPU（Hexagon）'),
-                    (LlmBackend.gpu, 'GPU（OpenCL）'),
-                    (LlmBackend.cpu, 'CPU'),
-                  ])
-                    ChoiceChip(
-                      label: Text(
-                        label,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: _llmRuntime.backend == value
-                              ? colorScheme.onPrimary
-                              : colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      selected: _llmRuntime.backend == value,
-                      selectedColor: colorScheme.primary,
-                      backgroundColor: colorScheme.surfaceContainerHighest,
-                      onSelected: (_) => _setLlmBackend(value),
+              for (final (value, label) in const [
+                (LlmBackend.auto, '自動'),
+                (LlmBackend.npu, 'NPU（Hexagon）'),
+                (LlmBackend.gpu, 'GPU（OpenCL）'),
+                (LlmBackend.cpu, 'CPU'),
+              ])
+                ChoiceChip(
+                  label: Text(
+                    label,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: _llmRuntime.backend == value
+                          ? colorScheme.onPrimary
+                          : colorScheme.onSurfaceVariant,
                     ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.sm - 2),
-              Divider(color: colorScheme.outlineVariant, height: 16),
-              Text('CPU スレッド数（要求値）', style: theme.textTheme.titleSmall),
-              const SizedBox(height: 2),
-              Text(
-                '比較用の候補です（自動 = 現状の基準・1/2 は診断用）。'
-                '実効値は取得できないため要求値のみ表示します。',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
+                  ),
+                  selected: _llmRuntime.backend == value,
+                  selectedColor: colorScheme.primary,
+                  backgroundColor: colorScheme.surfaceContainerHighest,
+                  onSelected: (_) => _setLlmBackend(value),
                 ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Wrap(
-                spacing: AppSpacing.sm,
-                children: [
-                  for (final t in LlmRuntimeSettings.cpuThreadChoices)
-                    ChoiceChip(
-                      label: Text(
-                        t == 0 ? '自動' : '$t',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: _llmRuntime.cpuThreads == t
-                              ? colorScheme.onPrimary
-                              : colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      selected: _llmRuntime.cpuThreads == t,
-                      selectedColor: colorScheme.primary,
-                      backgroundColor: colorScheme.surfaceContainerHighest,
-                      onSelected: (_) => _setLlmCpuThreads(t),
-                    ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.sm - 2),
-              Text(
-                '次回のモデルロードから反映（要約シート再表示で再ロードされます）。',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
             ],
           ),
-        ),
+          const SizedBox(height: AppSpacing.sm - 2),
+          Divider(color: colorScheme.outlineVariant, height: 16),
+          Text('CPU スレッド数（要求値）', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 2),
+          Text(
+            '比較用の候補です（自動 = 現状の基準・1/2 は診断用）。'
+            '実効値は取得できないため要求値のみ表示します。',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Wrap(
+            spacing: AppSpacing.sm,
+            children: [
+              for (final t in LlmRuntimeSettings.cpuThreadChoices)
+                ChoiceChip(
+                  label: Text(
+                    t == 0 ? '自動' : '$t',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: _llmRuntime.cpuThreads == t
+                          ? colorScheme.onPrimary
+                          : colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  selected: _llmRuntime.cpuThreads == t,
+                  selectedColor: colorScheme.primary,
+                  backgroundColor: colorScheme.surfaceContainerHighest,
+                  onSelected: (_) => _setLlmCpuThreads(t),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm - 2),
+          Text(
+            '次回のモデルロードから反映（要約シート再表示で再ロードされます）。',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -625,147 +613,136 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final s = _autoSummary;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    return Container(
+    return AppPanel(
       margin: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
         vertical: AppSpacing.sm,
       ),
-      width: double.infinity,
-      child: Material(
-        color: colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.lg,
-            vertical: AppSpacing.md - 2,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.md,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text('自動要約（実験）', style: theme.textTheme.titleSmall),
-                  ),
-                  Switch(
-                    value: s.enabled,
-                    activeThumbColor: colorScheme.primary,
-                    onChanged: (v) => _setAutoSummary(s.copyWith(enabled: v)),
-                  ),
-                ],
+              Expanded(
+                child: Text('自動要約（実験）', style: theme.textTheme.titleSmall),
               ),
-              Text(
-                '登録タグの小説を、充電中・WiFi時にバックグラウンドで'
-                '自動要約しキャッシュへ蓄積します。'
-                'バックグラウンド実行は準備中です。',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              _autoSummaryStatusRow(),
-              const SizedBox(height: AppSpacing.xs),
-              Text('対象タグ', style: theme.textTheme.bodyMedium),
-              const SizedBox(height: AppSpacing.xs),
-              Wrap(
-                spacing: AppSpacing.sm - 2,
-                runSpacing: AppSpacing.sm - 2,
-                children: [
-                  for (final t in s.tags)
-                    InputChip(
-                      label: Text(
-                        t,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      backgroundColor: colorScheme.surfaceContainerHighest,
-                      onDeleted: () => _removeAutoSummaryTag(t),
-                      deleteIconColor: colorScheme.onSurfaceVariant,
-                    ),
-                  ActionChip(
-                    avatar: Icon(
-                      Icons.add,
-                      color: colorScheme.primary,
-                      size: 18,
-                    ),
-                    label: Text(
-                      '追加',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.primary,
-                      ),
-                    ),
-                    backgroundColor: colorScheme.surfaceContainerHighest,
-                    onPressed: _addAutoSummaryTag,
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Divider(color: colorScheme.outlineVariant, height: 16),
-              _autoSummaryToggleRow(
-                '充電中のみ実行',
-                s.chargeOnly,
-                (v) => s.copyWith(chargeOnly: v),
-              ),
-              _autoSummaryToggleRow(
-                'WiFi接続時のみ実行',
-                s.wifiOnly,
-                (v) => s.copyWith(wifiOnly: v),
-              ),
-              _autoSummaryToggleRow(
-                '推論中 画面ON維持（高速）',
-                s.keepScreenOn,
-                (v) => s.copyWith(keepScreenOn: v),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              _autoSummaryChipRow<int>(
-                label: '1セッション最大件数',
-                choices: AutoSummarySettings.maxChoices,
-                selected: s.maxPerSession,
-                display: (v) => '$v件',
-                onSelect: (v) => s.copyWith(maxPerSession: v),
-              ),
-              _autoSummaryChipRow<int>(
-                label: 'クールダウン',
-                choices: AutoSummarySettings.cooldownChoices,
-                selected: s.cooldownSeconds,
-                display: (v) => '$v秒',
-                onSelect: (v) => s.copyWith(cooldownSeconds: v),
-              ),
-              _autoSummaryChipRow<double>(
-                label: '温度閾値',
-                choices: AutoSummarySettings.tempChoices,
-                selected: s.temperatureLimitCelsius,
-                display: (v) => '${v.toInt()}℃',
-                onSelect: (v) => s.copyWith(temperatureLimitCelsius: v),
-              ),
-              const SizedBox(height: AppSpacing.sm - 2),
-              Text(
-                '最終実行: ${s.lastRunAtMillis == 0 ? '未実行' : _fmtEpoch(s.lastRunAtMillis)}'
-                '　累計処理: ${s.totalProcessed}件',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm - 2),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _runAutoSummaryNow,
-                      icon: const Icon(Icons.play_arrow, size: 16),
-                      label: const Text('今すぐ実行'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: colorScheme.primary,
-                        side: BorderSide(color: colorScheme.primary),
-                      ),
-                    ),
-                  ),
-                ],
+              Switch(
+                value: s.enabled,
+                activeThumbColor: colorScheme.primary,
+                onChanged: (v) => _setAutoSummary(s.copyWith(enabled: v)),
               ),
             ],
           ),
-        ),
+          Text(
+            '登録タグの小説を、充電中・WiFi時にバックグラウンドで'
+            '自動要約しキャッシュへ蓄積します。'
+            'バックグラウンド実行は準備中です。',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          _autoSummaryStatusRow(),
+          const SizedBox(height: AppSpacing.xs),
+          Text('対象タグ', style: theme.textTheme.bodyMedium),
+          const SizedBox(height: AppSpacing.xs),
+          Wrap(
+            spacing: AppSpacing.sm - 2,
+            runSpacing: AppSpacing.sm - 2,
+            children: [
+              for (final t in s.tags)
+                InputChip(
+                  label: Text(
+                    t,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  backgroundColor: colorScheme.surfaceContainerHighest,
+                  onDeleted: () => _removeAutoSummaryTag(t),
+                  deleteIconColor: colorScheme.onSurfaceVariant,
+                ),
+              ActionChip(
+                avatar: Icon(Icons.add, color: colorScheme.primary, size: 18),
+                label: Text(
+                  '追加',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.primary,
+                  ),
+                ),
+                backgroundColor: colorScheme.surfaceContainerHighest,
+                onPressed: _addAutoSummaryTag,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Divider(color: colorScheme.outlineVariant, height: 16),
+          _autoSummaryToggleRow(
+            '充電中のみ実行',
+            s.chargeOnly,
+            (v) => s.copyWith(chargeOnly: v),
+          ),
+          _autoSummaryToggleRow(
+            'WiFi接続時のみ実行',
+            s.wifiOnly,
+            (v) => s.copyWith(wifiOnly: v),
+          ),
+          _autoSummaryToggleRow(
+            '推論中 画面ON維持（高速）',
+            s.keepScreenOn,
+            (v) => s.copyWith(keepScreenOn: v),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          _autoSummaryChipRow<int>(
+            label: '1セッション最大件数',
+            choices: AutoSummarySettings.maxChoices,
+            selected: s.maxPerSession,
+            display: (v) => '$v件',
+            onSelect: (v) => s.copyWith(maxPerSession: v),
+          ),
+          _autoSummaryChipRow<int>(
+            label: 'クールダウン',
+            choices: AutoSummarySettings.cooldownChoices,
+            selected: s.cooldownSeconds,
+            display: (v) => '$v秒',
+            onSelect: (v) => s.copyWith(cooldownSeconds: v),
+          ),
+          _autoSummaryChipRow<double>(
+            label: '温度閾値',
+            choices: AutoSummarySettings.tempChoices,
+            selected: s.temperatureLimitCelsius,
+            display: (v) => '${v.toInt()}℃',
+            onSelect: (v) => s.copyWith(temperatureLimitCelsius: v),
+          ),
+          const SizedBox(height: AppSpacing.sm - 2),
+          Text(
+            '最終実行: ${s.lastRunAtMillis == 0 ? '未実行' : _fmtEpoch(s.lastRunAtMillis)}'
+            '　累計処理: ${s.totalProcessed}件',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm - 2),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _runAutoSummaryNow,
+                  icon: const Icon(Icons.play_arrow, size: 16),
+                  label: const Text('今すぐ実行'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: colorScheme.primary,
+                    side: BorderSide(color: colorScheme.primary),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -911,20 +888,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _sectionHeader(String title) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    return Padding(
+    return AppSectionHeader(
+      title,
       padding: const EdgeInsets.only(
         left: AppSpacing.lg,
         top: AppSpacing.lg,
-        bottom: AppSpacing.sm - 2,
-      ),
-      child: Text(
-        title,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: colorScheme.onSurfaceVariant,
-          fontWeight: FontWeight.bold,
-        ),
+        bottom: AppSpacing.sm,
       ),
     );
   }

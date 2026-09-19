@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:pixiv_viewer/services/google_drive_service.dart';
+import 'package:pixiv_viewer/theme/app_spacing.dart';
 import 'package:pixiv_viewer/utils/datetime_format.dart';
+import 'package:pixiv_viewer/widgets/design_system/app_state_view.dart';
+import 'package:pixiv_viewer/widgets/design_system/app_status_banner.dart';
 
 /// Google Drive バックアップ管理画面。
 ///
@@ -270,28 +273,18 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
       body: Column(
         children: [
           // 上部: サインイン状態 + 今すぐバックアップ
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: colorScheme.surfaceContainer,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        loggedIn ? 'Google アカウント接続済み' : 'Google アカウント未連携',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      if (loggedIn && _drive.userEmail != null)
-                        Text(
-                          _drive.userEmail!,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                    ],
-                  ),
-                ),
-                ElevatedButton.icon(
+          AppStatusBanner(
+            type: loggedIn ? AppStatusType.success : AppStatusType.info,
+            title: loggedIn ? 'Google アカウント接続済み' : 'Google アカウント未連携',
+            message: loggedIn ? _drive.userEmail : null,
+            margin: const EdgeInsets.all(AppSpacing.lg),
+          ),
+          if (loggedIn)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
                   icon: _isProcessing
                       ? const SizedBox(
                           width: 16,
@@ -300,54 +293,26 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
                         )
                       : const Icon(Icons.backup),
                   label: const Text('今すぐバックアップ'),
-                  onPressed: (_isProcessing || !loggedIn)
-                      ? (_isProcessing ? null : () => _promptSignIn())
-                      : _createBackup,
+                  onPressed: _isProcessing ? null : _createBackup,
                 ),
-              ],
+              ),
             ),
-          ),
           if (_lastActionMessage != null)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: colorScheme.primary.withValues(alpha: 0.12),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.check_circle,
-                    color: colorScheme.primary,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(_lastActionMessage!)),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 16),
-                    onPressed: () => setState(() => _lastActionMessage = null),
-                  ),
-                ],
+            AppStatusBanner(
+              type: AppStatusType.success,
+              title: _lastActionMessage!,
+              margin: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.lg,
+                vertical: AppSpacing.sm,
               ),
             ),
           if (_errorMessage != null)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: colorScheme.error.withValues(alpha: 0.12),
-              child: Row(
-                children: [
-                  Icon(Icons.error, color: colorScheme.error, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _errorMessage!,
-                      style: TextStyle(color: colorScheme.error),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 16),
-                    onPressed: () => setState(() => _errorMessage = null),
-                  ),
-                ],
+            AppStatusBanner(
+              type: AppStatusType.error,
+              title: _errorMessage!,
+              margin: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.lg,
+                vertical: AppSpacing.sm,
               ),
             ),
           const Divider(height: 1),
@@ -359,29 +324,17 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
 
   Widget _buildBody(bool loggedIn, ColorScheme colorScheme) {
     if (!loggedIn) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.account_circle,
-              size: 64,
-              color: colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 16),
-            const Text('Google アカウントに連携してください'),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _isProcessing ? null : _promptSignIn,
-              child: const Text('Google アカウント連携'),
-            ),
-          ],
-        ),
+      return AppStateView(
+        type: AppStateViewType.empty,
+        icon: Icons.account_circle,
+        title: 'Google アカウントに連携してください',
+        actionLabel: 'Google アカウント連携',
+        onAction: _isProcessing ? null : _promptSignIn,
       );
     }
 
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppStateView(type: AppStateViewType.loading);
     }
 
     if (_backups.isEmpty) {
@@ -389,22 +342,13 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
         onRefresh: _loadBackups,
         child: ListView(
           children: [
-            SizedBox(height: 80),
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.cloud_off,
-                    size: 64,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                  SizedBox(height: 16),
-                  Text('バックアップがまだありません'),
-                  SizedBox(height: 8),
-                  Text('上部の「今すぐバックアップ」から作成できます'),
-                ],
-              ),
+            const SizedBox(height: 80),
+            AppStateView(
+              type: AppStateViewType.empty,
+              icon: Icons.cloud_off,
+              title: 'バックアップがまだありません',
+              message: '上部の「今すぐバックアップ」から作成できます',
+              centered: false,
             ),
           ],
         ),

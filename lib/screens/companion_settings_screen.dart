@@ -8,6 +8,11 @@
 // - 保存済みサーバー生成結果の一覧（GET /summaries）。
 import 'package:flutter/material.dart';
 
+import '../theme/app_spacing.dart';
+import '../widgets/design_system/app_panel.dart';
+import '../widgets/design_system/app_section_header.dart';
+import '../widgets/design_system/app_state_view.dart';
+import '../widgets/design_system/app_status_banner.dart';
 import '../services/companion/companion_models.dart';
 import '../services/companion/companion_service.dart';
 import '../services/companion/companion_transport.dart';
@@ -269,41 +274,18 @@ class _CompanionSettingsScreenState extends State<CompanionSettingsScreen> {
         ],
       ),
       body: _initializing
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppStateView(type: AppStateViewType.loading)
           : ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(AppSpacing.lg),
               children: [
                 _linkBanner(),
                 if (_message != null)
-                  Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color:
-                          (_messageIsError
-                                  ? colorScheme.error
-                                  : colorScheme.primary)
-                              .withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color:
-                            (_messageIsError
-                                    ? colorScheme.error
-                                    : colorScheme.primary)
-                                .withValues(alpha: 0.5),
-                      ),
-                    ),
-                    child: Text(
-                      _message!,
-                      style: TextStyle(
-                        color: _messageIsError
-                            ? colorScheme.error
-                            : colorScheme.primary,
-                        fontSize: 12,
-                        height: 1.5,
-                      ),
-                    ),
+                  AppStatusBanner(
+                    type: _messageIsError
+                        ? AppStatusType.error
+                        : AppStatusType.success,
+                    title: _message!,
+                    margin: const EdgeInsets.only(bottom: AppSpacing.md),
                   ),
                 if (!_svc.isPaired) ...[
                   _pairingCard(),
@@ -362,39 +344,14 @@ class _CompanionSettingsScreenState extends State<CompanionSettingsScreen> {
     required List<Widget> children,
     String? subtitle,
   }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colorScheme.outlineVariant),
-      ),
+    return AppPanel(
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: TextStyle(
-              color: colorScheme.primary,
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: TextStyle(
-                color: colorScheme.onSurfaceVariant,
-                fontSize: 11,
-                height: 1.4,
-              ),
-            ),
-          ],
-          const SizedBox(height: 8),
+          AppSectionHeader(title, subtitle: subtitle),
+          const SizedBox(height: AppSpacing.sm),
           ...children,
         ],
       ),

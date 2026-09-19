@@ -10,6 +10,8 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_spacing.dart';
+import '../widgets/design_system/app_panel.dart';
+import '../widgets/design_system/app_section_header.dart';
 import '../services/auto_summary_controller.dart';
 import '../services/auto_summary_snapshot.dart';
 
@@ -701,33 +703,20 @@ class _Section extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm - 2,
+        vertical: AppSpacing.sm,
       ),
-      child: Material(
-        color: colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(12),
-        clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurface,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              child,
-            ],
-          ),
+      child: AppPanel(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AppSectionHeader(title),
+            const SizedBox(height: AppSpacing.sm),
+            child,
+          ],
         ),
       ),
     );
