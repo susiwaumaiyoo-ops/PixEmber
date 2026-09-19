@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../services/auto_summary_bridge_controller.dart';
+import '../services/companion/companion_models.dart';
+import '../services/companion/companion_service.dart';
+import '../services/companion/companion_transport.dart';
 import '../services/fgs_lifecycle_service.dart';
 import '../services/llm_run_arbiter.dart';
 import '../services/local_llm_service.dart';
@@ -30,6 +35,7 @@ class LlmSummarySheet extends StatefulWidget {
     this.availableModels = const <LlmModelChoice>[],
     this.serviceFactory,
     this.bridgeController,
+    this.companionService,
   });
 
   /// 使用する GGUF モデルの絶対パス（初期値。「別モデルで再生成」で更新）。
@@ -45,6 +51,10 @@ class LlmSummarySheet extends StatefulWidget {
   /// FGS ブリッジコントローラ（手動要約の要求・応答）。
   /// null なら内部で生成・破棄する。
   final AutoSummaryBridgeController? bridgeController;
+
+  /// PC Companion サービス（10-B1）。non-null かつペアリング済みなら
+  /// PCサーバー経由で生成する（serviceFactory 指定時を除く・ローカル挙動不変）。
+  final CompanionService? companionService;
 
   final String title;
 
@@ -102,8 +112,20 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
   String _requestId = '';
   bool _waitingForAuto = false;
 
+  /// 10-B1: PC Companion 経由ジョブの状態。
+  CompanionService? _companion;
+  Timer? _companionPoll;
+  int _companionJobId = 0;
+  Duration _companionBackoff = const Duration(seconds: 4);
+  bool _companionError = false;
+
+  /// 「端末で生成する」選択時（手動のみ・自動フォールバック禁止）。
+  bool _forceLocal = false;
+
   @override
   void dispose() {
+    // 10-B1: PCサーバーへのポーリングを停止（PC側の生成は継続する・キャンセル扱いしない）。
+    _companionPoll?.cancel();
     // 生成中・読み込み中でも確実に破棄（dispose 後の setState は起きない）。
     _service?.dispose();
     if (_ownsBridge) {
@@ -128,12 +150,27 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
       _regenerations = 0;
       _waitingForAuto = false;
       _stageText = '本文を処理中…';
+      _companionJobId = 0;
+      _companionError = false;
     });
-    // B: 本文解決の計測開始。
     final bodyWatch = Stopwatch()..start();
     // テスト用ファクトリが指定されていればローカル実行（旧経路）。
     if (widget.serviceFactory != null) {
       await _startLocal(bodyWatch);
+      return;
+    }
+    // 10-B1: Companion ペアリング済みなら PCサーバー経由（「端末で生成する」選択時を除く）。
+    if (widget.companionService != null &&
+        !_forceLocal &&
+        widget.companionService!.isPaired) {
+      if (widget.workId == null) {
+        setState(() {
+          _phase = _SheetPhase.error;
+          _errorMessage = 'PCサーバーでの生成には作品IDが必要です。「端末で生成する」をご利用ください。';
+        });
+        return;
+      }
+      await _startViaCompanion();
       return;
     }
     // FGS 経由の実行。
@@ -364,6 +401,135 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
     }
   }
 
+  /// PC Companion サーバー経由の生成（10-B1・§4-B）。
+  ///
+  /// - 本文取得・生成はすべて PC 側で行う（端末の NPU/CPU は使わない）。
+  /// - ローカル推論への自動フォールバックは禁止。「端末で生成する」は手動のみ。
+  /// - ポーリングは画面表示中のみ。切断しても PC 側の生成は継続し、
+  ///   再接続後に job_id から状態を再取得できる（キャンセル扱いしない）。
+  Future<void> _startViaCompanion() async {
+    _companion = widget.companionService!;
+    try {
+      setState(() => _stageText = 'PCサーバーへジョブを送信中…');
+      // crid 冪等: 未完了 pending ジョブがあれば同じ crid で再送→同一 job へ再アタッチ。
+      final created = await _companion!.createJob(widget.workId!);
+      if (!mounted) return;
+      _companionJobId = created.jobId;
+      setState(() {
+        _stageText = 'PCサーバー: ${companionJobStageLabel(created.job.state)}';
+      });
+      _companionBackoff = const Duration(seconds: 4);
+      _scheduleCompanionPoll();
+    } on CompanionAuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _phase = _SheetPhase.error;
+        _companionError = true;
+        _errorMessage = e.isRevoked
+            ? 'PCサーバーの認証が失効しています。設定画面で再登録してください。'
+            : 'PCサーバーとの認証に失敗しました。設定画面を確認してください。';
+      });
+    } on CompanionCertException {
+      if (!mounted) return;
+      setState(() {
+        _phase = _SheetPhase.error;
+        _companionError = true;
+        _errorMessage = 'PCサーバーの証明書が登録時と一致しません。通信を拒否しました（設定画面で確認）。';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      final firstLine = e.toString().split('\n').first.trim();
+      setState(() {
+        _phase = _SheetPhase.error;
+        _companionError = true;
+        _errorMessage =
+            'PCサーバーへのジョブ送信に失敗しました: ${firstLine.length > 100 ? '${firstLine.substring(0, 100)}…' : firstLine}';
+      });
+    } finally {
+      _busy = false;
+    }
+  }
+
+  /// §4-C: 表示中のみ 3〜5s ポーリング。通信失敗時は backoff して再試行。
+  void _scheduleCompanionPoll() {
+    _companionPoll?.cancel();
+    _companionPoll = Timer(_companionBackoff, _pollCompanionJob);
+  }
+
+  Future<void> _pollCompanionJob() async {
+    final jobId = _companionJobId;
+    final svc = _companion;
+    if (jobId == 0 || svc == null || !mounted) return;
+    try {
+      final job = await svc.fetchJob(jobId);
+      if (!mounted) return;
+      setState(() {
+        _stageText =
+            'PCサーバー: ${companionJobStageLabel(job.state, done: job.chunksDone, total: job.chunksTotal)}';
+        if (job.state == 'mapping' && job.chunksTotal > 0) {
+          _chunkCurrent = job.chunksDone;
+          _chunkTotal = job.chunksTotal;
+        }
+      });
+      if (job.isTerminal) {
+        await _finishCompanionJob(job);
+        return;
+      }
+      // 通常時は backoff を基本間隔に戻す。
+      _companionBackoff = const Duration(seconds: 4);
+      _scheduleCompanionPoll();
+    } catch (e) {
+      // 通信断でも PC 側の生成は継続。キャンセル扱いせず backoff 再試行する。
+      if (!mounted) return;
+      setState(() {
+        _stageText = 'PCサーバーとの通信を再試行しています…（PC側の生成は継続します）';
+      });
+      _companionBackoff = Duration(
+          seconds: (_companionBackoff.inSeconds * 2).clamp(4, 30));
+      _scheduleCompanionPoll();
+    }
+  }
+
+  Future<void> _finishCompanionJob(CompanionJob job) async {
+    final svc = _companion;
+    if (svc == null) return;
+    // 終端ジョブの pending を掃除。
+    try {
+      await svc.settleJob(job);
+    } catch (_) {}
+    if (!mounted) return;
+    if (job.isCompleted && job.result != null) {
+      final r = job.result!;
+      // §5: 検証済み結果を server_summaries へ保存（llm_summaries とは別テーブル）。
+      try {
+        await svc.saveResult(r, job.jobId);
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() {
+        _phase = _SheetPhase.done;
+        _result = LlmSummaryResult(
+          synopsis: r.synopsis,
+          intro: r.spoilerFreeIntro,
+          tagSuggestions: r.suggestedTags,
+          copyWarning: r.copyWarning,
+          bodySourceNote: '生成元：PCサーバー（${r.modelId}）',
+          modelLabel: 'PCサーバー（${r.modelId}）',
+          generationMs: r.generationMs == 0 ? null : r.generationMs,
+          generatedAt: DateTime.tryParse(r.generatedAt),
+          processingMode: r.mode,
+        );
+      });
+      return;
+    }
+    setState(() {
+      _phase = _SheetPhase.error;
+      _companionError = true;
+      _errorMessage = job.state == 'cancelled'
+          ? 'PCサーバーでの生成をキャンセルしました。'
+          : 'PCサーバーでの生成に失敗しました: ${job.error ?? '原因不明'}';
+    });
+  }
+
   /// FGS 側からの手動要約イベント受信。
   void _onManualEvent(
     String requestId,
@@ -439,6 +605,15 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
   }
 
   void _cancel() {
+    // 10-B1: PCサーバージョブのキャンセル要求（明示 API のみ・切断≠キャンセルではない）。
+    final jobId = _companionJobId;
+    final svc = _companion;
+    if (jobId != 0 && svc != null) {
+      unawaited(svc.cancelJob(jobId));
+      // キャンセル要求後も終端状態までポーリングを継続。
+      _scheduleCompanionPoll();
+      return;
+    }
     if (_requestId.isNotEmpty && _bridge != null) {
       _bridge!.cancelManualSummary(_requestId);
     }
@@ -535,10 +710,30 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (_companionJobId != 0) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.tealAccent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.tealAccent.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  child: const Text(
+                    'PCサーバー',
+                    style: TextStyle(color: Colors.tealAccent, fontSize: 11),
                   ),
                 ),
-                const Spacer(),
+              ],
+              const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.close, color: Colors.white70),
                   tooltip: '閉じる',
@@ -579,6 +774,22 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.pinkAccent,
                       side: const BorderSide(color: Colors.pinkAccent),
+                    ),
+                  ),
+                if (_phase == _SheetPhase.error &&
+                    _companionError &&
+                    widget.serviceFactory == null &&
+                    widget.companionService != null)
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() => _forceLocal = true);
+                      _start();
+                    },
+                    icon: const Icon(Icons.phone_android, size: 16),
+                    label: const Text('端末で生成する'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.tealAccent,
+                      side: const BorderSide(color: Colors.tealAccent),
                     ),
                   ),
                 if (_phase == _SheetPhase.done) ...[
