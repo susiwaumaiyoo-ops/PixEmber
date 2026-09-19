@@ -289,5 +289,56 @@ void main() {
       final padding = tester.widget<Padding>(find.byType(Padding));
       expect(padding.padding, EdgeInsets.zero);
     });
+
+    // ---- Phase 16b-2d: a11y ガイドライン ----
+    for (final brightness2 in Brightness.values) {
+      final isDark2 = brightness2 == Brightness.dark;
+      final themeData2 = isDark2 ? AppTheme.darkTheme : AppTheme.lightTheme;
+
+      testWidgets('${brightness2.name} AppStatusBanner はコントラスト基準を満たす', (
+        tester,
+      ) async {
+        final handle = tester.ensureSemantics();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: themeData2,
+            home: Scaffold(
+              body: Column(
+                children: [
+                  for (final type in AppStatusType.values)
+                    AppStatusBanner(
+                      type: type,
+                      title: '${type.name} タイトル',
+                      message: '${type.name} の説明メッセージ',
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+        await expectLater(tester, meetsGuideline(textContrastGuideline));
+        handle.dispose();
+      });
+
+      testWidgets('${brightness2.name} AppStateView アクションはタップ領域基準を満たす', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: themeData2,
+            home: Scaffold(
+              body: AppStateView(
+                type: AppStateViewType.error,
+                title: 'エラー',
+                message: '再試行してください',
+                actionLabel: '再試行',
+                onAction: () {},
+              ),
+            ),
+          ),
+        );
+        await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      });
+    }
   });
 }

@@ -158,8 +158,11 @@ class AppTheme {
     onPrimaryContainer: Color(0xFF7E4123),
     // onSecondaryContainer: #6F7C5C*0.75 → 83.3→83(0x53), 93→93(0x5D), 69→69(0x45)
     onSecondaryContainer: Color(0xFF535D45),
-    // onTertiaryContainer: #A6782E*0.75 → 124.5→125(0x7D), 90→90(0x5A), 34.5→35(0x23)
-    onTertiaryContainer: Color(0xFF7D5A23),
+    // onTertiaryContainer: #A6782E*0.68 → 113(0x71), 82(0x52), 31(0x1F)
+    //   ※ 16b-2d: 0.75 倍（#7D5A23）だと tertiaryContainer とのコントラスト比が
+    //     4.41 となり WCAG AA(4.5) を下回る。0.68 倍まで濃くして 5.06 を確保。
+    //     warning バナー（AppStatusBanner）の本文色として使用。
+    onTertiaryContainer: Color(0xFF71521F),
     // onErrorContainer: #B3402F*0.75 → 134.3→134(0x86), 48→48(0x30), 35.3→35(0x23)
     onErrorContainer: Color(0xFF863023),
 

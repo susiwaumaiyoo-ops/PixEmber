@@ -64,6 +64,58 @@ void main() {
         expect(r, greaterThanOrEqualTo(4.5), reason: '$name $r');
       });
 
+      // 16b-2d: 画面常駐バナー（AppStatusBanner）等の「面色 × 本文」ペアは
+      //   WCAG AA(4.5) が必要。コンポーネントが実際に使うペアを検証する。
+      test('$name: secondaryContainer ペア（success バナー本文）', () {
+        expect(
+          _contrastRatio(
+            scheme.secondaryContainer,
+            scheme.onSecondaryContainer,
+          ),
+          greaterThanOrEqualTo(4.5),
+        );
+      });
+
+      test('$name: tertiaryContainer ペア（warning バナー本文）', () {
+        expect(
+          _contrastRatio(scheme.tertiaryContainer, scheme.onTertiaryContainer),
+          greaterThanOrEqualTo(4.5),
+          reason: 'light は onTertiaryContainer を 0.68 倍に濃くして達成',
+        );
+      });
+
+      test('$name: errorContainer ペア（error バナー本文）', () {
+        expect(
+          _contrastRatio(scheme.errorContainer, scheme.onErrorContainer),
+          greaterThanOrEqualTo(4.5),
+        );
+        // アイコン等の装飾色は large-text の AA(3.0) を下回らないこと。
+        expect(
+          _contrastRatio(scheme.errorContainer, scheme.error),
+          greaterThanOrEqualTo(3.0),
+        );
+      });
+
+      // 【既知の例外・16b-2d で発見・理由を記録】
+      // アクセント地 × 白文字（FilledButton の label・選択中 Chip 等）は
+      // light で secondary 4.46 / tertiary 3.93 となり AA(4.5) に届かない。
+      // primary / error は達成。16b-2 のどのコンポーネント本文もこのペアを
+      // 使わないため、本フェーズ（繰り返し表示パターンの共通化）では
+      // パレット変更を見送り、16a 系パレット見直しの課題として記録する。
+      // 回帰の床は 3.0（AA large-text / グラフィック最低値）とする。
+      test('$name: アクセント × onSecondary/onTertiary（既知の例外）', () {
+        expect(
+          _contrastRatio(scheme.secondary, scheme.onSecondary),
+          greaterThanOrEqualTo(3.0),
+          reason: '16b-2d 計測: light 4.46 / dark 6.48。AA まであと 0.05。',
+        );
+        expect(
+          _contrastRatio(scheme.tertiary, scheme.onTertiary),
+          greaterThanOrEqualTo(3.0),
+          reason: '16b-2d 計測: light 3.93 / dark 7.30。',
+        );
+      });
+
       test('$name: error/onError', () {
         final r = _contrastRatio(scheme.error, scheme.onError);
         expect(r, greaterThanOrEqualTo(4.5), reason: '$name $r');
