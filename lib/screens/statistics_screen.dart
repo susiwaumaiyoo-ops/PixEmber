@@ -6,6 +6,7 @@ import '../services/dormant_tags_service.dart';
 import '../services/reading_speed_service.dart';
 import '../services/reading_trends_service.dart';
 import '../services/usage_tracking_service.dart';
+import '../theme/app_spacing.dart';
 import '../utils/datetime_format.dart';
 
 /// 日別閲覧数の1要素。
@@ -221,6 +222,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   // 最近読んでいないタグ（Phase E2）
   List<DormantTagInfo> _staleTags = const [];
 
+  ThemeData get _theme => Theme.of(context);
+  ColorScheme get _colorScheme => _theme.colorScheme;
+
   @override
   void initState() {
     super.initState();
@@ -299,7 +303,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('閲覧統計'),
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: _colorScheme.surface,
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_outline),
@@ -315,8 +319,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           : _data == null ||
                 (_data!.totalCount == 0 &&
                     (_usage == null || _usage!.totalSeconds == 0))
-          ? const Center(
-              child: Text('閲覧履歴がありません', style: TextStyle(color: Colors.grey)),
+          ? Center(
+              child: Text(
+                '閲覧履歴がありません',
+                style: _theme.textTheme.bodyLarge?.copyWith(
+                  color: _colorScheme.onSurfaceVariant,
+                ),
+              ),
             )
           : RefreshIndicator(onRefresh: _load, child: _buildContent()),
     );
@@ -326,21 +335,23 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     // 長いエラーメッセージ（スタックトレース等）でも溢れないよう、
     // 縦方向にスクロール可能にし、mainAxisSize: min で収まるサイズにする。
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(height: 40),
-          const Icon(Icons.error_outline, color: Colors.grey, size: 48),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.xxl),
+          Icon(Icons.error_outline, color: _colorScheme.error, size: 48),
+          const SizedBox(height: AppSpacing.lg),
           SelectableText(
             '統計の読み込みに失敗しました\n$_error',
-            style: const TextStyle(color: Colors.grey),
+            style: _theme.textTheme.bodyMedium?.copyWith(
+              color: _colorScheme.onSurfaceVariant,
+            ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           ElevatedButton(onPressed: _load, child: const Text('再読み込み')),
-          const SizedBox(height: 40),
+          const SizedBox(height: AppSpacing.xxl),
         ],
       ),
     );
@@ -349,28 +360,28 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   Widget _buildContent() {
     final data = _data!;
     return ListView(
-      padding: const EdgeInsets.all(12.0),
+      padding: const EdgeInsets.all(AppSpacing.md),
       children: [
         _buildSummaryCard(data),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         if (_usage != null) ...[
           _buildUsageCard(_usage!),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
         ],
         _buildReadingSpeedCard(),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         _buildDailyChartCard(data),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         _buildTrendsSection(),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         _buildRatioCard(data),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         _buildTagCard(data),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         _buildAuthorCard(data),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         _buildDormantTagsCard(),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
       ],
     );
   }
@@ -386,12 +397,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       _SummaryItem(label: '過去30日', value: data.last30DaysCount),
     ];
     return Card(
-      color: const Color(0xFF1E1E1E),
       child: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
           children: items
               .map(
                 (e) => SizedBox(
@@ -401,18 +411,15 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     children: [
                       Text(
                         e.value.toString(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 22,
+                        style: _theme.textTheme.headlineMedium?.copyWith(
+                          color: _colorScheme.onSurface,
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: AppSpacing.xs - 2),
                       Text(
                         e.label,
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
+                        style: _theme.textTheme.bodySmall?.copyWith(
+                          color: _colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -438,28 +445,35 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             Text(
               '現在の推定速度: 約${result.charsPerMinute.round()}字/分'
               '${result.isEstimated ? '（推定値: データ不足のため平均速度）' : ''}',
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              style: _theme.textTheme.bodySmall?.copyWith(
+                color: _colorScheme.onSurfaceVariant,
+              ),
             ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           if (points.length < 2)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
               child: Text(
                 'あと数冊読むと、ここに読書速度の推移が表示されます',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
+                style: _theme.textTheme.bodySmall?.copyWith(
+                  color: _colorScheme.onSurfaceVariant,
+                ),
               ),
             )
           else ...[
-            const Text(
+            Text(
               '週別の読書速度（字/分）',
-              style: TextStyle(color: Colors.white70, fontSize: 12),
+              style: _theme.textTheme.bodySmall?.copyWith(
+                color: _colorScheme.onSurfaceVariant,
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             SizedBox(
               height: 140,
               child: CustomPaint(
                 painter: _LineChartPainter(
                   points.map((p) => p.charsPerMinute).toList(),
+                  colorScheme: _colorScheme,
                 ),
                 child: Container(),
               ),
@@ -481,31 +495,40 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildUsageSummaryGrid(usage),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           Text(
             '過去30日: 小説 ${_formatDuration(usage.novel30DaysSeconds)} / '
             'イラスト ${_formatDuration(usage.illust30DaysSeconds)}'
             '（${usage.sessionCount30Days} セッション）',
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+            style: _theme.textTheme.bodySmall?.copyWith(
+              color: _colorScheme.onSurfaceVariant,
+            ),
           ),
-          const SizedBox(height: 12),
-          const Text(
+          const SizedBox(height: AppSpacing.md),
+          Text(
             '過去30日の日別利用時間（分）',
-            style: TextStyle(color: Colors.white70, fontSize: 12),
+            style: _theme.textTheme.bodySmall?.copyWith(
+              color: _colorScheme.onSurfaceVariant,
+            ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           SizedBox(
             height: 160,
             child: CustomPaint(
-              painter: _BarChartPainter(dailyMinutes),
+              painter: _BarChartPainter(
+                dailyMinutes,
+                colorScheme: _colorScheme,
+              ),
               child: Container(),
             ),
           ),
-          const SizedBox(height: 12),
-          const Text(
+          const SizedBox(height: AppSpacing.md),
+          Text(
             '※ 利用時間は端末内にのみ保存され、サーバー送信・'
             'Google Drive バックアップの対象外です。',
-            style: TextStyle(color: Colors.grey, fontSize: 11),
+            style: _theme.textTheme.bodySmall?.copyWith(
+              color: _colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -521,8 +544,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       ('過去30日', _formatDuration(usage.last30DaysSeconds)),
     ];
     return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.sm,
       children: entries
           .map(
             (e) => SizedBox(
@@ -532,16 +555,16 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 children: [
                   Text(
                     e.$2,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
+                    style: _theme.textTheme.titleLarge?.copyWith(
+                      color: _colorScheme.onSurface,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: AppSpacing.xs - 2),
                   Text(
                     e.$1,
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    style: _theme.textTheme.bodySmall?.copyWith(
+                      color: _colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -589,26 +612,23 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   Widget _buildDailyChartCard(StatisticsData data) {
     final values = data.dailyCounts.map((e) => e.count).toList();
     return Card(
-      color: const Color(0xFF1E1E1E),
       child: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               '過去30日の日別閲覧数',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
+              style: _theme.textTheme.titleMedium?.copyWith(
+                color: _colorScheme.onSurface,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             SizedBox(
               height: 160,
               child: CustomPaint(
-                painter: _BarChartPainter(values),
+                painter: _BarChartPainter(values, colorScheme: _colorScheme),
                 child: Container(),
               ),
             ),
@@ -624,18 +644,22 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     if (bundle == null) {
       return _sectionCard(
         title: '読書傾向',
-        body: const Text(
+        body: Text(
           '読み込み中…',
-          style: TextStyle(color: Colors.grey, fontSize: 12),
+          style: _theme.textTheme.bodySmall?.copyWith(
+            color: _colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
     if (!bundle.hasAnyData) {
       return _sectionCard(
         title: '読書傾向',
-        body: const Text(
+        body: Text(
           'あと数日使うとここに傾向が出ます',
-          style: TextStyle(color: Colors.grey, fontSize: 12),
+          style: _theme.textTheme.bodySmall?.copyWith(
+            color: _colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -645,8 +669,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Wrap(
-            spacing: 8,
-            runSpacing: 4,
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.xs,
             children: TrendPeriod.values
                 .map(
                   (p) => ChoiceChip(
@@ -657,50 +681,56 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 )
                 .toList(),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           _trendSubheading('曜日 × 時間帯（セッション数）'),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           _buildHeatmap(bundle.heatmap),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           _trendSubheading('スティーク'),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           _buildStreak(bundle.streak),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           _trendSubheading('今年'),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           _buildAnnualSummary(bundle.annualSummary),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           _trendSubheading('月別のトップタグ'),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           _buildTagEvolution(bundle.monthlyTags),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           _trendSubheading('作者集中度'),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           _buildAuthorDonut(bundle.authorConcentration),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           _trendSubheading('発掘率'),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           _buildDiscoveryRate(bundle.discoveryRate),
         ],
       ),
     );
   }
 
-  Widget _trendSubheading(String t) =>
-      Text(t, style: const TextStyle(color: Colors.white70, fontSize: 12));
+  Widget _trendSubheading(String t) => Text(
+    t,
+    style: _theme.textTheme.bodySmall?.copyWith(
+      color: _colorScheme.onSurfaceVariant,
+    ),
+  );
 
   Widget _buildHeatmap(List<int> heatmap) {
     final max = heatmap.isEmpty ? 0 : heatmap.reduce((a, b) => a > b ? a : b);
     if (max == 0) {
-      return const Text(
+      return Text(
         'この期間に利用記録がありません',
-        style: TextStyle(color: Colors.grey, fontSize: 12),
+        style: _theme.textTheme.bodySmall?.copyWith(
+          color: _colorScheme.onSurfaceVariant,
+        ),
       );
     }
     return SizedBox(
       height: 150,
       child: CustomPaint(
-        painter: _HeatmapPainter(heatmap),
+        painter: _HeatmapPainter(heatmap, colorScheme: _colorScheme),
         child: const SizedBox.expand(),
       ),
     );
@@ -711,9 +741,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final longest = (streak['longest'] as int?) ?? 0;
     final atRisk = (streak['atRisk'] as bool?) ?? false;
     if (longest == 0) {
-      return const Text(
+      return Text(
         'まだ連続記録がありません',
-        style: TextStyle(color: Colors.grey, fontSize: 12),
+        style: _theme.textTheme.bodySmall?.copyWith(
+          color: _colorScheme.onSurfaceVariant,
+        ),
       );
     }
     return Column(
@@ -721,23 +753,25 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       children: [
         Text(
           '🔥 $current日連続',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
+          style: _theme.textTheme.titleMedium?.copyWith(
+            color: _colorScheme.onSurface,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: AppSpacing.xs),
         Text(
           '最長: $longest日',
-          style: const TextStyle(color: Colors.white70, fontSize: 12),
+          style: _theme.textTheme.bodySmall?.copyWith(
+            color: _colorScheme.onSurfaceVariant,
+          ),
         ),
         if (atRisk)
-          const Padding(
-            padding: EdgeInsets.only(top: 4),
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.xs),
             child: Text(
               '⚠️ 今日の閲覧がまだ記録されていません（連続が途切れそう）',
-              style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
+              style: _theme.textTheme.bodySmall?.copyWith(
+                color: _colorScheme.tertiary,
+              ),
             ),
           ),
       ],
@@ -749,23 +783,29 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final chars = (annual['totalChars'] as int?) ?? 0;
     final seconds = (annual['totalSeconds'] as int?) ?? 0;
     if (works == 0) {
-      return const Text(
+      return Text(
         '今年はまだ小説を読んでいません',
-        style: TextStyle(color: Colors.grey, fontSize: 12),
+        style: _theme.textTheme.bodySmall?.copyWith(
+          color: _colorScheme.onSurfaceVariant,
+        ),
       );
     }
     return Text(
       '今年の読書: $works作品 / 約${formatCharCount(chars)} / '
       '${formatHoursMinutes(seconds)}',
-      style: const TextStyle(color: Colors.white, fontSize: 13),
+      style: _theme.textTheme.bodySmall?.copyWith(
+        color: _colorScheme.onSurfaceVariant,
+      ),
     );
   }
 
   Widget _buildTagEvolution(List<Map<String, dynamic>> months) {
     if (months.isEmpty) {
-      return const Text(
+      return Text(
         'この期間にタグ記録がありません',
-        style: TextStyle(color: Colors.grey, fontSize: 12),
+        style: _theme.textTheme.bodySmall?.copyWith(
+          color: _colorScheme.onSurfaceVariant,
+        ),
       );
     }
     return Column(
@@ -777,7 +817,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             .join(', ');
         final month = (m['month'] as int?) ?? 1;
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs - 2),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -785,13 +825,17 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 width: 56,
                 child: Text(
                   '${m['year']}-${month.toString().padLeft(2, '0')}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  style: _theme.textTheme.bodySmall?.copyWith(
+                    color: _colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
               Expanded(
                 child: Text(
                   label.isEmpty ? '-' : label,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  style: _theme.textTheme.bodySmall?.copyWith(
+                    color: _colorScheme.onSurface,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -807,18 +851,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final top = (author['top'] as List).cast<Map<String, dynamic>>();
     final totalAuthors = (author['totalAuthors'] as int?) ?? 0;
     if (totalAuthors == 0) {
-      return const Text(
+      return Text(
         'この期間に作者記録がありません',
-        style: TextStyle(color: Colors.grey, fontSize: 12),
+        style: _theme.textTheme.bodySmall?.copyWith(
+          color: _colorScheme.onSurfaceVariant,
+        ),
       );
     }
-    const palette = [
-      Colors.pinkAccent,
-      Colors.tealAccent,
-      Colors.orangeAccent,
-      Colors.lightBlueAccent,
-      Colors.purpleAccent,
-      Colors.grey,
+    final palette = [
+      _colorScheme.primary,
+      _colorScheme.secondary,
+      _colorScheme.tertiary,
+      _colorScheme.error,
+      _colorScheme.primaryContainer,
+      _colorScheme.outlineVariant,
     ];
     final segments = <_TrendDonutSegment>[];
     for (final e in top) {
@@ -847,29 +893,33 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             child: const SizedBox.expand(),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         Text(
           'TOP 占比 ${topShare.toStringAsFixed(0)}%（全 $totalAuthors 作者）',
-          style: const TextStyle(color: Colors.white70, fontSize: 12),
+          style: _theme.textTheme.bodySmall?.copyWith(
+            color: _colorScheme.onSurfaceVariant,
+          ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: AppSpacing.xs),
         Wrap(
-          spacing: 10,
-          runSpacing: 2,
+          spacing: AppSpacing.md - 2,
+          runSpacing: AppSpacing.xs - 2,
           children: [
             for (int i = 0; i < segments.length; i++)
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 8,
-                    height: 8,
+                    width: AppSpacing.sm,
+                    height: AppSpacing.sm,
                     color: palette[i % palette.length],
                   ),
-                  const SizedBox(width: 3),
+                  const SizedBox(width: AppSpacing.xs - 1),
                   Text(
                     segments[i].label,
-                    style: const TextStyle(color: Colors.white70, fontSize: 11),
+                    style: _theme.textTheme.bodySmall?.copyWith(
+                      color: _colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -884,14 +934,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final fresh = (d['newAuthors'] as int?) ?? 0;
     final rate = (d['rate'] as double?) ?? 0.0;
     if (total == 0) {
-      return const Text(
+      return Text(
         'この期間に作者記録がありません',
-        style: TextStyle(color: Colors.grey, fontSize: 12),
+        style: _theme.textTheme.bodySmall?.copyWith(
+          color: _colorScheme.onSurfaceVariant,
+        ),
       );
     }
     return Text(
       '発掘率 ${(rate * 100).toStringAsFixed(0)}%（$total作者中 $fresh が初見）',
-      style: const TextStyle(color: Colors.white, fontSize: 13),
+      style: _theme.textTheme.bodySmall?.copyWith(
+        color: _colorScheme.onSurfaceVariant,
+      ),
     );
   }
 
@@ -901,24 +955,29 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     if (total == 0) {
       return _sectionCard(
         title: 'イラスト / 小説の比率',
-        body: const Text('データがありません', style: TextStyle(color: Colors.grey)),
+        body: Text(
+          'データがありません',
+          style: _theme.textTheme.bodySmall?.copyWith(
+            color: _colorScheme.onSurfaceVariant,
+          ),
+        ),
       );
     }
     final segments = [
       _RatioSegment(
         label: 'イラスト',
         count: data.illustCount,
-        color: Colors.pinkAccent,
+        color: _colorScheme.primary,
       ),
       _RatioSegment(
         label: '小説',
         count: data.novelCount,
-        color: Colors.tealAccent,
+        color: _colorScheme.secondary,
       ),
       _RatioSegment(
         label: '不明',
         count: data.unknownTypeCount,
-        color: Colors.grey,
+        color: _colorScheme.outlineVariant,
       ),
     ];
     return _sectionCard(
@@ -939,23 +998,26 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 )
                 .toList(),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Wrap(
-            spacing: 12,
-            runSpacing: 4,
+            spacing: AppSpacing.md,
+            runSpacing: AppSpacing.xs,
             children: segments
                 .map(
                   (s) => Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(width: 10, height: 10, color: s.color),
-                      const SizedBox(width: 4),
+                      Container(
+                        width: AppSpacing.xs + AppSpacing.xs / 2,
+                        height: AppSpacing.xs + AppSpacing.xs / 2,
+                        color: s.color,
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
                       Text(
                         '${s.label}: ${s.count} '
                         '(${(s.count / total * 100).toStringAsFixed(1)}%)',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
+                        style: _theme.textTheme.bodySmall?.copyWith(
+                          color: _colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -973,7 +1035,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     if (data.topTags.isEmpty) {
       return _sectionCard(
         title: 'よく見たタグ TOP10',
-        body: const Text('タグ情報がありません', style: TextStyle(color: Colors.grey)),
+        body: Text(
+          'タグ情報がありません',
+          style: _theme.textTheme.bodySmall?.copyWith(
+            color: _colorScheme.onSurfaceVariant,
+          ),
+        ),
       );
     }
     return _buildRankCard('よく見たタグ TOP10', data.topTags);
@@ -984,7 +1051,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     if (data.topAuthors.isEmpty) {
       return _sectionCard(
         title: 'よく見た作者 TOP10',
-        body: const Text('作者情報がありません', style: TextStyle(color: Colors.grey)),
+        body: Text(
+          '作者情報がありません',
+          style: _theme.textTheme.bodySmall?.copyWith(
+            color: _colorScheme.onSurfaceVariant,
+          ),
+        ),
       );
     }
     return _buildRankCard('よく見た作者 TOP10', data.topAuthors);
@@ -998,15 +1070,15 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           final rank = entry.key + 1;
           final item = entry.value;
           return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4.0),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
             child: Row(
               children: [
                 SizedBox(
-                  width: 24,
+                  width: AppSpacing.md * 2,
                   child: Text(
                     '$rank',
-                    style: const TextStyle(
-                      color: Colors.pinkAccent,
+                    style: _theme.textTheme.bodySmall?.copyWith(
+                      color: _colorScheme.primary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -1014,14 +1086,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 Expanded(
                   child: Text(
                     item.label,
-                    style: const TextStyle(color: Colors.white),
+                    style: _theme.textTheme.bodyMedium?.copyWith(
+                      color: _colorScheme.onSurface,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Text(
                   '${item.count} 回',
-                  style: const TextStyle(color: Colors.grey),
+                  style: _theme.textTheme.bodySmall?.copyWith(
+                    color: _colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -1035,23 +1111,27 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   Widget _buildDormantTagsCard() {
     final tags = _staleTags;
     final body = tags.isEmpty
-        ? const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8.0),
+        ? Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
             child: Text(
               '最近読んでいないタグはまだありません',
-              style: TextStyle(color: Colors.grey),
+              style: _theme.textTheme.bodySmall?.copyWith(
+                color: _colorScheme.onSurfaceVariant,
+              ),
             ),
           )
         : Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
             children: [
               for (final t in tags)
                 ActionChip(
-                  backgroundColor: Colors.pinkAccent.withValues(alpha: 0.15),
+                  backgroundColor: _colorScheme.primary.withValues(alpha: 0.15),
                   label: Text(
                     '${t.tag}・${t.daysSinceLast}日ぶり',
-                    style: const TextStyle(color: Colors.pinkAccent),
+                    style: _theme.textTheme.bodySmall?.copyWith(
+                      color: _colorScheme.primary,
+                    ),
                   ),
                   onPressed: widget.onTagTap == null
                       ? null
@@ -1064,22 +1144,19 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   Widget _sectionCard({required String title, required Widget body}) {
     return Card(
-      color: const Color(0xFF1E1E1E),
       child: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
+              style: _theme.textTheme.titleMedium?.copyWith(
+                color: _colorScheme.onSurface,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             body,
           ],
         ),
@@ -1108,8 +1185,9 @@ class _RatioSegment {
 /// 日別閲覧数の簡易棒グラフ。`CustomPainter` で描画する。
 class _BarChartPainter extends CustomPainter {
   final List<int> values;
+  final ColorScheme colorScheme;
 
-  _BarChartPainter(this.values);
+  _BarChartPainter(this.values, {required this.colorScheme});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1121,14 +1199,15 @@ class _BarChartPainter extends CustomPainter {
     final barW = (size.width - gap * (count - 1)) / count;
 
     // ベースライン
-    final basePaint = Paint()..color = Colors.grey.withValues(alpha: 0.3);
+    final basePaint = Paint()
+      ..color = colorScheme.outlineVariant.withValues(alpha: 0.3);
     canvas.drawLine(
       Offset(0, size.height - 1),
       Offset(size.width, size.height - 1),
       basePaint,
     );
 
-    final paint = Paint()..color = Colors.pinkAccent;
+    final paint = Paint()..color = colorScheme.primary;
     for (int i = 0; i < count; i++) {
       final h = (values[i] / maxH) * (size.height - 4);
       final x = i * (barW + gap);
@@ -1150,8 +1229,9 @@ class _BarChartPainter extends CustomPainter {
 /// 週別読書速度の簡易折れ線グラフ（Phase A）。`CustomPainter` で描画する。
 class _LineChartPainter extends CustomPainter {
   final List<double> values;
+  final ColorScheme colorScheme;
 
-  _LineChartPainter(this.values);
+  _LineChartPainter(this.values, {required this.colorScheme});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1164,7 +1244,7 @@ class _LineChartPainter extends CustomPainter {
     canvas.drawLine(
       Offset(0, size.height - 1),
       Offset(size.width, size.height - 1),
-      Paint()..color = Colors.grey.withValues(alpha: 0.3),
+      Paint()..color = colorScheme.outlineVariant.withValues(alpha: 0.3),
     );
 
     final stepX = size.width / (values.length - 1);
@@ -1180,12 +1260,12 @@ class _LineChartPainter extends CustomPainter {
     canvas.drawPath(
       path,
       Paint()
-        ..color = Colors.pinkAccent
+        ..color = colorScheme.primary
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2
         ..strokeJoin = StrokeJoin.round,
     );
-    final dotPaint = Paint()..color = Colors.pinkAccent;
+    final dotPaint = Paint()..color = colorScheme.primary;
     for (int i = 0; i < values.length; i++) {
       canvas.drawCircle(pointAt(i), 2.5, dotPaint);
     }
@@ -1199,8 +1279,9 @@ class _LineChartPainter extends CustomPainter {
 /// `values` は長さ168の配列（weekday * 24 + hour）。
 class _HeatmapPainter extends CustomPainter {
   final List<int> values;
+  final ColorScheme colorScheme;
 
-  _HeatmapPainter(this.values);
+  _HeatmapPainter(this.values, {required this.colorScheme});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1217,7 +1298,7 @@ class _HeatmapPainter extends CustomPainter {
     for (int w = 0; w < 7; w++) {
       tp.text = TextSpan(
         text: names[w],
-        style: const TextStyle(color: Colors.grey, fontSize: 8),
+        style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 8),
       );
       tp.layout();
       tp.paint(
@@ -1236,7 +1317,8 @@ class _HeatmapPainter extends CustomPainter {
             Rect.fromLTWH(x, y, cellW, cellH),
             const Radius.circular(2),
           ),
-          Paint()..color = Colors.pinkAccent.withValues(alpha: 0.08 + 0.92 * t),
+          Paint()
+            ..color = colorScheme.primary.withValues(alpha: 0.08 + 0.92 * t),
         );
       }
     }
@@ -1244,7 +1326,7 @@ class _HeatmapPainter extends CustomPainter {
     for (final h in hours) {
       tp.text = TextSpan(
         text: '$h',
-        style: const TextStyle(color: Colors.grey, fontSize: 8),
+        style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 8),
       );
       tp.layout();
       tp.paint(
