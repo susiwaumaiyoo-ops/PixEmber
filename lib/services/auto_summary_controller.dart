@@ -26,7 +26,11 @@ abstract class AutoSummaryController {
   AutoSummarySnapshot get current;
 
   /// 「今すぐ実行」。実行中・予約済みの場合は二重起動しない（idempotent）。
-  void runNow();
+  ///
+  /// 戻り値は「実行コマンドを受理したか」。FGS 起動に失敗した場合や
+  /// 既に実行中で二重起動を抑止した場合は false を返す（呼び出し側で
+  /// SnackBar 等の可視フィードバックに使う）。成功時のみ true。
+  Future<bool> runNow();
 
   /// 一時停止。停止処理中は多重の停止要求を無視する。
   void pause();

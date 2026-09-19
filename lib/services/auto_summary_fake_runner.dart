@@ -104,11 +104,11 @@ class FakeAutoSummaryController implements AutoSummaryController {
   bool _stopRequested = false;
 
   @override
-  void runNow() {
+  Future<bool> runNow() async {
     if (_snapshot.phase.isActive ||
         _snapshot.phase == AutoSummaryPhase.scheduled ||
         _snapshot.phase == AutoSummaryPhase.fetchingCandidates) {
-      return; // 二重起動しない。
+      return false; // 二重起動しない。
     }
     // 全件を待機に戻して開始（今回のキュー）。clear 前に正規化コピーを作る
     // （clear 後に _items を写すと空になり対象が消えるため）。
@@ -133,6 +133,7 @@ class FakeAutoSummaryController implements AutoSummaryController {
     _emit();
     // 候補取得完了 → 先頭を取り出して処理開始。
     _startNextOrFinish();
+    return true;
   }
 
   @override

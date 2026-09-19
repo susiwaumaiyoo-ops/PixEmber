@@ -35,6 +35,10 @@ AutoSummaryPorts createRealPorts({
   // ミュートリスト（最初の候補取得時に1回だけ読む）。
   List<Map<String, dynamic>>? mutes;
 
+  // run ごとに再読込して差し替える有効設定（バグ修正 #1）。
+  // UI とは別 isolate のため AutoSummarySettings.load() 側で prefs.reload() 済み。
+  var effective = settings;
+
   return AutoSummaryPorts(
     fetchCandidates: (tag, page) async {
       mutes ??= await db.getMutesList();
@@ -146,6 +150,12 @@ AutoSummaryPorts createRealPorts({
       }
       return false;
     },
+    getSummarizedWorkIds: () => db.getSummarizedWorkIds(),
+    reloadSettings: () async {
+      final fresh = await AutoSummarySettings.load();
+      effective = fresh; // checkConditions 等のクロージャも次回から新設定を参照。
+      return fresh;
+    },
     checkConditions: () async {
       // ログイン確認。
       try {
@@ -154,7 +164,7 @@ AutoSummaryPorts createRealPorts({
         return AutoSummaryWaitReason.loginRequired;
       }
       // 充電確認。
-      if (settings.chargeOnly) {
+      if (effective.chargeOnly) {
         final battery = Battery();
         final state = await battery.batteryState;
         if (state != BatteryState.charging &&
@@ -164,7 +174,7 @@ AutoSummaryPorts createRealPorts({
         }
       }
       // WiFi確認。
-      if (settings.wifiOnly) {
+      if (effective.wifiOnly) {
         final connectivity = Connectivity();
         final results = await connectivity.checkConnectivity();
         if (!results.contains(ConnectivityResult.wifi)) {

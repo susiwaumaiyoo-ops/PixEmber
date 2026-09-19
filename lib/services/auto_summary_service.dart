@@ -46,6 +46,8 @@ class AutoSummaryPorts {
     this.isMuted = _neverMuted,
     this.checkConditions = _alwaysReady,
     this.persist,
+    this.reloadSettings,
+    this.getSummarizedWorkIds = _noSummarized,
     this.requestGap = const Duration(milliseconds: 5000),
   });
 
@@ -94,7 +96,20 @@ class AutoSummaryPorts {
   /// 次ページ要求前に空ける間隔（レート制限 §5）。テストではゼロにする。
   final Duration requestGap;
 
+  /// 設定の再読込（run 境界で呼ぶ）。未設定なら null（＝前回設定を維持）。
+  /// FGS は別 isolate のため、UI の save() を反映するにはプラットフォームから
+  /// 再読込する必要がある（AutoSummarySettings.load() 内部で prefs.reload()）。
+  final Future<AutoSummarySettings?> Function()? reloadSettings;
+
+  /// 既に要約が保存されている workId 集合（軽量な事前除外用・バグ修正 #3）。
+  /// _buildQueue の候補ループで muted と同じ段階で除外し、上限枠を
+  /// 「未処理作品」に届かせる。厳密なキャッシュ有効性（指紋・モデル）は
+  /// 従来通り _processItem の isCachedValid で担保する。
+  final Future<Set<int>> Function() getSummarizedWorkIds;
+
   static bool _neverMuted(int workId, List<String> tags) => false;
+
+  static Future<Set<int>> _noSummarized() async => const <int>{};
 
   static Future<AutoSummaryWaitReason?> _alwaysReady() async => null;
 }
@@ -133,7 +148,9 @@ class AutoSummaryService implements AutoSummaryController {
     _notifier.value = _snapshot;
   }
 
-  final AutoSummarySettings _settings;
+  // 設定は run 境界で再読込・適用する（バグ修正 #1: 常駐 FGS が起動時の
+  // 古い maxPerSession 等を使い続けないため）。_settings は可変。
+  AutoSummarySettings _settings;
   final AutoSummaryPorts _ports;
   final String _runId;
   final int Function() _clock;
@@ -174,8 +191,10 @@ class AutoSummaryService implements AutoSummaryController {
   // ---------------------------------------------------------------------------
 
   @override
-  void runNow() {
-    if (_running) return; // 二重起動防止（§3-B）。
+  Future<bool> runNow() async {
+    if (_running) return false; // 二重起動防止（§3-B）。
+    // 同期プロローグで _running/_done を確定させてから起動する（finished の
+    // 同期可視性を保つ）。設定の再読込は _run() 冒頭で行う。
     _running = true;
     _stopRequested = false;
     _pauseRequested = false;
@@ -185,6 +204,26 @@ class AutoSummaryService implements AutoSummaryController {
         if (!(_done?.isCompleted ?? true)) _done!.complete();
       }),
     );
+    return true;
+  }
+
+  /// ports.reloadSettings で再読込し、次 run 用の設定として保持する。
+  /// 再読込不可（null）は据え置き。安全側: 実行中は絶対に呼ばない（runNow 冒頭）。
+  Future<void> applySettingsFromReload() async {
+    final reload = _ports.reloadSettings;
+    if (reload == null) return;
+    final fresh = await reload();
+    if (fresh != null) {
+      _settings = fresh;
+      debugPrint(
+        '[AutoSummary] applied settings: '
+        'maxPerSession=${fresh.maxPerSession} '
+        'chargeOnly=${fresh.chargeOnly} wifiOnly=${fresh.wifiOnly} '
+        'cooldown=${fresh.cooldownSeconds}s tags=${fresh.tags.length}',
+      );
+    } else {
+      debugPrint('[AutoSummary] settings reload returned null (keep current)');
+    }
   }
 
   @override
@@ -233,6 +272,10 @@ class AutoSummaryService implements AutoSummaryController {
   Future<void> _run() async {
     try {
       _resetForNewRun();
+      // run 開始前に設定を再読込して適用（次の run から反映・稼働中は干渉しない）。
+      // _buildQueue / checkConditions が新しい _settings を参照するよう、
+      // 候補構築より前に適用する（バグ修正 #1）。
+      await applySettingsFromReload();
 
       // 1) 条件判定（§5）。待機理由があれば条件待ちで一旦停止（再開は B2-5）。
       final wait = await _ports.checkConditions();
@@ -351,6 +394,10 @@ class AutoSummaryService implements AutoSummaryController {
     };
 
     var hasMore = false;
+    // 既に要約済みの workId を軽量に事前除外（バグ修正 #3）。date_desc の
+    // 先頭が毎回キャッシュ済みだと上限枠が埋まって未処理に届かないため。
+    final summarized = await _ports.getSummarizedWorkIds();
+    var skippedCached = 0;
     // タグをラウンドロビンで1ページずつ拾い、maxPerSession 件集まったら停止。
     while (byId.length < _settings.maxPerSession) {
       var progressed = false;
@@ -370,6 +417,11 @@ class AutoSummaryService implements AutoSummaryController {
         for (final cand in page.items) {
           tagChecked++;
           if (_ports.isMuted(cand.workId, cand.tags)) continue;
+          if (summarized.contains(cand.workId)) {
+            // 生成済みは上限枠を消費させずスキップ（未処理を先に出す）。
+            skippedCached++;
+            continue;
+          }
           if (byId.length >= _settings.maxPerSession) {
             hasMore = true; // 上限到達で以降は待機数に含めない（§2-C）。
             break;
@@ -406,6 +458,12 @@ class AutoSummaryService implements AutoSummaryController {
       }
       if (!progressed) break; // 全タグ枯渇。
       if (exhausted.length >= tags.length) break;
+    }
+
+    if (skippedCached > 0) {
+      debugPrint(
+        '[AutoSummary] skipped $skippedCached cached items during queue build',
+      );
     }
 
     _items
@@ -454,6 +512,9 @@ class AutoSummaryService implements AutoSummaryController {
     }
 
     // 有効キャッシュ確認（手動と同一の有効性＝workId だけではない）。
+    // maxPerSession は「今回キューに入れた作品数」の上限。キャッシュヒット
+    // （existing→saved 計上）もキュー済み＝上限を消費する（実生成件数のみで
+    // 数えない）。よって saved + skipped + failed の合計 ≦ maxPerSession。
     final fp = _ports.fingerprintOf(item.title, item.tags, body);
     if (await _ports.isCachedValid(item.workId, fp)) {
       _markExistingSaved(index);

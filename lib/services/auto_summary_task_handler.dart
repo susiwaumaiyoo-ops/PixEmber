@@ -36,6 +36,16 @@ const String kCmdManualCancel = 'manual_cancel';
 /// Task→UI へのデータキー。
 const String kKeySnapshot = 'snapshot';
 const String kKeyManualEvent = 'manual_event';
+const String kKeyShutdown = 'shutdown';
+
+/// Task 内部でアイドル解放を発火させる自己コマンド（onReceiveData 経由でテスト可能）。
+const String kCmdIdleRelease = 'idle_release';
+
+/// run 完走後のアイドル解放までの待機時間（バグ修正 #2）。
+/// デバッグビルドでは検証しやすいよう短縮する。kReleaseMode で切替。
+final Duration kAutoSummaryIdleRelease = kDebugMode
+    ? const Duration(seconds: 60)
+    : const Duration(minutes: 5);
 
 /// 通知更新の最小間隔（§3-D: ≥1s）。
 const Duration kNotificationThrottle = Duration(seconds: 1);
@@ -46,9 +56,17 @@ class AutoSummaryTaskHandler extends TaskHandler {
   LlmRunArbiter? _arbiter;
   AutoSummarySettings _settings = const AutoSummarySettings();
   Timer? _notifyTimer;
+  Timer? _idleTimer;
   DateTime _lastNotify = DateTime.fromMillisecondsSinceEpoch(0);
   bool _paused = false;
   int _generation = 0;
+  bool _stopping = false;
+
+  /// テスト用: true のときアイドル解放で実際に stopService を呼ばない
+  /// （FakeAsync では Dart タイマーのみ進み、プラットフォームチャネルは
+  /// 解決しないため待てない）。本番（kDebugMode）では false。
+  @visibleForTesting
+  bool idleReleaseStopForTest = false;
 
   // ---------------------------------------------------------------------------
   // lifecycle
@@ -77,6 +95,7 @@ class AutoSummaryTaskHandler extends TaskHandler {
       ports: ports,
       runId: 'auto-${DateTime.now().millisecondsSinceEpoch}',
     );
+    _stopping = false;
 
     // 状態変化を通知 + UI に送信。
     _service!.state.addListener(_onStateChanged);
@@ -98,6 +117,7 @@ class AutoSummaryTaskHandler extends TaskHandler {
   Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {
     debugPrint('[AutoSummaryTask] onDestroy(isTimeout: $isTimeout)');
     _notifyTimer?.cancel();
+    _idleTimer?.cancel();
     _service?.dispose();
     _service = null;
     await _arbiter?.disposeModel();
@@ -113,7 +133,9 @@ class AutoSummaryTaskHandler extends TaskHandler {
     if (data is String) {
       switch (data) {
         case kCmdRun:
-          _service?.runNow();
+          // 新しい要求 → アイドル解放タイマーを中止（モデル再利用）。
+          _cancelIdleTimer();
+          unawaited(_service?.runNow() ?? Future<bool>.value(false));
           break;
         case kCmdPause:
           _service?.pause();
@@ -128,6 +150,9 @@ class AutoSummaryTaskHandler extends TaskHandler {
           break;
         case kCmdStopService:
           _stopServiceSafe();
+          break;
+        case kCmdIdleRelease:
+          _onIdleTimerFired();
           break;
       }
       return;
@@ -147,6 +172,8 @@ class AutoSummaryTaskHandler extends TaskHandler {
   }
 
   void _handleManualGenerate(Map data) {
+    // 手動要求も活動とみなしアイドル解放を中止（モデル再利用）。
+    _cancelIdleTimer();
     final requestId = data['requestId'] as String? ?? '';
     final workId = data['workId'] as int? ?? 0;
     final title = data['title'] as String? ?? '';
@@ -168,9 +195,44 @@ class AutoSummaryTaskHandler extends TaskHandler {
   }
 
   Future<void> _stopServiceSafe() async {
+    // 二重停止防止（terminal 直後に手動停止と競合した場合）。
+    if (_stopping) return;
+    _stopping = true;
+    _idleTimer?.cancel();
     _service?.stop();
     await _arbiter?.waitForIdle();
+    // UI 側に「シャットダウン」を通知し _ready をリセットして再起動可能にする。
+    FlutterForegroundTask.sendDataToMain(<String, dynamic>{
+      kKeyShutdown: true,
+      kKeyGeneration: _generation,
+    });
     await FlutterForegroundTask.stopService();
+  }
+
+  void _cancelIdleTimer() {
+    _idleTimer?.cancel();
+    _idleTimer = null;
+  }
+
+  /// run が terminal に入ったらアイドル解放タイマーを開始（既に停止中なら何もしない）。
+  void _scheduleIdleRelease() {
+    if (_stopping) return;
+    _idleTimer?.cancel();
+    _idleTimer = Timer(kAutoSummaryIdleRelease, () {
+      // 発火は onReceiveData 経由に一本化（テストでも同じ経路を通す）。
+      onReceiveData(kCmdIdleRelease);
+    });
+    debugPrint(
+      '[AutoSummaryTask] idle release scheduled in '
+      '${kAutoSummaryIdleRelease.inSeconds}s',
+    );
+  }
+
+  void _onIdleTimerFired() {
+    _idleTimer = null;
+    debugPrint('[AutoSummaryTask] idle release fired -> stopping service');
+    if (idleReleaseStopForTest) return;
+    unawaited(_stopServiceSafe());
   }
 
   void _onManualEvent(
@@ -230,6 +292,11 @@ FlutterForegroundTask.sendDataToMain(<String, dynamic>{
       kKeySnapshot: s.toMap(),
     });
 
+    // run 完走（terminal）→ アイドル解放タイマーを開始。
+    if (s.phase.isTerminal) {
+      _scheduleIdleRelease();
+    }
+
     // 通知更新（スロットル付き）。
     final now = DateTime.now();
     if (now.difference(_lastNotify) < kNotificationThrottle &&
@@ -266,5 +333,6 @@ FlutterForegroundTask.sendDataToMain(<String, dynamic>{
 /// トップレベルコールバック（FGS エンジン起動時に呼ばれる）。
 @pragma('vm:entry-point')
 void autoSummaryTaskCallback() {
+  debugPrint('[AutoSummaryTask] callback reached (engine bootstrapping)');
   FlutterForegroundTask.setTaskHandler(AutoSummaryTaskHandler());
 }

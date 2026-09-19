@@ -107,6 +107,10 @@ class AutoSummarySettings {
   static Future<AutoSummarySettings> load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      // FGS は UI とは別 isolate で走る。SharedPreferences は isolate 毎に
+      // メモリキャッシュを持つため、UI 側 save() を受信中も FGS のキャッシュは
+      // 陳腐化し得る。必ずプラットフォームへ reload() してから読む。
+      await prefs.reload();
       final rawTags = prefs.getStringList(keyTags) ?? const <String>[];
       final tags = rawTags.map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
       final max = prefs.getInt(keyMaxPerSession) ?? defaultMaxPerSession;

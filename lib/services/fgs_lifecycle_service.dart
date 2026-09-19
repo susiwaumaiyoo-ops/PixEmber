@@ -64,26 +64,49 @@ class FgsLifecycleService {
     _readyCompleter = Completer<bool>();
 
     try {
-      // 既にサービスが動いているか確認。
-      final isRunning = await FlutterForegroundTask.isRunningService;
-      if (!isRunning) {
-        // 新規起動。
+      // 既にサービスが動いているか確認（init() 忘れは ServiceNotInitializedException で検知）。
+      final runningBefore = await FlutterForegroundTask.isRunningService;
+      debugPrint('[FgsLifecycle] isRunningService(before)=$runningBefore');
+      if (!runningBefore) {
+        // 新規起動（切り分け中は実サービス不在確認のため startService を明示）。
         _generation++;
         debugPrint('[FgsLifecycle] starting service (gen=$_generation)');
-        try {
-await FlutterForegroundTask.startService(
-            callback: autoSummaryTaskCallback,
-            notificationTitle: 'PixEmber 自動要約',
-            notificationText: '起動中…',
-          );
-        } catch (e) {
-          debugPrint('[FgsLifecycle] startService rejected: $e');
-          _readyCompleter!.complete(false);
-          return false;
+        final result = await FlutterForegroundTask.startService(
+          serviceTypes: const [ForegroundServiceTypes.dataSync],
+          callback: autoSummaryTaskCallback,
+          notificationTitle: 'PixEmber 自動要約',
+          notificationText: '起動中…',
+        );
+        switch (result) {
+          case ServiceRequestSuccess():
+            debugPrint(
+              '[FgsLifecycle] startService result=success '
+              'running=${await FlutterForegroundTask.isRunningService}',
+            );
+          case ServiceRequestFailure(:final error):
+            debugPrint(
+              '[FgsLifecycle] startService result=failure '
+              'type=${error.runtimeType} error=$error',
+            );
+            if (error is ServiceNotInitializedException) {
+              debugPrint('[FgsLifecycle] 原因: init() が呼ばれていません');
+            }
+            _readyCompleter!.complete(false);
+            return false;
         }
       } else {
         debugPrint('[FgsLifecycle] service already running, waiting READY');
       }
+
+      // +1s 後に再度 isRunningService を記録（起動確認）。
+      unawaited(
+        Future<void>.delayed(const Duration(seconds: 1), () async {
+          debugPrint(
+            '[FgsLifecycle] isRunningService(+1s)='
+            '${await FlutterForegroundTask.isRunningService}',
+          );
+        }),
+      );
 
       // READY を待つ（タイムアウト付き）。
       final result = await _readyCompleter!.future.timeout(
@@ -114,6 +137,17 @@ await FlutterForegroundTask.startService(
 
   void _onTaskData(Object data) {
     if (data is! Map) return;
+    // Task 側が自律停止（アイドル解放/手動停止）→ UI の _ready を解除し、
+    // 次の「今すぐ実行」で ensureServiceReady が正しく startService し直す。
+    if (data[kKeyShutdown] == true) {
+      _ready = false;
+      _starting = false;
+      if (_readyCompleter != null && !_readyCompleter!.isCompleted) {
+        _readyCompleter!.complete(false);
+      }
+      debugPrint('[FgsLifecycle] shutdown received -> reset ready');
+      return;
+    }
     final type = data[kKeyReady];
     if (type == kValueReady) {
       final gen = data[kKeyGeneration] as int? ?? 0;

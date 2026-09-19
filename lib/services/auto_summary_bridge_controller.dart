@@ -12,6 +12,7 @@ import 'auto_summary_controller.dart';
 import 'auto_summary_repository.dart';
 import 'auto_summary_snapshot.dart';
 import 'auto_summary_task_handler.dart';
+import 'fgs_lifecycle_service.dart';
 import 'llm_run_arbiter.dart';
 import 'llm_summary_service.dart';
 
@@ -19,10 +20,22 @@ import 'llm_summary_service.dart';
 ///
 /// 正本は FGS TaskHandler 側にあり、このクラスは表示用のミラーを保持する。
 class AutoSummaryBridgeController implements AutoSummaryController {
-  AutoSummaryBridgeController() {
-    _loadPersisted();
-    FlutterForegroundTask.addTaskDataCallback(_onTaskData);
+  /// [ensureReady] / [sendToTask] はテスト用の注入点。
+  /// 既定では実 FGS ライフサイクルと sendDataToTask を使う。
+  AutoSummaryBridgeController({
+    Future<bool> Function()? ensureReady,
+    void Function(Object data)? sendToTask,
+  })  : _ensureReady = ensureReady ?? FgsLifecycleService().ensureServiceReady,
+        _sendToTask = sendToTask ?? FlutterForegroundTask.sendDataToTask {
+    if (ensureReady == null) {
+      // 注入時（テスト）はシングルトンのデータ購読を登録しない。
+      _loadPersisted();
+      FlutterForegroundTask.addTaskDataCallback(_onTaskData);
+    }
   }
+
+  final Future<bool> Function() _ensureReady;
+  final void Function(Object data) _sendToTask;
 
   final ValueNotifier<AutoSummarySnapshot> _notifier =
       ValueNotifier<AutoSummarySnapshot>(const AutoSummarySnapshot());
@@ -90,8 +103,12 @@ class AutoSummaryBridgeController implements AutoSummaryController {
   }
 
   @override
-  void runNow() {
-    FlutterForegroundTask.sendDataToTask(kCmdRun);
+  Future<bool> runNow() async {
+    // FGS が未起動なら先に起動＋READY を確認（ensureServiceReady は再入安全）。
+    final ready = await _ensureReady();
+    if (!ready) return false;
+    _sendToTask(kCmdRun);
+    return true;
   }
 
   @override
