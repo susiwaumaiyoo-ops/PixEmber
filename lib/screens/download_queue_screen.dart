@@ -192,8 +192,12 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
   Color _statusColor(String status, ThemeData theme) {
     final colorScheme = theme.colorScheme;
     switch (status) {
+      // completed の戻り値は前景（ステータス Icon / Chip ラベル文字）として
+      // のみ使用されるため、容器系（primaryContainer）ではなく primary を使う。
+      // running と同色になるが、アイコン（check vs downloading）とラベルで
+      // 意味は区別される。
       case 'completed':
-        return colorScheme.primaryContainer;
+        return colorScheme.primary;
       case 'failed':
         return colorScheme.error;
       case 'canceled':

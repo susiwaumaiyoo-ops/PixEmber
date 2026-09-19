@@ -716,7 +716,6 @@ class HomeUIComponents {
   // 同期プログレス
   // =========================================================================
   Widget buildSyncProgressHUD() {
-    final colorScheme = Theme.of(state.context).colorScheme;
     if (state.isSyncing != true) return const SizedBox.shrink();
 
     return Center(
@@ -740,12 +739,11 @@ class HomeUIComponents {
               ),
             ),
             const SizedBox(height: 8),
+            // 背景は固定の黒(0.8)オーバーレイ（ライト/ダーク共通）のため、
+            // onSurfaceVariant（ライトでは濃いグレー）にせず白系統を維持する。
             Text(
               '処理中...',
-              style: TextStyle(
-                color: colorScheme.onSurfaceVariant,
-                fontSize: 12,
-              ),
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
           ],
         ),
