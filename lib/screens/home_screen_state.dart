@@ -40,6 +40,7 @@ import '../services/novel_document_text.dart';
 import '../services/search_preset_service.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:crypto/crypto.dart';
+import '../theme/app_spacing.dart';
 
 class PixivViewerHome extends StatefulWidget {
   const PixivViewerHome({super.key});
@@ -1648,6 +1649,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     final screenWidth = MediaQuery.of(context).size.width;
     int crossAxisCount = 2;
     if (screenWidth > 1200) {
@@ -1674,14 +1676,16 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                   : Icons.auto_awesome,
               color: colorScheme.primary,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpacing.sm),
             Text(
               currentIndex == illustIndex
                   ? 'Pixiv Illusts'
                   : currentIndex == novelIndex
                   ? 'Pixiv Novels'
                   : 'フィーリング発掘',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              style: textTheme.titleLarge?.copyWith(
+                color: colorScheme.onSurface,
+              ),
             ),
           ],
         ),
@@ -1694,33 +1698,33 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
         ],
       ),
       drawer: Drawer(
-        backgroundColor: const Color(0xFF1A1A1A),
+        backgroundColor: colorScheme.surfaceContainer,
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(color: Colors.pink),
+            DrawerHeader(
+              decoration: BoxDecoration(color: colorScheme.primaryContainer),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   Text(
                     'PixEmber',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                    style: textTheme.titleLarge?.copyWith(
+                      color: colorScheme.onPrimaryContainer,
                     ),
                   ),
                   Text(
                     'Ultimate State v3.1.0',
-                    style: TextStyle(color: Colors.white70, fontSize: 11),
+                    style: textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onPrimaryContainer,
+                    ),
                   ),
                 ],
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.bookmark, color: Colors.pinkAccent),
+              leading: Icon(Icons.bookmark, color: colorScheme.primary),
               title: const Text('しおり一覧'),
               onTap: () {
                 Navigator.pop(context);
@@ -1782,7 +1786,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                   trailing: unread > 0
                       ? Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
+                            horizontal: AppSpacing.sm,
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
@@ -1791,9 +1795,8 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                           ),
                           child: Text(
                             unread > 999 ? '999+' : unread.toString(),
-                            style: TextStyle(
+                            style: textTheme.bodySmall?.copyWith(
                               color: colorScheme.onPrimary,
-                              fontSize: 12,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -1831,7 +1834,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                   trailing: unread > 0
                       ? Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
+                            horizontal: AppSpacing.sm,
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
@@ -1840,9 +1843,8 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                           ),
                           child: Text(
                             unread > 999 ? '999+' : unread.toString(),
-                            style: TextStyle(
+                            style: textTheme.bodySmall?.copyWith(
                               color: colorScheme.onPrimary,
-                              fontSize: 12,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -1874,12 +1876,14 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
             ),
             Divider(height: 1, color: colorScheme.outlineVariant),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.lg,
+                vertical: AppSpacing.sm,
+              ),
               child: Text(
                 'AI 機能',
-                style: TextStyle(
+                style: textTheme.bodySmall?.copyWith(
                   color: colorScheme.onSurfaceVariant,
-                  fontSize: 12,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -1911,7 +1915,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.construction, color: Colors.pinkAccent),
+              leading: Icon(Icons.construction, color: colorScheme.primary),
               title: const Text('AIインデックス管理'),
               subtitle: const Text('モデル・埋め込みの診断・修復'),
               onTap: () {
@@ -1924,20 +1928,22 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                 );
               },
             ),
-            const Divider(height: 1, color: Colors.grey),
+            Divider(height: 1, color: colorScheme.outlineVariant),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.lg,
+                vertical: AppSpacing.sm,
+              ),
               child: Text(
                 'データ・保存',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
+                style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.bar_chart, color: Colors.pinkAccent),
+              leading: Icon(Icons.bar_chart, color: colorScheme.primary),
               title: const Text('閲覧統計'),
               subtitle: const Text('閲覧・読書時間の分析'),
               onTap: () {
@@ -1952,9 +1958,9 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               },
             ),
             ListTile(
-              leading: const Icon(
+              leading: Icon(
                 Icons.download_for_offline,
-                color: Colors.pinkAccent,
+                color: colorScheme.primary,
               ),
               title: const Text('ダウンロード管理'),
               subtitle: const Text('イラスト・うごイラ・小説のダウンロード状況'),
@@ -1969,10 +1975,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               },
             ),
             ListTile(
-              leading: const Icon(
-                Icons.cloud_download,
-                color: Colors.pinkAccent,
-              ),
+              leading: Icon(Icons.cloud_download, color: colorScheme.primary),
               title: const Text('オフライン本棚'),
               subtitle: const Text('キャッシュした小説をオフラインで読む'),
               onTap: () {
@@ -1986,7 +1989,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.find_replace, color: Colors.pinkAccent),
+              leading: Icon(Icons.find_replace, color: colorScheme.primary),
               title: const Text('重複画像の検出'),
               subtitle: const Text('完全一致・近似重複を見つけて整理'),
               onTap: () {
@@ -2000,10 +2003,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               },
             ),
             ListTile(
-              leading: const Icon(
-                Icons.manage_accounts,
-                color: Colors.pinkAccent,
-              ),
+              leading: Icon(Icons.manage_accounts, color: colorScheme.primary),
               title: const Text('バックアップ管理'),
               subtitle: const Text('複数のバックアップの一覧・復元・削除'),
               onTap: () {
@@ -2015,12 +2015,12 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                 );
               },
             ),
-            const Divider(height: 1, color: Colors.grey),
+            Divider(height: 1, color: colorScheme.outlineVariant),
             // ログイン/ログアウトボタン
             ListTile(
               leading: Icon(
                 isLoggedIn ? Icons.logout : Icons.login,
-                color: Colors.pinkAccent,
+                color: colorScheme.primary,
               ),
               title: Text(isLoggedIn ? 'ログアウト' : 'アカウント連携（ログイン）'),
               onTap: () {
@@ -2032,14 +2032,16 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                 }
               },
             ),
-            const Divider(height: 1, color: Colors.grey),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            Divider(height: 1, color: colorScheme.outlineVariant),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.lg,
+                vertical: AppSpacing.sm,
+              ),
               child: Text(
                 'Google ドライブ同期',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
+                style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -2056,7 +2058,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               // フィーリング発掘タブでは、画面側(AppBar.bottom)に専用検索バーがあるため非表示
               if (currentIndex != feelingDiscoveryIndex)
                 Padding(
-                  padding: const EdgeInsets.all(8.0),
+                  padding: const EdgeInsets.all(AppSpacing.sm),
                   child: Row(
                     children: [
                       Expanded(
@@ -2100,15 +2102,15 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                           },
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: AppSpacing.sm),
                       IconButton(
                         icon: Icon(
                           Icons.tune,
                           color: currentIndex == illustIndex
-                              ? Colors.pinkAccent
+                              ? colorScheme.primary
                               : currentIndex == novelIndex
-                              ? Colors.tealAccent
-                              : Colors.amberAccent,
+                              ? colorScheme.secondary
+                              : colorScheme.tertiary,
                         ),
                         onPressed: () {
                           FocusScope.of(context).unfocus();
@@ -2184,17 +2186,17 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                           child: currentIndex == feelingDiscoveryIndex
                               ? const FeelingDiscoveryScreen()
                               : isLoading
-                              ? const Center(
+                              ? Center(
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      CircularProgressIndicator(
-                                        color: Colors.pinkAccent,
-                                      ),
-                                      SizedBox(height: 16),
+                                      const CircularProgressIndicator(),
+                                      SizedBox(height: AppSpacing.lg),
                                       Text(
                                         'Pixiv からデータを取得中...',
-                                        style: TextStyle(color: Colors.grey),
+                                        style: TextStyle(
+                                          color: colorScheme.onSurfaceVariant,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -2218,20 +2220,20 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: currentIndex,
         onDestinationSelected: changeTab,
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.image_outlined),
-            selectedIcon: Icon(Icons.image, color: Colors.pinkAccent),
+            icon: const Icon(Icons.image_outlined),
+            selectedIcon: Icon(Icons.image, color: colorScheme.primary),
             label: 'イラスト',
           ),
           NavigationDestination(
-            icon: Icon(Icons.book_outlined),
-            selectedIcon: Icon(Icons.book, color: Colors.pinkAccent),
+            icon: const Icon(Icons.book_outlined),
+            selectedIcon: Icon(Icons.book, color: colorScheme.primary),
             label: '小説',
           ),
           NavigationDestination(
-            icon: Icon(Icons.auto_awesome_outlined),
-            selectedIcon: Icon(Icons.auto_awesome, color: Colors.pinkAccent),
+            icon: const Icon(Icons.auto_awesome_outlined),
+            selectedIcon: Icon(Icons.auto_awesome, color: colorScheme.primary),
             label: 'フィーリング発掘',
           ),
         ],

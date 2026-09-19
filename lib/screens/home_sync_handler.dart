@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/google_drive_service.dart';
+import '../theme/app_spacing.dart';
 import '../utils/datetime_format.dart';
 
 /// Googleドライブ同期関連メソッドを管理するクラス
@@ -123,10 +124,15 @@ class HomeSyncHandler {
 
   // Googleドライブ同期セクションのUI
   Widget buildGoogleDriveSyncSection() {
-    final colorScheme = Theme.of(state.uiContext).colorScheme;
+    final theme = Theme.of(state.uiContext);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
     if (state.loggedInEmail == null) {
       return Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        margin: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.sm,
+        ),
         decoration: BoxDecoration(
           color: colorScheme.secondary.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
@@ -136,7 +142,7 @@ class HomeSyncHandler {
         ),
         child: ListTile(
           leading: Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(AppSpacing.sm),
             decoration: BoxDecoration(
               color: colorScheme.secondary.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(8),
@@ -149,15 +155,16 @@ class HomeSyncHandler {
           ),
           title: Text(
             'Google ドライブ同期（パーソナルクラウド）',
-            style: TextStyle(
+            style: textTheme.bodyMedium?.copyWith(
               color: colorScheme.onSurface,
-              fontSize: 14,
               fontWeight: FontWeight.bold,
             ),
           ),
           subtitle: Text(
             '履歴・お気に入り・購読データをクラウドで管理',
-            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 11),
+            style: textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
           trailing: Icon(
             Icons.arrow_forward_ios,
@@ -177,7 +184,10 @@ class HomeSyncHandler {
     }
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      margin: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(12),
@@ -188,7 +198,7 @@ class HomeSyncHandler {
         children: [
           // ヘッダー：アカウント情報
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             decoration: BoxDecoration(
               color: colorScheme.secondary.withValues(alpha: 0.1),
               borderRadius: const BorderRadius.only(
@@ -207,25 +217,23 @@ class HomeSyncHandler {
                     size: 22,
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'ログイン中',
-                        style: TextStyle(
+                        style: textTheme.bodySmall?.copyWith(
                           color: colorScheme.secondary,
-                          fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: AppSpacing.xs),
                       Text(
                         state.loggedInEmail!,
-                        style: TextStyle(
+                        style: textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurface,
-                          fontSize: 13,
                           fontWeight: FontWeight.w500,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -237,28 +245,26 @@ class HomeSyncHandler {
             ),
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
 
           // 説明テキスト + 最終同期日時
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   '履歴・フォルダ・購読タグを Google ドライブ（appDataFolder）と同期',
-                  style: TextStyle(
+                  style: textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
-                    fontSize: 11,
                   ),
                 ),
                 if (lastSyncDisplay != null) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: AppSpacing.xs),
                   Text(
                     lastSyncDisplay,
-                    style: TextStyle(
+                    style: textTheme.bodySmall?.copyWith(
                       color: colorScheme.secondary.withValues(alpha: 0.8),
-                      fontSize: 11,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -270,11 +276,11 @@ class HomeSyncHandler {
           // 前回の同期サマリー表示
           if (state.lastSyncSummary != null &&
               state.lastSyncSummary!.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(AppSpacing.sm),
                 decoration: BoxDecoration(
                   color: colorScheme.secondary.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
@@ -287,22 +293,20 @@ class HomeSyncHandler {
                   children: [
                     Text(
                       '前回の復元結果',
-                      style: TextStyle(
+                      style: textTheme.bodySmall?.copyWith(
                         color: colorScheme.secondary,
-                        fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: AppSpacing.sm),
                     Wrap(
-                      spacing: 12,
-                      runSpacing: 4,
+                      spacing: AppSpacing.md,
+                      runSpacing: AppSpacing.xs,
                       children: state.lastSyncSummary!.entries.map((e) {
                         return Text(
                           '${e.key}: +${e.value}',
-                          style: TextStyle(
+                          style: textTheme.bodySmall?.copyWith(
                             color: colorScheme.onSurfaceVariant,
-                            fontSize: 10,
                           ),
                         );
                       }).toList(),
@@ -313,11 +317,11 @@ class HomeSyncHandler {
             ),
           ],
 
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
 
           // ボタン行：バックアップ / 復元
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
             child: Row(
               children: [
                 // クラウドにバックアップ（送信）
@@ -340,8 +344,7 @@ class HomeSyncHandler {
                         : const Icon(Icons.cloud_upload, size: 18),
                     label: Text(
                       state.isBackingUp ? 'バックアップ中...' : 'クラウドにバックアップ（送信）',
-                      style: const TextStyle(
-                        fontSize: 12,
+                      style: textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -350,7 +353,9 @@ class HomeSyncHandler {
                           ? colorScheme.secondary.withValues(alpha: 0.6)
                           : colorScheme.secondary,
                       foregroundColor: colorScheme.onSecondary,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: AppSpacing.md,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -358,7 +363,7 @@ class HomeSyncHandler {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpacing.md),
                 // クラウドから復元（受信）
                 Expanded(
                   child: ElevatedButton.icon(
@@ -379,8 +384,7 @@ class HomeSyncHandler {
                         : const Icon(Icons.cloud_download, size: 18),
                     label: Text(
                       state.isRestoring ? 'データマージ中...' : 'クラウドから復元（受信）',
-                      style: const TextStyle(
-                        fontSize: 12,
+                      style: textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -389,7 +393,9 @@ class HomeSyncHandler {
                           ? colorScheme.tertiary.withValues(alpha: 0.6)
                           : colorScheme.tertiary,
                       foregroundColor: colorScheme.onTertiary,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: AppSpacing.md,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -401,11 +407,11 @@ class HomeSyncHandler {
             ),
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
 
           // ログアウトボタン
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
             child: SizedBox(
               width: double.infinity,
               child: TextButton.icon(
@@ -419,14 +425,13 @@ class HomeSyncHandler {
                 ),
                 label: Text(
                   'ログアウト',
-                  style: TextStyle(
+                  style: textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
-                    fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                     side: BorderSide(color: colorScheme.outlineVariant),
@@ -436,7 +441,7 @@ class HomeSyncHandler {
             ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
         ],
       ),
     );
