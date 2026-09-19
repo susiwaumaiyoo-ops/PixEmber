@@ -4,6 +4,7 @@ import '../illust_model.dart';
 import '../novel_model.dart';
 import '../services/pixiv_api_service.dart';
 import '../services/database_service.dart';
+import '../theme/app_spacing.dart';
 import '../widgets/pixiv_image.dart';
 import 'novel_detail_screen.dart';
 
@@ -122,7 +123,8 @@ class _BookmarkListScreenState extends State<BookmarkListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Scaffold(
       appBar: AppBar(
         title: const Text('しおり一覧'),
@@ -139,10 +141,12 @@ class _BookmarkListScreenState extends State<BookmarkListScreen> {
           : _errorMessage != null
           ? Center(
               child: Padding(
-                padding: const EdgeInsets.all(24.0),
+                padding: const EdgeInsets.all(AppSpacing.xl),
                 child: Text(
                   _errorMessage!,
-                  style: TextStyle(color: colorScheme.onSurfaceVariant),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -151,17 +155,19 @@ class _BookmarkListScreenState extends State<BookmarkListScreen> {
           ? Center(
               child: Text(
                 'しおりはありません。',
-                style: TextStyle(color: colorScheme.onSurfaceVariant),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
             )
           : ListView.builder(
-              padding: const EdgeInsets.all(8.0),
+              padding: const EdgeInsets.all(AppSpacing.sm),
               itemCount: _novels.length,
               itemBuilder: (context, index) {
                 final novel = _novels[index];
                 return Card(
                   color: colorScheme.surfaceContainerHigh,
-                  margin: const EdgeInsets.symmetric(vertical: 4.0),
+                  margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
                   child: ListTile(
                     leading: Container(
                       width: 54,
@@ -184,10 +190,9 @@ class _BookmarkListScreenState extends State<BookmarkListScreen> {
                     ),
                     title: Text(
                       novel.title,
-                      style: TextStyle(
+                      style: theme.textTheme.bodyMedium?.copyWith(
                         color: colorScheme.onSurface,
                         fontWeight: FontWeight.bold,
-                        fontSize: 14,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -195,23 +200,21 @@ class _BookmarkListScreenState extends State<BookmarkListScreen> {
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SizedBox(height: 4),
+                        const SizedBox(height: AppSpacing.xs),
                         Text(
                           '✍️ ${novel.author.name}',
-                          style: TextStyle(
+                          style: theme.textTheme.bodySmall?.copyWith(
                             color: colorScheme.onSurfaceVariant,
-                            fontSize: 11,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: AppSpacing.xs),
                         Row(
                           children: [
                             Text(
                               '📄 ${novel.pageCount}P  |  '
                               '✍️ ${novel.textLength}文字',
-                              style: TextStyle(
+                              style: theme.textTheme.bodySmall?.copyWith(
                                 color: colorScheme.onSurfaceVariant,
-                                fontSize: 11,
                               ),
                             ),
                             const Spacer(),
@@ -336,7 +339,8 @@ class _BookmarkProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return FutureBuilder<double?>(
       future: SharedPreferences.getInstance().then(
         (prefs) => prefs.getDouble('novel_progress_$id'),
@@ -347,7 +351,10 @@ class _BookmarkProgress extends StatelessWidget {
           return const SizedBox.shrink();
         }
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.xs + 1,
+            vertical: AppSpacing.xs - 3,
+          ),
           decoration: BoxDecoration(
             color: colorScheme.primary.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(3),
@@ -356,11 +363,10 @@ class _BookmarkProgress extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.bookmark, size: 9, color: colorScheme.primary),
-              const SizedBox(width: 2),
+              const SizedBox(width: AppSpacing.xs - 2),
               Text(
                 '${progress.toStringAsFixed(0)}%',
-                style: TextStyle(
-                  fontSize: 9,
+                style: theme.textTheme.bodySmall?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: colorScheme.primary,
                 ),

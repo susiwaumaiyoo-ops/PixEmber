@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
 import '../services/download_service.dart';
+import '../theme/app_spacing.dart';
 
 /// ダウンロードキュー管理画面
 ///
@@ -303,7 +304,7 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
   Widget _buildWebUnsupported() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -312,12 +313,12 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
               size: 64,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             Text(
               'Web版ではダウンロードできません',
               style: Theme.of(context).textTheme.titleMedium,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Text(
               'この環境ではファイル保存がサポートされていません。\n'
               'ネイティブアプリ（Android / iOS / デスクトップ）でご利用ください。',
@@ -342,13 +343,15 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
             size: 64,
             color: theme.colorScheme.onSurfaceVariant,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           Text('ダウンロードキューは空です', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Text(
             'イラスト詳細画面や小説詳細画面から\nダウンロードできます',
             textAlign: TextAlign.center,
-            style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -381,12 +384,17 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
         .length;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.md,
+        AppSpacing.lg,
+        AppSpacing.md,
+      ),
       color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
       child: Row(
         children: [
           const Icon(Icons.download, size: 20),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               'キュー: $pending 件 / 完了: $_completedCount 件',
@@ -421,9 +429,12 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
     final progress = pageTotal > 0 ? pageCompleted / pageTotal : 0.0;
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      margin: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm - 2,
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -435,7 +446,7 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
                   color: _statusColor(status, theme),
                   size: 28,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -461,9 +472,8 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
                 Chip(
                   label: Text(
                     _statusLabel(status),
-                    style: TextStyle(
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: _statusColor(status, theme),
-                      fontSize: 12,
                     ),
                   ),
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -471,7 +481,7 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             // 進捗バー
             if (status == 'running' ||
                 status == 'pending' ||
@@ -483,7 +493,7 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
                     value: status == 'running' ? null : progress,
                     backgroundColor: theme.colorScheme.surfaceContainerHighest,
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: AppSpacing.xs),
                   Text(
                     '$pageCompleted / $pageTotal ページ'
                     '${status == 'running' ? ' (ダウンロード中...)' : ''}',
@@ -523,7 +533,7 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
                 ],
               ),
             // 操作ボタン
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             _buildActionButtons(groupId, status, theme),
           ],
         ),
@@ -627,7 +637,11 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
         break;
     }
 
-    return Wrap(spacing: 8, runSpacing: 4, children: buttons);
+    return Wrap(
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.xs,
+      children: buttons,
+    );
   }
 
   Widget _actionButton({
@@ -642,7 +656,10 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
         : theme.colorScheme.primary;
     return ActionChip(
       avatar: Icon(icon, size: 18, color: color),
-      label: Text(label, style: TextStyle(color: color)),
+      label: Text(
+        label,
+        style: theme.textTheme.bodySmall?.copyWith(color: color),
+      ),
       onPressed: onTap,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.compact,

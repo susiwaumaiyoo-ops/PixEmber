@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'home_screen_state.dart';
 import '../services/pixiv_api_service.dart';
+import '../theme/app_spacing.dart';
 import '../widgets/pixiv_image.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -25,11 +26,15 @@ class HomeUIComponents {
     required bool isActive,
     required VoidCallback onTap,
   }) {
-    final colorScheme = Theme.of(state.context).colorScheme;
+    final theme = Theme.of(state.context);
+    final colorScheme = theme.colorScheme;
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.sm,
+        ),
         decoration: BoxDecoration(
           color: isActive
               ? colorScheme.primary.withValues(alpha: 0.3)
@@ -38,7 +43,7 @@ class HomeUIComponents {
         ),
         child: Text(
           label,
-          style: TextStyle(
+          style: theme.textTheme.bodySmall?.copyWith(
             color: isActive
                 ? colorScheme.primary
                 : colorScheme.onSurfaceVariant,
@@ -61,7 +66,10 @@ class HomeUIComponents {
         : state.novelSubMode;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs - 2,
+      ),
       child: Row(
         children: [
           _buildSubTabButton(
@@ -69,7 +77,7 @@ class HomeUIComponents {
             isActive: activeSubMode == 0,
             onTap: () => state.changeSubMode(0),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           _buildSubTabButton(
             label: 'ランキング',
             isActive: activeSubMode == 2,
@@ -103,21 +111,25 @@ class HomeUIComponents {
 
     return Container(
       height: 42,
-      margin: const EdgeInsets.symmetric(vertical: 4),
+      margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
         itemCount: modes.length,
         itemBuilder: (ctx, idx) {
-          final colorScheme = Theme.of(ctx).colorScheme;
+          final theme = Theme.of(ctx);
+          final colorScheme = theme.colorScheme;
           final m = modes[idx];
           final isSel = m['value'] == selected;
           return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.xs,
+              vertical: AppSpacing.xs,
+            ),
             child: ChoiceChip(
               label: Text(
                 m['label']?.toString() ?? '',
-                style: const TextStyle(fontSize: 11),
+                style: theme.textTheme.bodySmall,
               ),
               selected: isSel,
               selectedColor: colorScheme.primary.withValues(alpha: 0.3),
@@ -194,11 +206,11 @@ class HomeUIComponents {
         physics: const ClampingScrollPhysics(),
         // ignore: deprecated_member_use
         cacheExtent: 600.0,
-        padding: const EdgeInsets.all(6.0),
+        padding: const EdgeInsets.all(AppSpacing.md - 2),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: crossAxisCount,
-          crossAxisSpacing: 6.0,
-          mainAxisSpacing: 6.0,
+          crossAxisSpacing: AppSpacing.md - 2,
+          mainAxisSpacing: AppSpacing.md - 2,
           childAspectRatio: 0.75,
         ),
         itemCount: filteredIllusts.length + (state.nextOffset != null ? 1 : 0),
@@ -234,7 +246,8 @@ class HomeUIComponents {
   }
 
   Widget _buildIllustGridItem(BuildContext context, dynamic illust) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     String? previewUrl;
     try {
       previewUrl =
@@ -283,10 +296,10 @@ class HomeUIComponents {
               // ブックマーク済みハート（左上）
               if (illust.isBookmarked == true)
                 Positioned(
-                  top: 8,
-                  left: 8,
+                  top: AppSpacing.sm,
+                  left: AppSpacing.sm,
                   child: Container(
-                    padding: const EdgeInsets.all(4),
+                    padding: const EdgeInsets.all(AppSpacing.xs),
                     decoration: BoxDecoration(
                       color: colorScheme.primary,
                       shape: BoxShape.circle,
@@ -301,12 +314,12 @@ class HomeUIComponents {
               // ブックマーク数バッジ（右下）
               if ((illust.totalBookmarks) > 0)
                 Positioned(
-                  bottom: 8,
-                  right: 8,
+                  bottom: AppSpacing.sm,
+                  right: AppSpacing.sm,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 3,
+                      horizontal: AppSpacing.sm - 2,
+                      vertical: AppSpacing.xs - 1,
                     ),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.7),
@@ -320,12 +333,11 @@ class HomeUIComponents {
                           size: 12,
                           color: colorScheme.primary,
                         ),
-                        const SizedBox(width: 2),
+                        const SizedBox(width: AppSpacing.xs - 2),
                         Text(
                           '${illust.totalBookmarks}',
-                          style: TextStyle(
+                          style: theme.textTheme.bodySmall?.copyWith(
                             color: Colors.white,
-                            fontSize: 10,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -362,12 +374,12 @@ class HomeUIComponents {
     double horiz, vert;
     if (isTablet) {
       crossAxisCount = 2;
-      horiz = 32.0;
-      vert = 10.0;
+      horiz = AppSpacing.xxl;
+      vert = AppSpacing.md - 2;
     } else {
       crossAxisCount = 1;
-      horiz = 16.0;
-      vert = 6.0;
+      horiz = AppSpacing.lg;
+      vert = AppSpacing.md - 2;
     }
 
     final itemCount = state.novels.length;
@@ -387,8 +399,8 @@ class HomeUIComponents {
                 ? SliverGrid(
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: crossAxisCount,
-                      crossAxisSpacing: 12.0,
-                      mainAxisSpacing: 12.0,
+                      crossAxisSpacing: AppSpacing.md,
+                      mainAxisSpacing: AppSpacing.md,
                       // カバー高さいっぱい + テキスト収まる余裕（Overflow防止）
                       mainAxisExtent: 156.0,
                     ),
@@ -442,21 +454,26 @@ class HomeUIComponents {
     required String message,
     required String subMessage,
   }) {
-    final colorScheme = Theme.of(state.context).colorScheme;
+    final theme = Theme.of(state.context);
+    final colorScheme = theme.colorScheme;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(icon, size: 64, color: colorScheme.onSurfaceVariant),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           Text(
             message,
-            style: TextStyle(fontSize: 18, color: colorScheme.onSurfaceVariant),
+            style: theme.textTheme.headlineSmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Text(
             subMessage,
-            style: TextStyle(fontSize: 14, color: colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -464,28 +481,31 @@ class HomeUIComponents {
   }
 
   Widget _buildLoadMoreIndicator() {
-    final colorScheme = Theme.of(state.context).colorScheme;
+    final theme = Theme.of(state.context);
+    final colorScheme = theme.colorScheme;
     if (state.rateLimited == true) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 'アクセス制限が発生しました',
-                style: TextStyle(
+                style: theme.textTheme.bodyLarge?.copyWith(
                   color: colorScheme.error,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               Text(
                 'Pixivのアクセス制限（レート制限）が発生しました。\nしばらく時間を置いてから再試行してください。',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: colorScheme.onSurfaceVariant),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.lg),
               ElevatedButton.icon(
                 onPressed: state.fetchNextPage,
                 icon: const Icon(Icons.refresh),
@@ -498,28 +518,31 @@ class HomeUIComponents {
     }
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: CircularProgressIndicator(),
       ),
     );
   }
 
   Widget buildErrorWidget() {
-    final colorScheme = Theme.of(state.context).colorScheme;
+    final theme = Theme.of(state.context);
+    final colorScheme = theme.colorScheme;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(AppSpacing.xl),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.cloud_off, size: 64, color: colorScheme.primary),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             Text(
               state.errorMessage?.toString() ?? 'エラーが発生しました',
               textAlign: TextAlign.center,
-              style: TextStyle(color: colorScheme.error, fontSize: 13),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.error,
+              ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppSpacing.xl),
             ElevatedButton.icon(
               onPressed: state.fetchData,
               icon: const Icon(Icons.refresh),
@@ -541,13 +564,14 @@ class HomeUIComponents {
   static const double _kEncyclopediaCardMaxHeight = 180.0;
 
   Widget buildEncyclopediaCard(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     if (state.searchItem == null) return const SizedBox.shrink();
     final item = state.searchItem!;
     final String? iconUrl = item.iconUrl;
 
     final cardContent = Padding(
-      padding: const EdgeInsets.all(12.0),
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -575,35 +599,32 @@ class HomeUIComponents {
                       : Icon(Icons.bookmark_border, color: colorScheme.primary),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       '#${item.name}',
-                      style: TextStyle(
+                      style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
-                        fontSize: 16,
                         color: colorScheme.primary,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: AppSpacing.xs - 2),
                     if (item.wordCount != null)
                       Text(
                         '作品数: ${item.wordCount}',
-                        style: TextStyle(
-                          fontSize: 12,
+                        style: theme.textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
                       )
                     else
                       Text(
                         '作品数: 取得できません',
-                        style: TextStyle(
-                          fontSize: 12,
+                        style: theme.textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
                       ),
@@ -613,11 +634,10 @@ class HomeUIComponents {
             ],
           ),
           if (item.summary.isNotEmpty) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: AppSpacing.md - 2),
             Text(
               item.summary,
-              style: TextStyle(
-                fontSize: 12,
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
                 height: 1.4,
               ),
@@ -626,7 +646,7 @@ class HomeUIComponents {
             ),
           ],
           if (item.dicUrl.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Align(
               alignment: Alignment.centerRight,
               child: InkWell(
@@ -653,15 +673,14 @@ class HomeUIComponents {
                 },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
-                    vertical: 4,
-                    horizontal: 8,
+                    vertical: AppSpacing.xs,
+                    horizontal: AppSpacing.sm,
                   ),
                   child: Text(
                     'ピクシブ百科事典で見る ↗',
-                    style: TextStyle(
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.tertiary,
                       fontWeight: FontWeight.bold,
-                      fontSize: 12,
                     ),
                   ),
                 ),
@@ -694,7 +713,10 @@ class HomeUIComponents {
     if (available >= _kEncyclopediaCardMaxHeight) {
       // 通常: 従来通りのレイアウト。
       return Card(
-        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        margin: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md - 2,
+          vertical: AppSpacing.sm - 2,
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         elevation: 4,
         child: cardContent,
@@ -703,7 +725,10 @@ class HomeUIComponents {
     return SizedBox(
       height: math.max(0.0, available),
       child: Card(
-        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        margin: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md - 2,
+          vertical: AppSpacing.sm - 2,
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         elevation: 4,
         clipBehavior: Clip.antiAlias,
@@ -718,9 +743,10 @@ class HomeUIComponents {
   Widget buildSyncProgressHUD() {
     if (state.isSyncing != true) return const SizedBox.shrink();
 
+    final theme = Theme.of(state.context);
     return Center(
       child: Container(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(AppSpacing.xl),
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.8),
           borderRadius: BorderRadius.circular(12),
@@ -729,16 +755,15 @@ class HomeUIComponents {
           mainAxisSize: MainAxisSize.min,
           children: [
             CircularProgressIndicator(),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             Text(
               'Google ドライブに同期中...',
-              style: TextStyle(
+              style: theme.textTheme.titleMedium?.copyWith(
                 color: Colors.white,
-                fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             // 背景は固定の黒(0.8)オーバーレイ（ライト/ダーク共通）のため、
             // onSurfaceVariant（ライトでは濃いグレー）にせず白系統を維持する。
             Text(
@@ -755,12 +780,12 @@ class HomeUIComponents {
   // フィルターUI部品（HomeFilterHandler と重複してるなら後で削除可）
   // =========================================================================
   Widget buildFilterSectionTitle(String title) {
+    final theme = Theme.of(state.context);
     return Text(
       title,
-      style: TextStyle(
-        color: Theme.of(state.context).colorScheme.onSurface,
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: theme.colorScheme.onSurface,
         fontWeight: FontWeight.bold,
-        fontSize: 13,
       ),
     );
   }
@@ -770,15 +795,15 @@ class HomeUIComponents {
     required bool selected,
     required VoidCallback onSelected,
   }) {
-    final colorScheme = Theme.of(state.context).colorScheme;
+    final theme = Theme.of(state.context);
+    final colorScheme = theme.colorScheme;
     return ChoiceChip(
       label: Text(
         label,
-        style: TextStyle(
+        style: theme.textTheme.bodySmall?.copyWith(
           color: selected
               ? colorScheme.onSurface
               : colorScheme.onSurfaceVariant,
-          fontSize: 12,
           fontWeight: selected ? FontWeight.bold : FontWeight.normal,
         ),
       ),

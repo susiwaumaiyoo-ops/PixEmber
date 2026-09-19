@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../novel_model.dart';
+import '../theme/app_spacing.dart';
 import 'pixiv_image.dart';
 
 /// ホーム／フィーリング発掘で共通利用する小説カード。
@@ -50,16 +51,16 @@ class NovelListCard extends StatelessWidget {
   /// 「BoxConstraints forces an infinite height」でクラッシュするため。
   static const double _listCoverHeight = 101.0;
 
-  static const EdgeInsets _cardPadding = EdgeInsets.all(8.0);
-  static const double _hGap = 8.0;
-  static const double _vGap = 6.0;
+  static const EdgeInsets _cardPadding = EdgeInsets.all(AppSpacing.sm);
+  static const double _hGap = AppSpacing.sm;
+  static const double _vGap = AppSpacing.sm - 2;
 
   @override
   Widget build(BuildContext context) {
     return Card(
       clipBehavior: Clip.antiAlias,
       elevation: 3,
-      margin: const EdgeInsets.symmetric(vertical: 2),
+      margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs - 2),
       child: InkWell(
         onTap: onTap,
         child: Padding(
@@ -129,7 +130,8 @@ class NovelListCard extends StatelessWidget {
   /// - bounded: caption / series は表示しない（省スペース、188pxに収める）。
   /// - unbounded: caption / series を1行ずつ追加。
   Widget _buildTextColumn(BuildContext context, {required bool hasBounded}) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final bool showCaption = !hasBounded && novel.caption.trim().isNotEmpty;
     final bool showSeries = !hasBounded && novel.series != null;
     final bool hasTags = novel.tags.isNotEmpty;
@@ -139,7 +141,13 @@ class NovelListCard extends StatelessWidget {
     // バッジ行（空なら Widget ごと生成しない）
     final badges = _buildBadges(context);
     if (badges.isNotEmpty) {
-      children.add(Wrap(spacing: 4, runSpacing: 2, children: badges));
+      children.add(
+        Wrap(
+          spacing: AppSpacing.xs,
+          runSpacing: AppSpacing.xs - 2,
+          children: badges,
+        ),
+      );
       children.add(const SizedBox(height: _vGap));
     }
 
@@ -152,12 +160,12 @@ class NovelListCard extends StatelessWidget {
         text: TextSpan(
           style: DefaultTextStyle.of(
             context,
-          ).style.copyWith(fontWeight: FontWeight.bold, fontSize: 14),
+          ).style.copyWith(fontWeight: FontWeight.bold),
           children: [
             if (hasLabel)
               TextSpan(
                 text: '$matchLabel ',
-                style: TextStyle(color: colorScheme.tertiary, fontSize: 13),
+                style: TextStyle(color: colorScheme.tertiary),
               ),
             TextSpan(text: novel.title),
           ],
@@ -185,7 +193,9 @@ class NovelListCard extends StatelessWidget {
       children.add(
         Text(
           novel.caption.trim(),
-          style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -202,11 +212,13 @@ class NovelListCard extends StatelessWidget {
               size: 13,
               color: colorScheme.secondary,
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: AppSpacing.xs),
             Expanded(
               child: Text(
                 novel.series!.title,
-                style: TextStyle(fontSize: 12, color: colorScheme.secondary),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.secondary,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -231,7 +243,8 @@ class NovelListCard extends StatelessWidget {
 
   /// 作者行（アイコンは常に丸型 / PixivImage で Referer 付き取得）。
   Widget _buildAuthorRow(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final String? avatar = novel.author.avatar;
     final bool hasAvatar = avatar != null && avatar.isNotEmpty;
 
@@ -252,11 +265,13 @@ class NovelListCard extends StatelessWidget {
                 : const _AvatarPlaceholder(),
           ),
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: AppSpacing.xs),
         Expanded(
           child: Text(
             novel.author.name,
-            style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -267,22 +282,28 @@ class NovelListCard extends StatelessWidget {
 
   /// タグ（最大3個）。Wrap で折り返し、右端での切れ/オーバーフローを防止。
   Widget _buildTags(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final tags = novel.tags.take(4).toList();
     return Wrap(
-      spacing: 4,
-      runSpacing: 2,
+      spacing: AppSpacing.xs,
+      runSpacing: AppSpacing.xs - 2,
       children: [
         for (final t in tags)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.xs + 1,
+              vertical: AppSpacing.xs - 3,
+            ),
             decoration: BoxDecoration(
               color: colorScheme.primary.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
               '#$t',
-              style: TextStyle(fontSize: 10, color: colorScheme.primary),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.primary,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -294,16 +315,19 @@ class NovelListCard extends StatelessWidget {
   /// メタ行（文字数 / ページ数 / ブクマ）。薄めの色。
   /// Row の幅は有限なので Expanded + ellipsis は安全。
   Widget _buildMetaRow(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.only(top: AppSpacing.xs - 2),
       child: Row(
         children: [
           Icon(Icons.notes, size: 12, color: colorScheme.onSurfaceVariant),
           const SizedBox(width: 3),
           Text(
             novel.textLength > 0 ? _formatNumber(novel.textLength) : '不明',
-            style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
             maxLines: 1,
           ),
           const SizedBox(width: 10),
@@ -311,7 +335,9 @@ class NovelListCard extends StatelessWidget {
           const SizedBox(width: 3),
           Text(
             novel.pageCount > 0 ? '${novel.pageCount}P' : '不明',
-            style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
             maxLines: 1,
           ),
           const SizedBox(width: 10),
@@ -320,8 +346,7 @@ class NovelListCard extends StatelessWidget {
           Expanded(
             child: Text(
               _formatNumber(novel.totalBookmarks),
-              style: TextStyle(
-                fontSize: 11,
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
               maxLines: 1,
@@ -356,7 +381,10 @@ class NovelListCard extends StatelessWidget {
 
   Widget _badge(IconData icon, String label, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xs + 1,
+        vertical: AppSpacing.xs - 3,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.18),
         borderRadius: BorderRadius.circular(4),
@@ -366,8 +394,8 @@ class NovelListCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 11, color: color),
-          const SizedBox(width: 3),
-          Text(label, style: TextStyle(fontSize: 10, color: color)),
+          const SizedBox(width: AppSpacing.xs - 1),
+          Text(label, style: TextStyle(color: color)),
         ],
       ),
     );
@@ -376,7 +404,10 @@ class NovelListCard extends StatelessWidget {
   /// 呼び出し側が [extraBadges] に渡すバッジを生成するファクトリ。
   static Widget buildExtraBadge(IconData icon, String label, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xs + 1,
+        vertical: AppSpacing.xs - 3,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.18),
         borderRadius: BorderRadius.circular(4),
@@ -386,8 +417,8 @@ class NovelListCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 11, color: color),
-          const SizedBox(width: 3),
-          Text(label, style: TextStyle(fontSize: 10, color: color)),
+          const SizedBox(width: AppSpacing.xs - 1),
+          Text(label, style: TextStyle(color: color)),
         ],
       ),
     );
