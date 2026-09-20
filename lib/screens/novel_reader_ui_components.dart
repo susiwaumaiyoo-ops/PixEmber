@@ -1417,7 +1417,8 @@ extension _ReaderUiComponents on _NovelReaderScreenState {
 
   // 挿絵の全画面表示（既存 FullScreenImagePage を再利用）。
   void _openNovelIllustrationViewer(String url) {
-    Navigator.of(context).push(
+    // 17b: 全画面表示は root Navigator に積みボトムナビを隠す。
+    Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute<void>(
         builder: (_) =>
             FullScreenImagePage(images: [PageImage(page: 1, original: url)]),

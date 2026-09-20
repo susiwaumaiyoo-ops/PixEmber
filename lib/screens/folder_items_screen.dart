@@ -109,18 +109,18 @@ class _FolderItemsScreenState extends State<FolderItemsScreen> {
       try {
         final target = await _pixivApiService.getIllustById(itemId);
         if (!mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => IllustDetailScreen(
-              illust: target,
-              onTagTap: (tag) {},
-              onBookmarkChanged: (bookmarked) {
-                _fetchItems();
-              },
-            ),
-          ),
-        );
+        Navigator.of(context, rootNavigator: true) // 17b
+            .push(
+              MaterialPageRoute(
+                builder: (context) => IllustDetailScreen(
+                  illust: target,
+                  onTagTap: (tag) {},
+                  onBookmarkChanged: (bookmarked) {
+                    _fetchItems();
+                  },
+                ),
+              ),
+            );
       } catch (_) {}
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -141,8 +141,8 @@ class _FolderItemsScreenState extends State<FolderItemsScreen> {
         totalBookmarks: 0,
         isBookmarked: true,
       );
-      Navigator.push(
-        context,
+      Navigator.of(context, rootNavigator: true).push(
+        // 17b
         MaterialPageRoute(
           builder: (context) => NovelDetailScreen(
             novel: pseudoNovel,

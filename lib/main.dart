@@ -164,6 +164,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     Uri originalUri,
   ) async {
     try {
+      // 17b: _navigatorKey は MaterialApp 直下の root Navigator なので
+      // イマーシブ画面（詳細/リーダー）はそのままボトムナビが隠れる。
       if (parsed.type == 'illust') {
         final illust = await _api.getIllustById(parsed.id);
         if (!mounted) return;

@@ -86,10 +86,11 @@ class _OfflineBookshelfScreenState extends State<OfflineBookshelfScreen> {
       isBookmarked: false,
     );
     if (!mounted) return;
-    await Navigator.push(
+    // 17b: リーダーは root Navigator に積みボトムナビを隠す。
+    await Navigator.of(
       context,
-      MaterialPageRoute(builder: (_) => NovelReaderScreen(novel: novel!)),
-    );
+      rootNavigator: true,
+    ).push(MaterialPageRoute(builder: (_) => NovelReaderScreen(novel: novel!)));
     // 閲覧後は削除等で件数が変わる可能性があるため再読込
     _load();
   }

@@ -99,8 +99,8 @@ class _ReadLaterScreenState extends State<ReadLaterScreen>
       if (!mounted) return;
       // 未読は詳細画面、読書中/読了は直接リーダー再開
       if (status == 0) {
-        await Navigator.push(
-          context,
+        // 17b: 詳細画面は root Navigator に積みボトムナビを隠す。
+        await Navigator.of(context, rootNavigator: true).push(
           MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: novel)),
         );
       } else {
@@ -117,8 +117,8 @@ class _ReadLaterScreenState extends State<ReadLaterScreen>
           (item['last_offset'] as num? ?? 0).toDouble(),
         );
         if (!mounted) return;
-        await Navigator.push(
-          context,
+        // 17b: リーダーは root Navigator に積みボトムナビを隠す。
+        await Navigator.of(context, rootNavigator: true).push(
           MaterialPageRoute(builder: (_) => NovelReaderScreen(novel: novel)),
         );
       }
@@ -425,8 +425,8 @@ class _ReadLaterScreenState extends State<ReadLaterScreen>
       }
       final novel = await PixivApiService().getNovelById(next.id);
       if (!mounted) return;
-      await Navigator.push(
-        context,
+      // 17b: 詳細画面は root Navigator に積みボトムナビを隠す。
+      await Navigator.of(context, rootNavigator: true).push(
         MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: novel)),
       );
     } catch (e) {

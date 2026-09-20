@@ -276,13 +276,13 @@ class _BookmarkListScreenState extends State<BookmarkListScreen> {
                       if (!mounted) return;
                       final ctx = context;
                       if (!ctx.mounted) return;
-                      await Navigator.push(
-                        ctx,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              NovelDetailScreen(novel: fullNovel!),
-                        ),
-                      );
+                      await Navigator.of(ctx, rootNavigator: true) // 17b
+                          .push(
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  NovelDetailScreen(novel: fullNovel!),
+                            ),
+                          );
                       if (!mounted) return;
                       _loadBookmarks();
                     },

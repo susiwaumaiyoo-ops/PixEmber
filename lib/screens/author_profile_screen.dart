@@ -403,15 +403,16 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
         final illust = _illusts[index];
         return GestureDetector(
           onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => IllustDetailScreen(illust: illust),
-              ),
-            ).then((_) {
-              if (!mounted) return;
-              setState(() {});
-            });
+            Navigator.of(context, rootNavigator: true) // 17b
+                .push(
+                  MaterialPageRoute(
+                    builder: (context) => IllustDetailScreen(illust: illust),
+                  ),
+                )
+                .then((_) {
+                  if (!mounted) return;
+                  setState(() {});
+                });
           },
           child: Container(
             color: colorScheme.surfaceContainerHighest,
@@ -561,15 +562,16 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen>
               ],
             ),
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => NovelDetailScreen(novel: novel),
-                ),
-              ).then((_) {
-                if (!mounted) return;
-                setState(() {});
-              });
+              Navigator.of(context, rootNavigator: true) // 17b
+                  .push(
+                    MaterialPageRoute(
+                      builder: (context) => NovelDetailScreen(novel: novel),
+                    ),
+                  )
+                  .then((_) {
+                    if (!mounted) return;
+                    setState(() {});
+                  });
             },
           ),
         );

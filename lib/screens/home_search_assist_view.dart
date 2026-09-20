@@ -348,8 +348,8 @@ class _SearchAssistViewState extends State<SearchAssistView> {
         final authorId = card.authorId ?? 0;
         if (authorId <= 0) return;
         if (!mounted) return;
-        await Navigator.push(
-          context,
+        await Navigator.of(context, rootNavigator: true).push(
+          // 17b
           MaterialPageRoute(
             builder: (_) => AuthorProfileScreen(userId: authorId),
           ),
@@ -370,8 +370,8 @@ class _SearchAssistViewState extends State<SearchAssistView> {
       novel ??= await PixivApiService().getNovelById(workId);
       if (!mounted) return;
       final target = novel;
-      await Navigator.push(
-        context,
+      await Navigator.of(context, rootNavigator: true).push(
+        // 17b
         MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: target)),
       );
     } catch (_) {

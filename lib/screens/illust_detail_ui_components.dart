@@ -189,8 +189,8 @@ class IllustDetailUIComponents {
     final colorScheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: () {
-        Navigator.push(
-          context,
+        // 17b: 作者画面は root Navigator に積みボトムナビを隠す。
+        Navigator.of(context, rootNavigator: true).push(
           MaterialPageRoute(
             builder: (context) =>
                 AuthorProfileScreen(userId: state.illust.author.id),
@@ -806,8 +806,8 @@ class IllustDetailUIComponents {
   void _showSimilarWorksScreen(BuildContext context, IllustDetailState state) {
     final similar = state.similar;
     if (similar == null) return;
-    Navigator.push(
-      context,
+    // 17b: 詳細から派生する一覧画面も root Navigator に積む。
+    Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(
         builder: (context) => SimilarWorksScreen(
           baseTitle: state.illust.title,
@@ -827,8 +827,8 @@ class IllustDetailUIComponents {
     try {
       if (work.type == 'novel') {
         final novel = Novel.fromJson(Map<String, dynamic>.from(work.row));
-        Navigator.push(
-          context,
+        // 17b: 詳細画面は root Navigator に積みボトムナビを隠す。
+        Navigator.of(context, rootNavigator: true).push(
           MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: novel)),
         );
         return;
@@ -842,8 +842,8 @@ class IllustDetailUIComponents {
         }
       }
       final illust = Illust.fromJson(row);
-      Navigator.push(
-        context,
+      // 17b: 詳細画面は root Navigator に積みボトムナビを隠す。
+      Navigator.of(context, rootNavigator: true).push(
         MaterialPageRoute(
           builder: (context) => IllustDetailScreen(
             illust: illust,
@@ -916,8 +916,8 @@ class IllustDetailUIComponents {
               child: InkWell(
                 onTap: () async {
                   // 無限に関連作品に遷移 (Push)
-                  await Navigator.push(
-                    context,
+                  // 17b: 詳細画面は root Navigator に積みボトムナビを隠す。
+                  await Navigator.of(context, rootNavigator: true).push(
                     MaterialPageRoute(
                       builder: (context) => IllustDetailScreen(
                         illust: relIllust,
@@ -1134,8 +1134,8 @@ class IllustDetailUIComponents {
         ),
       );
     }
-    Navigator.push(
-      context,
+    // 17b: 全画面表示も root Navigator に積みボトムナビを隠す。
+    Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(
         builder: (context) =>
             FullScreenImagePage(images: images, initialIndex: 0),

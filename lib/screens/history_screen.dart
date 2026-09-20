@@ -136,23 +136,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
         // Novel オブジェクトを取得
         final novel = await PixivApiService().getNovelById(workId);
         if (mounted) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => NovelDetailScreen(novel: novel),
-            ),
-          );
+          Navigator.of(context, rootNavigator: true) // 17b
+              .push(
+                MaterialPageRoute(
+                  builder: (context) => NovelDetailScreen(novel: novel),
+                ),
+              );
         }
       } else {
         // イラスト/マンガ/うごイラ
         final illust = await PixivApiService().getIllustById(workId);
         if (mounted) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => IllustDetailScreen(illust: illust),
-            ),
-          );
+          Navigator.of(context, rootNavigator: true) // 17b
+              .push(
+                MaterialPageRoute(
+                  builder: (context) => IllustDetailScreen(illust: illust),
+                ),
+              );
         }
       }
     } on RateLimitException {

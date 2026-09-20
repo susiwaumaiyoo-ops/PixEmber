@@ -275,21 +275,21 @@ class HomeUIComponents {
         elevation: 3,
         child: InkWell(
           onTap: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => IllustDetailScreen(
-                  illust: illust,
-                  heroTag: heroTag,
-                  onTagTap: state.onTagSelected,
-                  onBookmarkChanged: (newVal) {
-                    state.applyState(() {
-                      illust.isBookmarked = newVal;
-                    });
-                  },
-                ),
-              ),
-            );
+            await Navigator.of(context, rootNavigator: true) // 17b
+                .push(
+                  MaterialPageRoute(
+                    builder: (_) => IllustDetailScreen(
+                      illust: illust,
+                      heroTag: heroTag,
+                      onTagTap: state.onTagSelected,
+                      onBookmarkChanged: (newVal) {
+                        state.applyState(() {
+                          illust.isBookmarked = newVal;
+                        });
+                      },
+                    ),
+                  ),
+                );
             if (state.isMounted != true) return;
             state.applyState(() {});
           },
@@ -486,12 +486,13 @@ class HomeUIComponents {
                       final novel = state.novels[index];
                       return NovelListCard(
                         novel: novel,
-                        onTap: () => Navigator.push(
-                          ctx,
-                          MaterialPageRoute(
-                            builder: (_) => NovelDetailScreen(novel: novel),
-                          ),
-                        ),
+                        onTap: () =>
+                            Navigator.of(ctx, rootNavigator: true).push(
+                              // 17b
+                              MaterialPageRoute(
+                                builder: (_) => NovelDetailScreen(novel: novel),
+                              ),
+                            ),
                       );
                     }, childCount: itemCount),
                   )
@@ -501,12 +502,13 @@ class HomeUIComponents {
                       final novel = state.novels[index];
                       return NovelListCard(
                         novel: novel,
-                        onTap: () => Navigator.push(
-                          ctx,
-                          MaterialPageRoute(
-                            builder: (_) => NovelDetailScreen(novel: novel),
-                          ),
-                        ),
+                        onTap: () =>
+                            Navigator.of(ctx, rootNavigator: true).push(
+                              // 17b
+                              MaterialPageRoute(
+                                builder: (_) => NovelDetailScreen(novel: novel),
+                              ),
+                            ),
                       );
                     }, childCount: itemCount),
                   ),

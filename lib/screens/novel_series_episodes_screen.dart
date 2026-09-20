@@ -392,13 +392,13 @@ class _NovelSeriesEpisodesScreenState extends State<NovelSeriesEpisodesScreen> {
                             ],
                           ),
                           onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    NovelDetailScreen(novel: novel),
-                              ),
-                            );
+                            Navigator.of(context, rootNavigator: true) // 17b
+                                .push(
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        NovelDetailScreen(novel: novel),
+                                  ),
+                                );
                           },
                         ),
                       );

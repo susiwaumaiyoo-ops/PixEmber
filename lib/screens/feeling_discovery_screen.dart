@@ -640,8 +640,8 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
         return;
       }
 
-      await Navigator.push(
-        context,
+      // 17b: 詳細画面は root Navigator に積みボトムナビを隠す。
+      await Navigator.of(context, rootNavigator: true).push(
         MaterialPageRoute(builder: (_) => IllustDetailScreen(illust: illust!)),
       );
       return;
@@ -686,8 +686,8 @@ class _FeelingDiscoveryScreenState extends State<FeelingDiscoveryScreen> {
     }
 
     final fullNovel = novel;
-    await Navigator.push(
-      context,
+    // 17b: 詳細画面は root Navigator に積みボトムナビを隠す。
+    await Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: fullNovel)),
     );
   }

@@ -121,22 +121,23 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
   }
 
   void _navigateToDetail(RecommendCandidate candidate) {
+    final rootNav = Navigator.of(context, rootNavigator: true); // 17b
     if (candidate.type == 'novel') {
       final novel = Novel.fromJson(candidate.row);
-      Navigator.push(
-        context,
+      rootNav.push(
         MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: novel)),
       );
     } else {
       final illust = Illust.fromJson(candidate.row);
-      Navigator.push(
-        context,
+      rootNav.push(
         MaterialPageRoute(builder: (_) => IllustDetailScreen(illust: illust)),
       );
     }
   }
 
   void _navigateToMaintenance() {
+    // 17b: メンテナンス画面は Settings 系（SettingsScreen 配下）なので
+    // ネスト Navigator のまま。ボトムナビはこのスタック最上位で隠れる。
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const AiIndexMaintenanceScreen()),
@@ -144,6 +145,7 @@ class _AiRecommendFeedScreenState extends State<AiRecommendFeedScreen> {
   }
 
   void _navigateToSettings() {
+    // 17b: 設定画面は Settings 系なのでネスト Navigator のまま。
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const _RecommendSettingsScreen()),

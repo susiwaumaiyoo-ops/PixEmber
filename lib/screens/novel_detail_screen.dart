@@ -455,8 +455,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     try {
       if (w.type == 'novel') {
         final novel = Novel.fromJson(Map<String, dynamic>.from(w.row));
-        Navigator.push(
-          context,
+        // 17b: 詳細画面は root Navigator に積みボトムナビを隠す。
+        Navigator.of(context, rootNavigator: true).push(
           MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: novel)),
         );
       }
@@ -469,8 +469,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   void _showSimilarWorksScreen() {
     final result = _similar;
     if (result == null) return;
-    Navigator.push(
-      context,
+    // 17b: 詳細から派生する一覧画面も root Navigator に積む。
+    Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(
         builder: (_) => SimilarWorksScreen(
           baseTitle: widget.novel.title,
@@ -724,8 +724,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     );
     final page = curve.chunks[idx].pageStart;
     Navigator.pop(context);
-    Navigator.push(
-      context,
+    // 17b: リーダーは root Navigator に積みボトムナビを隠す。
+    Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(
         builder: (context) =>
             NovelReaderScreen(novel: widget.novel, initialPage: page),
@@ -925,8 +925,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     try {
       final novel = await PixivApiService().getNovelById(next.id);
       if (!mounted) return;
-      await Navigator.push(
-        context,
+      // 17b: 詳細画面は root Navigator に積みボトムナビを隠す。
+      await Navigator.of(context, rootNavigator: true).push(
         MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: novel)),
       );
     } catch (e) {
@@ -1239,8 +1239,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                         const SizedBox(height: 8),
                         InkWell(
                           onTap: () {
-                            Navigator.push(
-                              context,
+                            // 17b: 作者画面も root Navigator に積む。
+                            Navigator.of(context, rootNavigator: true).push(
                               MaterialPageRoute(
                                 builder: (context) => AuthorProfileScreen(
                                   userId: widget.novel.author.id,
@@ -1341,13 +1341,17 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                         const SizedBox(height: 12),
                         ElevatedButton.icon(
                           onPressed: () async {
-                            final res = await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    NovelReaderScreen(novel: widget.novel),
-                              ),
-                            );
+                            // 17b: リーダーは root Navigator に積みボトムナビを隠す。
+                            final res =
+                                await Navigator.of(
+                                  context,
+                                  rootNavigator: true,
+                                ).push(
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        NovelReaderScreen(novel: widget.novel),
+                                  ),
+                                );
                             if (!mounted) return;
                             if (res == true) {
                               _loadReadingProgress();
@@ -1400,8 +1404,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                           const SizedBox(height: 10),
                           OutlinedButton.icon(
                             onPressed: () {
-                              Navigator.push(
-                                context,
+                              // 17b: 話数一覧も root Navigator に積む。
+                              Navigator.of(context, rootNavigator: true).push(
                                 MaterialPageRoute(
                                   builder: (context) =>
                                       NovelSeriesEpisodesScreen(
