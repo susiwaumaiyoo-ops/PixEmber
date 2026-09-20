@@ -7,14 +7,14 @@
 // の判定ロジックだけを検証する（16c-3a と同じ手法）。
 //
 // 各表示要素の on/off は build() 内の `if` に相当する getter が
-// 单独にテストできる形になっている:
+// 単独にテストできる形になっている:
 //
 // - 検索入力欄・SearchAssistView・百科事典カード・Visual Search 導線
-//   → 検索サーフェス（と combined）だけで有効
+//   → 検索サーフェスだけで有効
 // - ソースチップ・おすすめ/ランキング切替・ランキングフィルター・
 //   フィーリング発掘・Google Drive 同期 HUD
-//   → フィードサーフェス（と combined）だけで有効
-// - combined は全要素を従来どおり表示する（互換性）
+//   → フィードサーフェスだけで有効
+// - 16c-4b で combined を廃止。表示分岐は isSearchMode だけになった。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pixiv_viewer/screens/home_screen_state.dart';
@@ -27,19 +27,14 @@ void main() {
 
     setUp(() {
       state = PixivViewerHomeState();
-      notifier = ValueNotifier<HomeSurfaceMode>(HomeSurfaceMode.combined);
+      // 16c-4b: combined 廃止。既定は feed。
+      notifier = ValueNotifier<HomeSurfaceMode>(HomeSurfaceMode.feed);
       state.attachSurfaceMode(notifier);
     });
 
     tearDown(() => notifier.dispose);
 
-    test('combined は feed 専用・search 専用のどちらでもない', () {
-      expect(state.surfaceMode, HomeSurfaceMode.combined);
-      expect(state.isFeedSurfaceForTest, isFalse);
-    });
-
     test('feed はフィード専用サーフェス', () {
-      notifier.value = HomeSurfaceMode.feed;
       expect(state.surfaceMode, HomeSurfaceMode.feed);
       expect(state.isFeedSurfaceForTest, isTrue);
     });
@@ -50,15 +45,15 @@ void main() {
     });
 
     group('SearchAssistView の表示判定', () {
-      test('combined では従来どおり assisting のみで表示', () {
-        state.homeSearchUiMode = HomeSearchUiMode.browsing;
-        expect(state.shouldShowSearchAssistForTest, isFalse);
-
-        state.homeSearchUiMode = HomeSearchUiMode.assisting;
-        expect(state.shouldShowSearchAssistForTest, isTrue);
-
-        state.homeSearchUiMode = HomeSearchUiMode.results;
-        expect(state.shouldShowSearchAssistForTest, isFalse);
+      test('feed ではどの検索 UI モードでも表示しない', () {
+        for (final mode in HomeSearchUiMode.values) {
+          state.homeSearchUiMode = mode;
+          expect(
+            state.shouldShowSearchAssistForTest,
+            isFalse,
+            reason: 'feed では $mode でもアシストを表示しない',
+          );
+        }
       });
 
       test('search では検索結果表示中以外は常時表示', () {

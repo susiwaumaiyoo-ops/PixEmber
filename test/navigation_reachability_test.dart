@@ -173,8 +173,8 @@ void main() {
       expect(find.text('ホーム/検索本文'), findsOneWidget);
     });
 
-    test('HomeSurfaceMode は 3 状態（combined/feed/search）を持つ', () {
-      expect(HomeSurfaceMode.values, hasLength(3));
+    test('HomeSurfaceMode は 2 状態（feed/search）を持つ（16c-4b）', () {
+      expect(HomeSurfaceMode.values, hasLength(2));
     });
   });
 

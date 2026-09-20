@@ -16,9 +16,8 @@ import 'package:pixiv_viewer/screens/home_screen_state.dart';
 
 void main() {
   group('HomeSurfaceMode enum', () {
-    test('combined / feed / search の 3 状態を持つ', () {
-      expect(HomeSurfaceMode.values, hasLength(3));
-      expect(HomeSurfaceMode.values, contains(HomeSurfaceMode.combined));
+    test('feed / search の 2 状態を持つ（16c-4b で combined を廃止）', () {
+      expect(HomeSurfaceMode.values, hasLength(2));
       expect(HomeSurfaceMode.values, contains(HomeSurfaceMode.feed));
       expect(HomeSurfaceMode.values, contains(HomeSurfaceMode.search));
     });
@@ -31,9 +30,9 @@ void main() {
       state = PixivViewerHomeState();
     });
 
-    test('listenable が null なら combined になる', () {
+    test('listenable が null なら feed になる（16c-4b）', () {
       state.attachSurfaceMode(null);
-      expect(state.surfaceMode, HomeSurfaceMode.combined);
+      expect(state.surfaceMode, HomeSurfaceMode.feed);
     });
 
     test('feed / search の切替を通知する', () {
@@ -140,7 +139,8 @@ void main() {
         notifier.value = HomeSurfaceMode.search;
         notifier.dispose();
       }, returnsNormally);
-      expect(state.surfaceMode, HomeSurfaceMode.combined);
+      // 16c-4b: combined 廃止。detach 後は feed（ホーム目的地）。
+      expect(state.surfaceMode, HomeSurfaceMode.feed);
     });
   });
 
