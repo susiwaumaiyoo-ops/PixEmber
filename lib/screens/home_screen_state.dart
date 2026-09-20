@@ -7,26 +7,12 @@ import '../novel_model.dart';
 import '../services/google_drive_service.dart';
 import '../services/pixiv_api_service.dart';
 import '../services/pixiv_api_http.dart';
-import 'bookmark_list_screen.dart';
-import 'history_screen.dart';
 import 'feeling_discovery_screen.dart';
 import 'ai_recommend_feed_screen.dart';
-import 'folder_list_screen.dart';
-import 'mute_settings_screen.dart';
-import 'subscriptions_screen.dart';
-import 'read_later_screen.dart';
-import 'statistics_screen.dart';
-import 'ai_index_maintenance_screen.dart';
-import 'backup_manager_screen.dart';
-import 'offline_bookshelf_screen.dart';
-import 'download_queue_screen.dart';
 import 'visual_search_screen.dart';
-import 'duplicate_finder_screen.dart';
 import '../widgets/home_visual_search_entry.dart';
-import 'settings_screen.dart';
 import 'home_ui_components.dart';
 import 'home_filter_handler.dart';
-import 'home_sync_handler.dart';
 import 'home_search_assist_view.dart';
 import 'home_search_source_chips.dart';
 import '../utils/home_search_ui_mode.dart';
@@ -116,10 +102,9 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   bool isSyncing = false;
 
   // Google Drive 同期用の状態変数
+  // 16c-4c: isBackingUp / isRestoring / lastSyncSummary は旧 Drawer
+  // 専用の即時バックアップ/復元ボタンが削除されたため不要。
   String? lastSyncTimestamp;
-  bool isBackingUp = false;
-  bool isRestoring = false;
-  Map<String, int>? lastSyncSummary;
 
   late final TextEditingController searchController;
   final FocusNode searchFocusNode = FocusNode();
@@ -499,9 +484,10 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   // 旧 SharedPreferences 履歴は起動時に1回だけ DB へ移行して削除する。
 
   // ハンドラーインスタンス
+  // 16c-4c: HomeSyncHandler は旧 Drawer 専用だったため削除。
+  //   Drive 同期 UI は BackupManagerScreen が独立して持つ。
   late HomeFilterHandler _filterHandler;
   late HomeUIComponents _uiComponents;
-  late HomeSyncHandler _syncHandler;
 
   /// 16c-3c: 検索サーフェスから [VisualSearchScreen] を開く。
   ///
@@ -534,7 +520,6 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     // ハンドラーの初期化
     _filterHandler = HomeFilterHandler(this);
     _uiComponents = HomeUIComponents(this);
-    _syncHandler = HomeSyncHandler(this);
 
     // Phase 3: 検索窓フォーカスでアシストビューへ領域置換（オーバーレイ禁止）
     // B3: 明示的タップ時のみ assisting へ遷移。プログラム的なフォーカス
@@ -1752,7 +1737,12 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     _filterHandler.showFilterBottomSheet();
   }
 
-  // ドライブ同期初期化
+  // 16c-4c: Drive 同期の起動時初期化。
+  //
+  // 旧 Drawer が持っていたバックアップ/復元 UI は BackupManagerScreen が
+  // 独立して行う（自前 GoogleDriveService）が、フィードサーフェスの
+  // 即時 HUD（buildSyncProgressHUD）とログイン状態表示のために、
+  // ホーム側でもサイレントサインインと最終同期時刻を復元し続ける。
   Future<void> _initializeDriveSync() async {
     await driveService.signInSilently();
     if (mounted && driveService.isLoggedIn) {
@@ -1766,121 +1756,6 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     if (timestamp != null && mounted) {
       setState(() {
         lastSyncTimestamp = timestamp;
-      });
-    }
-  }
-
-  // ローディングダイアログ表示
-  void _showLoadingDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
-    );
-  }
-
-  // ローディングダイアログ非表示
-  void _hideLoadingDialog() {
-    Navigator.of(context, rootNavigator: true).pop();
-  }
-
-  // Google バックアップ処理
-  Future<void> handleGoogleBackup() async {
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() => isBackingUp = true);
-    _showLoadingDialog();
-    try {
-      final success = await driveService.backupJSON();
-      _hideLoadingDialog();
-      setState(() => isBackingUp = false);
-      if (success && mounted) {
-        final now = DateTime.now().toIso8601String();
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('GOOGLE_DRIVE_LAST_SYNC', now);
-        setState(() => lastSyncTimestamp = now);
-        messenger.showSnackBar(const SnackBar(content: Text('バックアップ完了しました！')));
-      }
-    } catch (e) {
-      _hideLoadingDialog();
-      setState(() => isBackingUp = false);
-      if (mounted) {
-        messenger.showSnackBar(SnackBar(content: Text('バックアップ失敗：$e')));
-      }
-    }
-  }
-
-  // Google 復元処理
-  Future<void> handleGoogleRestore() async {
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() => isRestoring = true);
-    _showLoadingDialog();
-    try {
-      final summary = await driveService.restoreJSON();
-      _hideLoadingDialog();
-      setState(() => isRestoring = false);
-      if (summary != null && mounted) {
-        final now = DateTime.now().toIso8601String();
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('GOOGLE_DRIVE_LAST_SYNC', now);
-        setState(() {
-          lastSyncTimestamp = now;
-          lastSyncSummary = summary;
-        });
-        final totalAdded = summary.values.fold<int>(0, (sum, v) => sum + v);
-        messenger.showSnackBar(
-          SnackBar(content: Text('復元完了しました！追加/更新：$totalAdded 件')),
-        );
-      }
-    } catch (e) {
-      _hideLoadingDialog();
-      setState(() => isRestoring = false);
-      if (mounted) {
-        messenger.showSnackBar(SnackBar(content: Text('復元失敗：$e')));
-      }
-    }
-  }
-
-  // Google ログイン処理
-  Future<void> handleGoogleLogin() async {
-    try {
-      await driveService.signIn();
-      if (mounted && driveService.isLoggedIn) {
-        setState(() {
-          loggedInEmail = driveService.signedInEmail;
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Google ドライブにログインしました')));
-        }
-      } else if (mounted) {
-        // null 返却（キャンセル）/ 例外による失敗のいずれでも、
-        // 実エラー（code/message/details）から短い診断を生成して表示する。
-        final msg =
-            'Googleドライブログイン失敗：'
-            '${describeSignInError(driveService.lastSignInError)}';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), duration: const Duration(seconds: 8)),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('ログイン失敗：${describeSignInError(e)}'),
-            duration: const Duration(seconds: 8),
-          ),
-        );
-      }
-    }
-  }
-
-  // Google ログアウト処理
-  Future<void> handleGoogleLogout() async {
-    await driveService.signOut();
-    if (mounted) {
-      setState(() {
-        loggedInEmail = null;
       });
     }
   }
@@ -1990,359 +1865,22 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
           ),
         ),
       ),
-      drawer: Drawer(
-        backgroundColor: colorScheme.surfaceContainer,
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(color: colorScheme.primaryContainer),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(
-                    'PixEmber',
-                    style: textTheme.titleLarge?.copyWith(
-                      color: colorScheme.onPrimaryContainer,
-                    ),
-                  ),
-                  Text(
-                    'Ultimate State v3.1.0',
-                    style: textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onPrimaryContainer,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            ListTile(
-              leading: Icon(Icons.bookmark, color: colorScheme.primary),
-              title: const Text('しおり一覧'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const BookmarkListScreen(),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.history, color: colorScheme.primary),
-              title: const Text('閲覧履歴 (History)'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const HistoryScreen(),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.folder, color: colorScheme.primary),
-              title: const Text('お気に入りフォルダ'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const FolderListScreen(),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.block, color: colorScheme.primary),
-              title: const Text('ミュート（ブラックリスト）管理'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const MuteSettingsScreen(),
-                  ),
-                );
-              },
-            ),
-            FutureBuilder<int>(
-              future: DatabaseService().getSubscriptionUnreadCount(),
-              initialData: 0,
-              builder: (context, snapshot) {
-                final unread = snapshot.data ?? 0;
-                return ListTile(
-                  leading: Icon(Icons.stars, color: colorScheme.primary),
-                  title: const Text('購読タグ'),
-                  trailing: unread > 0
-                      ? Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.sm,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            unread > 999 ? '999+' : unread.toString(),
-                            style: textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onPrimary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        )
-                      : null,
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => SubscriptionsScreen(
-                          onTagSelected: (tag, type) =>
-                              onSubscribedTagSelected(tag, type),
-                        ),
-                      ),
-                    ).then((_) {
-                      // 購読画面から戻った際に未読バッジを再取得・反映
-                      if (mounted) setState(() {});
-                    });
-                  },
-                );
-              },
-            ),
-            FutureBuilder<int>(
-              future: DatabaseService().getReadLaterUnreadCount(),
-              initialData: 0,
-              builder: (context, snapshot) {
-                final unread = snapshot.data ?? 0;
-                return ListTile(
-                  leading: Icon(
-                    Icons.bookmark_add_outlined,
-                    color: colorScheme.primary,
-                  ),
-                  title: const Text('あとで読む'),
-                  trailing: unread > 0
-                      ? Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.sm,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            unread > 999 ? '999+' : unread.toString(),
-                            style: textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onPrimary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        )
-                      : null,
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ReadLaterScreen(),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.settings, color: colorScheme.primary),
-              title: const Text('設定'),
-              subtitle: const Text('検索・リーダー・バックアップ'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                );
-              },
-            ),
-            Divider(height: 1, color: colorScheme.outlineVariant),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.lg,
-                vertical: AppSpacing.sm,
-              ),
-              child: Text(
-                'AI 機能',
-                style: textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            ListTile(
-              leading: Icon(Icons.recommend, color: colorScheme.primary),
-              title: const Text('AIレコメンド'),
-              subtitle: const Text('あなたの好みに合わせた推薦'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const AiRecommendFeedScreen(),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.image_search, color: colorScheme.primary),
-              title: const Text('似た画像を探す'),
-              subtitle: const Text('ダウンロード済み画像から似た作品を探す'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const VisualSearchScreen()),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.construction, color: colorScheme.primary),
-              title: const Text('AIインデックス管理'),
-              subtitle: const Text('モデル・埋め込みの診断・修復'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const AiIndexMaintenanceScreen(),
-                  ),
-                );
-              },
-            ),
-            Divider(height: 1, color: colorScheme.outlineVariant),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.lg,
-                vertical: AppSpacing.sm,
-              ),
-              child: Text(
-                'データ・保存',
-                style: textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            ListTile(
-              leading: Icon(Icons.bar_chart, color: colorScheme.primary),
-              title: const Text('閲覧統計'),
-              subtitle: const Text('閲覧・読書時間の分析'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        StatisticsScreen(onTagTap: (tag) => onTagSelected(tag)),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(
-                Icons.download_for_offline,
-                color: colorScheme.primary,
-              ),
-              title: const Text('ダウンロード管理'),
-              subtitle: const Text('イラスト・うごイラ・小説のダウンロード状況'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const DownloadQueueScreen(),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.cloud_download, color: colorScheme.primary),
-              title: const Text('オフライン本棚'),
-              subtitle: const Text('キャッシュした小説をオフラインで読む'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const OfflineBookshelfScreen(),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.find_replace, color: colorScheme.primary),
-              title: const Text('重複画像の検出'),
-              subtitle: const Text('完全一致・近似重複を見つけて整理'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const DuplicateFinderScreen(),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.manage_accounts, color: colorScheme.primary),
-              title: const Text('バックアップ管理'),
-              subtitle: const Text('複数のバックアップの一覧・復元・削除'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const BackupManagerScreen(),
-                  ),
-                );
-              },
-            ),
-            Divider(height: 1, color: colorScheme.outlineVariant),
-            // ログイン/ログアウトボタン
-            ListTile(
-              leading: Icon(
-                isLoggedIn ? Icons.logout : Icons.login,
-                color: colorScheme.primary,
-              ),
-              title: Text(isLoggedIn ? 'ログアウト' : 'アカウント連携（ログイン）'),
-              onTap: () {
-                Navigator.pop(context);
-                if (isLoggedIn) {
-                  logout();
-                } else {
-                  showPKCELoginDialog();
-                }
-              },
-            ),
-            Divider(height: 1, color: colorScheme.outlineVariant),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.lg,
-                vertical: AppSpacing.sm,
-              ),
-              child: Text(
-                'Google ドライブ同期',
-                style: textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            _syncHandler.buildGoogleDriveSyncSection(),
-          ],
-        ),
-      ),
+      // 16c-4c: 旧 Drawer は完全に削除した（ハンバーガーアイコンも
+      // Scaffold.drawer がなくなったことで自動的に消滅）。
+      // 17 導線の受け皿:
+      //   しおり一覧・閲覧履歴・お気に入りフォルダ・購読タグ・あとで読む・
+      //   閲覧統計・ダウンロード管理・オフライン本棚・重複画像の検出
+      //     → LibraryHubScreen（ライブラリ目的地）
+      //   設定・AIインデックス管理・ミュート（ブラックリスト）管理・
+      //   バックアップ管理
+      //     → SettingsScreen（設定目的地）
+      //   AIレコメンド・ログイン/ログアウト
+      //     → HomeSearchSourceChips の末尾チップ・Home AppBar ポップアップ
+      //   似た画像を探す
+      //     → 検索サーフェスの HomeVisualSearchEntry（16c-3c）
+      //   Google ドライブ同期セクション
+      //     → バックアップ管理（BackupManagerScreen）へ集約
+      //       （即時 HUD は buildSyncProgressHUD がフィードに残る）
       body: Stack(
         children: [
           Column(
