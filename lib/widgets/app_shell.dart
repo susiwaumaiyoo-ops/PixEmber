@@ -154,8 +154,12 @@ class _AppShellState extends State<AppShell> {
   /// `initialRoute: '/'` でルート画面を 1 枚積んだ状態で開始する。
   /// 以降の `Navigator.push` は渡された [MaterialPageRoute] をそのまま
   /// 積むため、タブごとに独立した履歴ができる。
+  ///
+  /// [NavigatorPopHandler] で包むことで、Android 予測型バックが
+  /// **非選択タブの Navigator を操作せず** 現在タブだけを pop する
+  /// （`enabled: false` でオフタブのハンドラを無効化）。
   Widget _wrapInNavigator(Widget tab, int index) {
-    return Navigator(
+    final navigator = Navigator(
       key: _navigatorKeys[index],
       initialRoute: '/',
       onGenerateRoute: (settings) {
@@ -168,24 +172,64 @@ class _AppShellState extends State<AppShell> {
         return null;
       },
     );
+
+    return NavigatorPopHandler(
+      // 選択中タブだけが OS の戻るを受け持つ。オフタブの Navigator は
+      // IndexedStack で offstage になっているが、PopScope と違い
+      // NavigatorPopHandler は無効化しておかないと全タブが競合する。
+      enabled: _index == index,
+      onPopWithResult: (result) {
+        _navigatorKeys[index].currentState?.maybePop(result);
+      },
+      child: navigator,
+    );
+  }
+
+  /// 現在タブのネスト Navigator が pop 可能か（= ルートより上に画面があるか）。
+  bool get _currentTabCanPop {
+    final navigator = _navigatorKeys[_index].currentState;
+    return navigator?.canPop() ?? false;
+  }
+
+  /// OS の戻るが押された（Android 予測型バック）。
+  ///
+  /// 優先順位:
+  /// 1. 現在タブ内で pop 可能 → ネスト Navigator が処理
+  /// 2. タブルートでホーム以外 → ホームへ切替
+  /// 3. ホームタブルート → Flutter/OS の通常処理に任せる
+  ///    （`SystemNavigator.pop()` は直接呼ばない）
+  Future<void> _handleSystemPop() async {
+    if (_currentTabCanPop) return; // 1: maybePop が処理する
+    if (_index != homeIndex) {
+      setState(() => _index = homeIndex); // 2
+    }
+    // 3: ここで false を返すと Flutter が OS へ戻す
   }
 
   @override
   Widget build(BuildContext context) {
     final tabs = _effectiveTabs();
     final destinations = widget.destinations ?? _defaultDestinations;
-    return Scaffold(
-      // appBar も drawer も持たない: 各タブが自分の Scaffold を持つ。
-      body: IndexedStack(
-        index: _index,
-        children: [
-          for (var i = 0; i < tabs.length; i++) _wrapInNavigator(tabs[i], i),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: _onTabSelected,
-        destinations: destinations,
+    return PopScope(
+      // 現在タブが pop 可能なら OS 戻るをここで消費せずネスト Navigator へ。
+      canPop: !_currentTabCanPop && _index == homeIndex,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleSystemPop();
+      },
+      child: Scaffold(
+        // appBar も drawer も持たない: 各タブが自分の Scaffold を持つ。
+        body: IndexedStack(
+          index: _index,
+          children: [
+            for (var i = 0; i < tabs.length; i++) _wrapInNavigator(tabs[i], i),
+          ],
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _index,
+          onDestinationSelected: _onTabSelected,
+          destinations: destinations,
+        ),
       ),
     );
   }

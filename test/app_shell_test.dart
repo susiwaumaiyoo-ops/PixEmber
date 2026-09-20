@@ -261,6 +261,107 @@ void main() {
     expect(find.text('A-1'), findsOneWidget);
   });
 
+  // ---- 16c-2d: 戻る操作（ネスト Navigator + PopScope） ----
+
+  testWidgets('タブ内 push 後の戻るは現在タブだけを pop する', (tester) async {
+    await pumpShell(
+      tester,
+      tabs: const [
+        _TabPage(label: 'A'),
+        _TabPage(label: 'B'),
+      ],
+      destinations: twoDestinations,
+    );
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    expect(find.text('pushed-A'), findsOneWidget);
+
+    // OS の戻るをシミュレート（handlePopRoute は PopScope/Navigator の
+    // 処理結果を bool で返す: true = アプリが消費した）。
+    final handled = await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(handled, isTrue, reason: 'ネスト Navigator が pop を消費');
+    expect(find.text('pushed-A'), findsNothing);
+    expect(find.text('A'), findsOneWidget);
+  });
+
+  testWidgets('ライブラリ/設定のルートで戻るとホームへ切替わる', (tester) async {
+    await pumpShell(
+      tester,
+      tabs: const [
+        _TabPage(label: 'A'),
+        _TabPage(label: 'B'),
+      ],
+      destinations: twoDestinations,
+    );
+
+    // タブ B（ルート、pop 不可）へ切り替え。
+    await tester.tap(find.text('タブB'));
+    await tester.pumpAndSettle();
+    expect(find.text('B'), findsOneWidget);
+
+    // OS 戻る: ルートなのでアプリが戻るを処理し、PopScope が
+    // ホームへ切替える（handlePopRoute はアプリが消費すると true）。
+    final handled = await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(handled, isTrue, reason: 'AppShell が戻るを消費してホームへ切替');
+    expect(find.text('A'), findsOneWidget);
+    expect(find.text('B'), findsNothing);
+  });
+
+  testWidgets('ホームのルートで戻る操作を握りつぶさない', (tester) async {
+    await pumpShell(
+      tester,
+      tabs: const [
+        _TabPage(label: 'A'),
+        _TabPage(label: 'B'),
+      ],
+      destinations: twoDestinations,
+    );
+
+    // タブ A（ホーム相当）のルート。OS 戻るはそのまま通す。
+    // （ネスト Navigator は pop できず、PopScope の canPop は true）
+    final handled = await tester.binding.handlePopRoute();
+    expect(handled, isFalse, reason: 'ホームルートでは OS へ戻す');
+  });
+
+  testWidgets('root Navigator に push した画面はタブより上に表示される', (tester) async {
+    await pumpShell(
+      tester,
+      tabs: const [
+        _TabPage(label: 'A'),
+        _TabPage(label: 'B'),
+      ],
+      destinations: twoDestinations,
+    );
+
+    // タブ B を選択した状態で root Navigator にダイアログを出す
+    // （ログイン WebView ダイアログと同じスコープ）。
+    await tester.tap(find.text('タブB'));
+    await tester.pumpAndSettle();
+
+    final rootContext = tester.element(find.byType(AppShell));
+    showDialog<void>(
+      context: rootContext,
+      useRootNavigator: true,
+      builder: (_) => const AlertDialog(title: Text('root dialog')),
+    );
+    await tester.pumpAndSettle();
+
+    // タブ B の上に重なる。
+    expect(find.text('root dialog'), findsOneWidget);
+    expect(find.text('B'), findsOneWidget);
+
+    // 戻るでダイアログだけが閉じ、タブ B は残る。
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('root dialog'), findsNothing);
+    expect(find.text('B'), findsOneWidget);
+  });
+
   for (final brightness in Brightness.values) {
     final themeData = brightness == Brightness.dark
         ? AppTheme.darkTheme

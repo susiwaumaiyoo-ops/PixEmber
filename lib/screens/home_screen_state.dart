@@ -1367,8 +1367,12 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
         ),
       );
 
+    // ネスト Navigator の内側で動くため、ダイアログは root Navigator に
+    // 出さないと別タブに隠れてしまう。閉じる側も同じ root Navigator を
+    // 使うため useRootNavigator: true を指定する（16c-2d）。
     showDialog(
       context: context,
+      useRootNavigator: true,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
         title: Row(
@@ -1376,7 +1380,8 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
             const Expanded(child: Text('Pixiv ログイン')),
             IconButton(
               icon: const Icon(Icons.close),
-              onPressed: () => Navigator.of(dialogContext).pop(),
+              onPressed: () =>
+                  Navigator.of(dialogContext, rootNavigator: true).pop(),
             ),
           ],
         ),
@@ -1408,7 +1413,8 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
       _pixivApiService.setRefreshToken(refreshToken);
       if (mounted) {
         setState(() => isLoggedIn = true);
-        Navigator.of(context).pop(); // WebView ダイアログを閉じる
+        // 開く側と同じ root Navigator から閉じる（16c-2d）。
+        Navigator.of(context, rootNavigator: true).pop(); // WebView ダイアログを閉じる
         fetchData(); // ログイン後にホーム画面を更新
         ScaffoldMessenger.of(
           context,
@@ -1416,7 +1422,8 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
       }
     } catch (e) {
       if (mounted) {
-        Navigator.of(context).pop();
+        // 開く側と同じ root Navigator から閉じる（16c-2d）。
+        Navigator.of(context, rootNavigator: true).pop();
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('ログイン失敗: $e')));
