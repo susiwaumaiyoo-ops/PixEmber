@@ -41,6 +41,7 @@ import '../services/search_preset_service.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:crypto/crypto.dart';
 import '../theme/app_spacing.dart';
+import '../widgets/home_content_mode_selector.dart';
 
 class PixivViewerHome extends StatefulWidget {
   const PixivViewerHome({super.key});
@@ -1696,6 +1697,18 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
             tooltip: '更新',
           ),
         ],
+        // 16c-2a: コンテンツ種別の切替はボトムナビから AppBar 直下の
+        // セグメントコントロールへ移動した。Scaffold.bottomNavigationBar は
+        // 16c-2c で殻（AppShell）の NavigationBar に明渡すため空ける。
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(
+            HomeContentModeSelector.preferredHeight,
+          ),
+          child: HomeContentModeSelector(
+            currentIndex: currentIndex,
+            onModeSelected: changeTab,
+          ),
+        ),
       ),
       drawer: Drawer(
         backgroundColor: colorScheme.surfaceContainer,
@@ -2215,27 +2228,6 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
           // 🔄 サブスクリプション同期プログレス HUD
           if (isSyncing && _syncProgress != null)
             _uiComponents.buildSyncProgressHUD(),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: currentIndex,
-        onDestinationSelected: changeTab,
-        destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.image_outlined),
-            selectedIcon: Icon(Icons.image, color: colorScheme.primary),
-            label: 'イラスト',
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.book_outlined),
-            selectedIcon: Icon(Icons.book, color: colorScheme.primary),
-            label: '小説',
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.auto_awesome_outlined),
-            selectedIcon: Icon(Icons.auto_awesome, color: colorScheme.primary),
-            label: 'フィーリング発掘',
-          ),
         ],
       ),
     );
