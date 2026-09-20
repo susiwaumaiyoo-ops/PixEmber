@@ -254,6 +254,12 @@ class HomeUIComponents {
           illust.urls?.preview ?? illust.urls?.small ?? illust.urls?.medium;
     } catch (_) {}
 
+    // 16d-2: サムネ→詳細の Hero タグ。
+    // うごイラは詳細画面側が Hero にならない（フレーム取得Stateが追従できず
+    // 崩れる）ため、ここでも付けない。タグの重複を避けるため、このタグを
+    // 渡すのはホームグリッドのみとする。
+    final heroTag = illust.type == 'ugoira' ? null : 'illust-hero-${illust.id}';
+
     return RepaintBoundary(
       child: Card(
         clipBehavior: Clip.antiAlias,
@@ -265,6 +271,7 @@ class HomeUIComponents {
               MaterialPageRoute(
                 builder: (_) => IllustDetailScreen(
                   illust: illust,
+                  heroTag: heroTag,
                   onTagTap: state.onTagSelected,
                   onBookmarkChanged: (newVal) {
                     state.applyState(() {
@@ -284,13 +291,24 @@ class HomeUIComponents {
               if (illust.type == 'ugoira')
                 _buildUgoiraThumb(illust, previewUrl)
               else if (previewUrl != null && previewUrl.isNotEmpty)
-                PixivImage(
-                  url: previewUrl,
-                  fit: BoxFit.cover,
-                  isThumbnail: true,
-                  cacheWidth: 300,
-                  errorWidget: Container(color: Colors.black26),
-                )
+                heroTag == null
+                    ? PixivImage(
+                        url: previewUrl,
+                        fit: BoxFit.cover,
+                        isThumbnail: true,
+                        cacheWidth: 300,
+                        errorWidget: Container(color: Colors.black26),
+                      )
+                    : Hero(
+                        tag: heroTag,
+                        child: PixivImage(
+                          url: previewUrl,
+                          fit: BoxFit.cover,
+                          isThumbnail: true,
+                          cacheWidth: 300,
+                          errorWidget: Container(color: Colors.black26),
+                        ),
+                      )
               else
                 Container(color: Colors.black26),
               // ブックマーク済みハート（左上）

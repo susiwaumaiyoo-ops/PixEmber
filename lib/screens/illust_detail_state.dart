@@ -192,11 +192,19 @@ class IllustDetailScreen extends StatefulWidget {
   final ValueChanged<String>? onTagTap;
   final ValueChanged<bool>? onBookmarkChanged;
 
+  /// 16d-2: サムネ→詳細の Hero トランジション用タグ。
+  ///
+  /// 呼び出し元（グリッド等）が [heroTag] を渡した場合のみ Hero を有効にする。
+  /// グリッドは `illust-hero-<id>` を付ける。**詳細画面の関連グリッドには
+  /// 渡さない**（同じ Navigator に Hero タグが 2 つできるとクラッシュする）。
+  final String? heroTag;
+
   const IllustDetailScreen({
     super.key,
     required this.illust,
     this.onTagTap,
     this.onBookmarkChanged,
+    this.heroTag,
   });
 
   @override
@@ -282,6 +290,8 @@ class _IllustDetailScreenState extends State<IllustDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return state.uiComponents.build(context, state);
+    // 16d-2: 呼び出し元が渡した Hero タグをそのまま UI へ伝播する。
+    // タグはグリッド側で `illust-hero-<id>` の形で生成する。
+    return state.uiComponents.build(context, state, heroTag: widget.heroTag);
   }
 }

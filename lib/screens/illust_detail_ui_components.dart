@@ -20,17 +20,27 @@ class IllustDetailUIComponents {
   // メインビルド
   // ==========================================
 
-  Widget build(BuildContext context, IllustDetailState state) {
+  /// 16d-2: [heroTag] が渡された場合のみ、画像ビューアを Hero にする。
+  /// 詳細画面の関連グリッドはタグを渡さない（タグ重複でクラッシュする）。
+  Widget build(
+    BuildContext context,
+    IllustDetailState state, {
+    String? heroTag,
+  }) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth >= kTabletBreakpoint;
     if (isTablet) {
-      return _buildTabletLayout(context, state);
+      return _buildTabletLayout(context, state, heroTag: heroTag);
     }
-    return _buildPhoneLayout(context, state);
+    return _buildPhoneLayout(context, state, heroTag: heroTag);
   }
 
   // スマホレイアウト（従来の縦積みUIを維持）
-  Widget _buildPhoneLayout(BuildContext context, IllustDetailState state) {
+  Widget _buildPhoneLayout(
+    BuildContext context,
+    IllustDetailState state, {
+    String? heroTag,
+  }) {
     final screenWidth = MediaQuery.of(context).size.width;
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -70,7 +80,7 @@ class IllustDetailUIComponents {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // 画像ビューア
-              _buildImageViewer(context, state, screenWidth),
+              _buildImageViewer(context, state, screenWidth, heroTag: heroTag),
               // メタ情報エリア
               Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -84,8 +94,11 @@ class IllustDetailUIComponents {
   }
 
   // タブレットレイアウト（幅 > kTabletBreakpoint: 左右分割）
-  // タブレットレイアウト（幅 > kTabletBreakpoint: 左右分割）
-  Widget _buildTabletLayout(BuildContext context, IllustDetailState state) {
+  Widget _buildTabletLayout(
+    BuildContext context,
+    IllustDetailState state, {
+    String? heroTag,
+  }) {
     final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -131,6 +144,7 @@ class IllustDetailUIComponents {
                     state,
                     constraints.maxHeight,
                     constraints.maxWidth,
+                    heroTag: heroTag,
                   );
                 },
               ),
@@ -154,6 +168,15 @@ class IllustDetailUIComponents {
         ],
       ),
     );
+  }
+
+  /// 16d-2: [heroTag] が非 null なら [child] を Hero で包む。
+  ///
+  /// 詳細画面の関連グリッドはタグを渡さないため、ここは必ず null になり
+  /// Hero は生成されない（同じ Navigator 内のタグ重複クラッシュ回避）。
+  Widget _maybeHero(String? heroTag, Widget child) {
+    if (heroTag == null) return child;
+    return Hero(tag: heroTag, child: child);
   }
 
   // 作者アイコン + 作者名ブロック（左ペイン / スマホ共通）
@@ -228,12 +251,14 @@ class IllustDetailUIComponents {
     BuildContext context,
     IllustDetailState state,
     double availableHeight,
-    double availableWidth,
-  ) {
+    double availableWidth, {
+    String? heroTag,
+  }) {
     final cacheWidth = (availableWidth * MediaQuery.devicePixelRatioOf(context))
         .round();
 
     if (state.illust.type == 'ugoira') {
+      // うごイラは Hero 対象外（スマホレイアウトに同じ）。
       return Center(child: UgoiraPlayer(illustId: state.illust.id));
     }
 
@@ -286,12 +311,15 @@ class IllustDetailUIComponents {
     // 1枚絵: 左ペイン内で縦センター配置
     return Stack(
       children: [
-        Center(
-          child: ZoomableImage(
-            url: images.first.original ?? state.illust.urls.original ?? '',
-            isLargeScreen: true,
-            maxHeight: availableHeight,
-            cacheWidth: cacheWidth,
+        _maybeHero(
+          heroTag,
+          Center(
+            child: ZoomableImage(
+              url: images.first.original ?? state.illust.urls.original ?? '',
+              isLargeScreen: true,
+              maxHeight: availableHeight,
+              cacheWidth: cacheWidth,
+            ),
           ),
         ),
         Positioned(
@@ -428,9 +456,12 @@ class IllustDetailUIComponents {
   Widget _buildImageViewer(
     BuildContext context,
     IllustDetailState state,
-    double screenWidth,
-  ) {
+    double screenWidth, {
+    String? heroTag,
+  }) {
     if (state.illust.type == 'ugoira') {
+      // うごイラは Hero 対象外: フレーム取得中の State がフライトに
+      // 追従できず表示が崩れやすいため（16d-2）。
       return SizedBox(
         height: 300,
         child: UgoiraPlayer(illustId: state.illust.id),
@@ -439,12 +470,15 @@ class IllustDetailUIComponents {
 
     return Stack(
       children: [
-        SizedBox(
-          height: 300,
-          child: ZoomableImage(
-            url: state.illust.urls.original ?? '',
-            isLargeScreen: screenWidth > 900,
-            maxHeight: 300,
+        _maybeHero(
+          heroTag,
+          SizedBox(
+            height: 300,
+            child: ZoomableImage(
+              url: state.illust.urls.original ?? '',
+              isLargeScreen: screenWidth > 900,
+              maxHeight: 300,
+            ),
           ),
         ),
         Positioned(
