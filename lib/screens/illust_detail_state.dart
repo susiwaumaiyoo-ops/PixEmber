@@ -106,6 +106,30 @@ class IllustDetailState extends ChangeNotifier {
   palette_generator.PaletteGenerator? get paletteGenerator => _paletteGenerator;
   List<Illust> get relatedIllusts => _relatedIllusts;
 
+  /// 16d-3: ブックマーク追加が **API 成功** した直後か。
+  ///
+  /// これが true に変化したときだけ [BounceBookmarkIcon] が 1 回
+  /// バウンスする。「一度だけ」制御はアイコン側の didUpdateWidget で
+  /// 行う（false -> true の変化のみ発動）ので、ここでは値を保持する
+  /// だけ。UI は build ごとにこの値を読み、バウンス後は次の
+  /// toggleBookmark が呼ばれるまで false を返し続ける。
+  // ignore: unnecessary_getters_setters
+  bool get didBookmarkSucceed => _didBookmarkSucceed;
+  bool _didBookmarkSucceed = false;
+
+  /// 16d-3: handler が API 成功時に立てる（追加時のみ）。
+  ///
+  /// このセッターは [_IllustDetailScreenState.build] が
+  /// ListenableBuilder ではないため、notify せず値を保持するだけ。
+  /// バウンス発動の有無はアイコン側が widget の差分で判断する。
+  ///
+  /// `_didBookmarkSucceed` はプライベートフィールドであり、
+  /// [IllustDetailHandler] は別ライブラリから参照するため、
+  /// public な getter/setter のペアが必須（単純なリネーム不可）。
+  set didBookmarkSucceed(bool value) {
+    _didBookmarkSucceed = value;
+  }
+
   // Setters with notify
   set isBookmarked(bool value) {
     _isBookmarked = value;

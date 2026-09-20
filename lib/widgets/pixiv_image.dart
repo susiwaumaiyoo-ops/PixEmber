@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../services/pixiv_http_headers.dart';
+import '../theme/app_motion.dart';
 
 class PixivImage extends StatelessWidget {
   final String url;
@@ -100,6 +101,25 @@ class PixivImage extends StatelessWidget {
       height: h,
       cacheWidth: cacheWidth ?? (isThumbnail ? 300 : 1200),
       cacheHeight: cacheHeight,
+      // 16d-3: 画像デコード完了時にフェードインする。
+      // 同期ロード（メモリキャッシュ命中）の場合は wasSynchronouslyLoaded
+      // が true になるので、アニメーションなしで即表示する。
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+        if (wasSynchronouslyLoaded || frame != null) {
+          return child;
+        }
+        // frame が null = まだデコード中。フェードアウト状態を維持し、
+        // デコード完了時に AnimatedOpacity が 0.0 -> 1.0 へ遷移する。
+        return TweenAnimationBuilder<double>(
+          tween: Tween<double>(begin: 0.0, end: 1.0),
+          duration: AppMotion.medium,
+          curve: AppMotion.enter,
+          builder: (context, value, inner) {
+            return Opacity(opacity: value, child: inner);
+          },
+          child: child,
+        );
+      },
       loadingBuilder: (context, child, loadingProgress) {
         if (loadingProgress == null) {
           return child;

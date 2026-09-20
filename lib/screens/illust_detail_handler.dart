@@ -347,6 +347,10 @@ class IllustDetailHandler {
     if (errorMessage == null) {
       state.setState(() {
         state.isBookmarked = toAdd;
+        state.isToggling = false;
+        // 16d-3: ブックマーク追加（API 成功）のときだけ
+        // バウンスフラグを立てる。解除時には鳴らさない。
+        state.didBookmarkSucceed = toAdd;
         state.bookmarkCountOffset += toAdd ? 1 : -1;
         if (onBookmarkChanged != null) {
           onBookmarkChanged!(toAdd);

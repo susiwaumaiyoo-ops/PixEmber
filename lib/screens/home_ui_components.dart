@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'home_screen_state.dart';
 import '../services/pixiv_api_service.dart';
+import '../theme/app_motion.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/pixiv_image.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +19,14 @@ class HomeUIComponents {
   static const double _kTabletBreakpoint = 700.0;
 
   final PixivViewerHomeState state;
+
+  /// 16d-3: stagger（順次フェードイン）を発動済みの項目数。
+  ///
+  /// このクラスの各 build 呼び出し（`buildIllustGrid`）が
+  /// 一度でも完了したら `true` 相当の状態にする。IndexedStack が
+  /// 常に全タブを build するため、ホームの再描画は頻発する。
+  /// 「初回描画のみ」という要件を、このカウントで担保する。
+  int _staggeredCount = 0;
 
   HomeUIComponents(this.state);
 
@@ -218,7 +227,7 @@ class HomeUIComponents {
           if (index == filteredIllusts.length) {
             return _buildLoadMoreIndicator();
           }
-          return _buildIllustGridItem(ctx, filteredIllusts[index]);
+          return _buildStaggeredGridItem(ctx, filteredIllusts[index], index);
         },
       ),
     );
@@ -367,6 +376,56 @@ class HomeUIComponents {
           ),
         ),
       ),
+    );
+  }
+
+  /// 16d-3: グリッド項目を順にフェードインさせる（stagger）。
+  ///
+  /// - 発動条件: 初回描画のみ。追加ロード・スクロール再描画では発動しない
+  ///   （[_staggeredCount] を超えたインデックスは何も包まずに返す）。
+  /// - 遅延は index * 24ms 相当、最大 8 項目（192ms で頭打ち）。
+  /// - AnimationController は使わず TweenAnimationBuilder だけで実装する。
+  ///
+  /// **仕組み**: アイテムの State は持たないが、インデックスに対して
+  /// 一意な ValueKey を使うことで TweenAnimationBuilder の
+  /// 「初回だけ 0.0 から開始する」性質を利用する。遅延は [Interval] で
+  /// 表現する（240ms のアニメーション幅の中で項目ごとに開始位置をずらす）。
+  Widget _buildStaggeredGridItem(
+    BuildContext context,
+    dynamic illust,
+    int index,
+  ) {
+    final isFirstAppearance = index >= _staggeredCount;
+    if (isFirstAppearance) {
+      _staggeredCount = index + 1;
+    }
+
+    final content = _buildIllustGridItem(context, illust);
+    if (!isFirstAppearance) {
+      // 2 回目以降の build （追加ロード・スクロール再描画）:
+      // 何も包まずにそのまま返す（アニメーションなし）。
+      return content;
+    }
+
+    // 16d-3: 先頭 8 項目まで index * 24ms の遅延を Interval で表現する。
+    // 240ms のアニメーション全体を 20 等分（1 単位 = 12ms）し、
+    // index 1 つにつき 2 単位（24ms）ずつ開始を遅らせる。
+    final delayFraction = (index < 8 ? index : 8) / 20.0;
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('grid-stagger-$index'),
+      tween: Tween<double>(begin: 0.0, end: 1.0),
+      duration: AppMotion.medium,
+      curve: Interval(delayFraction, 1.0, curve: AppMotion.enter),
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, (1.0 - value) * 8.0),
+            child: child,
+          ),
+        );
+      },
+      child: content,
     );
   }
 

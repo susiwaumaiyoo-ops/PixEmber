@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../illust_model.dart';
 import '../novel_model.dart';
 import '../services/similar_works_service.dart';
+import '../theme/app_motion.dart';
 import '../utils/datetime_format.dart';
 import '../widgets/pixiv_image.dart';
 import '../widgets/ugoira_player.dart';
@@ -56,10 +57,13 @@ class IllustDetailUIComponents {
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
+          // 16d-3: アイコンを BounceBookmarkIcon に置き換え。
+          // バウンスは API 成功で state.didBookmarkSucceed が
+          // true に変化したとき一度だけ発動する。
           IconButton(
-            icon: Icon(
-              state.isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-              color: colorScheme.onSurface,
+            icon: BounceBookmarkIcon(
+              isBookmarked: state.isBookmarked,
+              bounce: state.didBookmarkSucceed,
             ),
             onPressed: () => state.handler.toggleBookmark(state),
           ),
@@ -112,10 +116,11 @@ class IllustDetailUIComponents {
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
+          // 16d-3: アイコンを BounceBookmarkIcon に置き換え（タブレットも同じ）。
           IconButton(
-            icon: Icon(
-              state.isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-              color: colorScheme.onSurface,
+            icon: BounceBookmarkIcon(
+              isBookmarked: state.isBookmarked,
+              bounce: state.didBookmarkSucceed,
             ),
             onPressed: () => state.handler.toggleBookmark(state),
           ),
@@ -416,12 +421,16 @@ class IllustDetailUIComponents {
         const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
+          // 16d-3: メタパネルのボタンも、アイコンだけ BounceBookmarkIcon
+          // に差し替える。ElevatedButton.icon の icon には Widget を
+          // 渡せるのでそのまま使える。
           child: ElevatedButton.icon(
             onPressed: state.isToggling
                 ? null
                 : () => state.handler.toggleBookmark(state),
-            icon: Icon(
-              state.isBookmarked ? Icons.favorite : Icons.favorite_border,
+            icon: BounceBookmarkIcon(
+              isBookmarked: state.isBookmarked,
+              bounce: state.didBookmarkSucceed,
             ),
             label: Text(state.isBookmarked ? 'ブックマーク済み' : 'ブックマーク'),
           ),
@@ -1130,6 +1139,87 @@ class IllustDetailUIComponents {
       MaterialPageRoute(
         builder: (context) =>
             FullScreenImagePage(images: images, initialIndex: 0),
+      ),
+    );
+  }
+}
+
+/// 16d-3: ブックマーク成功時に scale 1.0 -> 1.25 -> 1.0 で
+/// 一度だけバウンスするアイコン。
+///
+/// **API 成功後のみ** 親が [BounceBookmarkIcon.bounce] を true に変えた
+/// ときに発動する（toggleBookmark のロジック自体には触れない）。
+/// 240ms 以内に収まるよう、押し出し 70% / 戻り 30% の TweenSequence で
+/// 1 つのアニメーションで完結させる。
+class BounceBookmarkIcon extends StatefulWidget {
+  const BounceBookmarkIcon({
+    super.key,
+    required this.isBookmarked,
+    required this.bounce,
+  });
+
+  final bool isBookmarked;
+
+  /// true に変化したときに 1 回だけバウンスする。
+  final bool bounce;
+
+  @override
+  State<BounceBookmarkIcon> createState() => _BounceBookmarkIconState();
+}
+
+class _BounceBookmarkIconState extends State<BounceBookmarkIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(duration: AppMotion.medium, vsync: this);
+    _scale = TweenSequence<double>(<TweenSequenceItem<double>>[
+      // 押し出し: 1.0 -> 1.25（ここで「効いた」感を出す）。
+      TweenSequenceItem<double>(
+        tween: Tween<double>(
+          begin: 1.0,
+          end: 1.25,
+        ).chain(CurveTween(curve: AppMotion.emphasized)),
+        weight: 70,
+      ),
+      // 戻り: 1.25 -> 1.0。
+      TweenSequenceItem<double>(
+        tween: Tween<double>(
+          begin: 1.25,
+          end: 1.0,
+        ).chain(CurveTween(curve: AppMotion.exit)),
+        weight: 30,
+      ),
+    ]).animate(_controller);
+  }
+
+  @override
+  void didUpdateWidget(covariant BounceBookmarkIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // false -> true の変化でのみ 1 回発動。連続タップでも毎回弾く。
+    // 「一度だけ」制御はここで完結する（親の rebuild で bounce が
+    // true を保ったままでも 2 回目は発動しない）。
+    if (widget.bounce && !oldWidget.bounce) {
+      _controller.forward(from: 0.0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ScaleTransition(
+      scale: _scale,
+      child: Icon(
+        widget.isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+        color: Theme.of(context).colorScheme.onSurface,
       ),
     );
   }
