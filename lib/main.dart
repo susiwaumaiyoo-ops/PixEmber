@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:workmanager/workmanager.dart';
-import 'screens/home_screen_widget.dart';
 import 'screens/illust_detail_screen.dart';
 import 'screens/novel_detail_screen.dart';
 import 'screens/novel_series_episodes_screen.dart';
@@ -16,6 +15,7 @@ import 'services/pixiv_api_service.dart';
 import 'services/theme_service.dart';
 import 'services/usage_tracking_service.dart';
 import 'theme/app_theme.dart';
+import 'widgets/app_shell.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 // ワークマネージャー（バックグラウンドダウンロード）のコールバックディスパッチャー。
@@ -238,7 +238,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           darkTheme: AppTheme.darkTheme,
           themeMode: themeMode,
           navigatorKey: _navigatorKey,
-          home: const PixivViewerHome(),
+          // 16c-1: ホームの周りに AppShell の殻を被せる。
+          // 16c-2 でこの殻にボトムナビと複数タブが追加される。
+          home: const AppShell(),
         );
       },
     );
