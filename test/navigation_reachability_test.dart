@@ -8,11 +8,13 @@
 // - 保存/履歴/整理の 9 導線 → すべて [LibraryHubScreen]（物理タブ1）
 // - フィーリング発掘・AIレコメンド → ホーム（物理タブ0・feed）
 // - 似た画像を探す → 検索（物理タブ0・search）
-// - AIインデックス管理・バックアップ・ミュート → 設定（物理タブ2）or Drawer
-// - ログイン/ログアウト・Google Drive 同期 → Home AppBar or Drawer or 設定
+// - AIインデックス管理・バックアップ・ミュート → 設定（物理タブ2）
+// - ログイン/ログアウト → Home AppBar のポップアップメニュー
+// - Google Drive 同期 → バックアップ管理（BackupManagerScreen）
 //
-// Drawer は 16c-4 で削除するため、ここでは「まだ存在する」ことを確認し、
-// 未移植項目を列挙する（機能消失を起こさないため）。
+// 16c-4c で Drawer は完全に削除された。本テストは「二度と
+// 復活しないこと」と「17 導線の受け皿が全て存在すること」を監視する。
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pixiv_viewer/screens/home_screen_state.dart';
@@ -89,57 +91,76 @@ void main() {
     });
   });
 
-  group('Drawer の残存と未移植項目の監査', () {
-    test('Drawer は 16c-3d 時点でまだ存在する（16c-4 で削除）', () {
-      // [PixivViewerHomeState.build] は `drawer: Drawer(...)` を持つ。
-      // 本テストは「Drawer がまだ削除されていない」ことをコードで監視する:
-      // 16c-4 で Drawer を削除するときにこのテストを更新する。
-      //
-      // ここでは静的に「Drawer 項目が定義されている」ことを確認するため、
-      // 本番構成のセンチナルが変わっていないことを検証する。
-      expect(const AppShell().tabs, isNull);
+  group('Drawer の完全削除と 17 導線の受け皿（16c-4c）', () {
+    // 旧 Drawer が持っていた 17 導線の移設先（機能消失がないことの保証）。
+    // 各受け皿の実際の描画は以下のテストファイルが検証済み:
+    //   - library_hub_screen_test.dart （9 導線）
+    //   - settings_screen_test.dart / ai_recommend_home_entry_test.dart
+    //     （ミュート管理・AIインデックス管理・バックアップ管理）
+    //   - home_visual_search_entry_test.dart （似た画像を探す）
+    const libraryEntries = <String>[
+      'しおり一覧',
+      'あとで読む',
+      '購読タグ',
+      'お気に入りフォルダ',
+      '閲覧履歴',
+      'オフライン本棚',
+      'ダウンロード管理',
+      '閲覧統計',
+      '重複画像の検出',
+    ];
+    const settingsEntries = <String>[
+      'ミュート（ブラックリスト）管理',
+      'AIインデックス管理',
+      'バックアップ管理',
+    ];
+
+    test('home_screen_state.dart に Drawer が残っていない（ソース監査）', () async {
+      final src = await File(
+        'lib/screens/home_screen_state.dart',
+      ).readAsString();
+      // Drawer 本体だけでなくハンバーガーアイコン（Icons.menu）も残さない。
+      // なお Icons.menu_book は小説タブのAppBarアイコンなので許容する。
+      expect(
+        src.contains('drawer:'),
+        isFalse,
+        reason: 'Scaffold.drawer が存在しない',
+      );
+      expect(src.contains('Drawer('), isFalse, reason: 'Drawer ウィジェットが存在しない');
+      expect(src.contains('DrawerHeader('), isFalse);
+      expect(src.contains('Icons.menu,'), isFalse, reason: 'ハンバーガーアイコンが存在しない');
+      expect(src.contains('Icons.menu_outlined'), isFalse);
     });
 
-    // 未移植項目の列挙（16c-4 への申し送り）。
-    // これらは Drawer にのみ存在する導線で、機能消失を防ぐため
-    // 16c-4 で Drawer を削除する前に移動先を決める必要がある:
-    //
-    // - しおり一覧 → Library（しおり一覧）
-    // - 閲覧履歴 → Library（閲覧履歴）
-    // - お気に入りフォルダ → Library（お気に入りフォルダ）
-    // - ミュート（ブラックリスト）管理 → Settings または Drawer
-    // - 購読タグ → Library（購読タグ）
-    // - あとで読む → Library（あとで読む）
-    // - 設定 → Settings（4 目的地）
-    // - AIレコメンド → Home（feed）
-    // - 似た画像を探す → Search（16c-3c で導線を追加済み）
-    // - AIインデックス管理 → Settings
-    // - 閲覧統計 → Library（閲覧統計）
-    // - ダウンロード管理 → Library（ダウンロード管理）
-    // - オフライン本棚 → Library（オフライン本棚）
-    // - 重複画像の検出 → Library（重複画像の検出）
-    // - バックアップ管理 → Settings または Drawer
-    // - ログイン/ログアウト → Home AppBar または Drawer
-    // - Google ドライブ同期 → Settings または Drawer
-    test('LibraryHub が未移植 9 導線の受け皿になっている', () {
-      // LibraryHub の 9 項目は library_hub_screen_test.dart が
-      // しおり一覧・あとで読む・購読タグ・お気に入りフォルダ・
-      // 閲覧履歴・オフライン本棚・ダウンロード管理・閲覧統計・
-      // 重複画像の検出の全てを検証済み。
-      // そのため Drawer に残るこれらの導線は「機能消失なし」で
-      // 16c-4 で削除できる。
-      const expected = <String>[
-        'しおり一覧',
-        'あとで読む',
-        '購読タグ',
-        'お気に入りフォルダ',
-        '閲覧履歴',
-        'オフライン本棚',
-        'ダウンロード管理',
-        '閲覧統計',
-        '重複画像の検出',
-      ];
-      expect(expected, hasLength(9));
+    test('home_sync_handler.dart は旧 Drawer 専用ハンドラとして削除されている', () {
+      // HomeSyncHandler は Drawer の Google ドライブ同期セクションのためだけ
+      // に存在した。バックアップ/復元は BackupManagerScreen が自前の
+      // GoogleDriveService で行うため、ファイルごと削除した。
+      expect(
+        File('lib/screens/home_sync_handler.dart').existsSync(),
+        isFalse,
+        reason: 'HomeSyncHandler は完全に削除された',
+      );
+    });
+
+    test('LibraryHub が 9 導線の受け皿になっている', () {
+      expect(libraryEntries, hasLength(9));
+    });
+
+    test('Settings がミュート・AIインデックス・バックアップの受け皿になっている', () {
+      expect(settingsEntries, hasLength(3));
+    });
+
+    test('17 導線の受け皿が過不足ない（9 + 3 + AIレコメンド + 似た画像 + ログイン + 設定）', () {
+      // 旧 Drawer 17 導線の内訳:
+      //   9   → LibraryHubScreen
+      //   3   → SettingsScreen（ミュート/AIインデックス/バックアップ）
+      //   1   → HomeSearchSourceChips 末尾チップ（AIレコメンド）
+      //   1   → 検索サーフェスの HomeVisualSearchEntry（似た画像を探す）
+      //   1   → Home AppBar ポップアップ（ログイン/ログアウト）
+      //   1   → 「設定」そのもの（4 目的地の設定タブ）
+      //   1   → Google ドライブ同期（バックアップ管理に集約）
+      expect(libraryEntries.length + settingsEntries.length + 5, 17);
     });
   });
 
