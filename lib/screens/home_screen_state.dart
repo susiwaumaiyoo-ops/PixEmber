@@ -879,6 +879,29 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     fetchData();
   }
 
+  /// 16c-4a: AIレコメンドフィードを開く（旧 Drawer 導線の移設）。
+  ///
+  /// ホームのソースチップから [AiRecommendFeedScreen] をネスト Navigator に
+  /// push する。既存の検索ロジック・API には一切触れない。
+  void openAiRecommendFeed() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AiRecommendFeedScreen()),
+    );
+  }
+
+  /// 16c-4a: ログイン/ログアウト（旧 Drawer 導線の移設）。
+  ///
+  /// Drawer を削除した後、Home AppBar のポップアップメニューが唯一の
+  /// ホーム側導線。状態・認証フローは既存のものをそのまま使う。
+  void toggleLogin() {
+    if (isLoggedIn) {
+      logout();
+    } else {
+      showPKCELoginDialog();
+    }
+  }
+
   /// Phase 3: コンテンツソース切替（おすすめ/新着/フォロー/ブックマーク）。
   /// キーワード結果は破棄して閲覧へ戻る（検索バーの文字は残す）。
   void onContentSourceSelected(HomeContentSource source) {
@@ -1949,6 +1972,33 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
               onPressed: isLoading ? null : fetchData,
               tooltip: '更新',
             ),
+          // 16c-4a: 旧 Drawer のログイン/ログアウト導線の受け皿。
+          // Drawer を削除した後、ホーム側の唯一のアカウント導線。
+          PopupMenuButton<String>(
+            icon: Icon(
+              isLoggedIn ? Icons.account_circle : Icons.account_circle_outlined,
+              color: colorScheme.primary,
+            ),
+            tooltip: 'アカウント',
+            onSelected: (value) {
+              if (value == 'login') toggleLogin();
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem<String>(
+                value: 'login',
+                child: Row(
+                  children: [
+                    Icon(
+                      isLoggedIn ? Icons.logout : Icons.login,
+                      color: colorScheme.primary,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text(isLoggedIn ? 'ログアウト' : 'アカウント連携（ログイン）'),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
         // 16c-2a: コンテンツ種別の切替はボトムナビから AppBar 直下の
         // セグメントコントロールへ移動した。Scaffold.bottomNavigationBar は

@@ -29,6 +29,7 @@ import 'bookmark_list_screen.dart';
 import 'companion_settings_screen.dart';
 import 'download_queue_screen.dart';
 import 'folder_list_screen.dart';
+import 'mute_settings_screen.dart';
 import 'llm_model_library_screen.dart';
 import 'offline_bookshelf_screen.dart';
 import 'read_later_screen.dart';
@@ -365,6 +366,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: '${_presets.length}件・最大30件',
             onTap: _showPresetSheet,
           ),
+          // 16c-4a: 旧 Drawer の「ミュート（ブラックリスト）管理」の受け皿。
+          // MuteSettingsScreen は DB 依存のみで Home State を持たないため
+          // ここからそのまま push できる。
+          _sectionHeader('コンテンツ'),
+          _tile(
+            icon: Icons.block,
+            title: 'ミュート（ブラックリスト）管理',
+            subtitle: '非表示にするタグ・作者の管理',
+            onTap: () => _open(() => const MuteSettingsScreen()),
+          ),
           _sectionHeader('レコメンド'),
           _tile(
             icon: Icons.auto_awesome,
@@ -405,6 +416,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: 'つけたしおりの一覧',
             onTap: () => _open(() => const BookmarkListScreen()),
           ),
+          // 16c-4a: 旧 Drawer の「Google ドライブ同期」セクションの受け皿。
+          // 即時バックアップ/復元 HUD はフィードサーフェス（buildSyncProgressHUD）
+          // に残すが、常設の管理導線はここで十分。
           _sectionHeader('バックアップ'),
           _tile(
             icon: Icons.cloud_upload,
