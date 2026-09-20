@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../screens/home_screen_widget.dart';
 import '../screens/library_hub_screen.dart';
 import '../screens/settings_screen.dart';
-import '../theme/app_motion.dart';
 
 /// アプリの外側を包む「殻」（Phase 16c-3b）。
 ///
@@ -22,7 +21,11 @@ import '../theme/app_motion.dart';
 /// （2 つ目の [PixivViewerHome] を作らない・API リクエストを二重化しない）
 ///
 /// - タブを切り替えても各物理 Navigator の履歴と Widget state は保持される
-///   （[IndexedStack] が全タブを常に構築するため）。
+///   （[Offstage] が `offstage` でも全タブを build・layout するため。
+///   Phase 16d-2 までは [IndexedStack] だったが、これに [AnimatedOpacity] を
+///   組み合わせたところ実機で **選択タブまで透明になる** 不具合
+///   （フィーリング発掘がタップに反応しない）が発生したため、
+///   Phase 17a で `Stack` + [Offstage] に置き換えた）。
 /// - 選択中の目的地をもう一度タップすると、その物理 Navigator の
 ///   ルートまで pop する。
 /// - ホーム/検索の切替時は共通 Navigator をルートまで pop し、
@@ -316,20 +319,29 @@ class AppShellState extends State<AppShell> {
     );
   }
 
-  /// 16d-2: タブ切替のフェードスルー。
+  /// 17a: タブの表示を制御する（16d-2 の AnimatedOpacity は撤去）。
   ///
-  /// [IndexedStack] は維持したまま、**選択タブだけ** opacity 1 にする。
-  /// AnimatedSwitcher で子を差し替えると State が破棄されるため禁止。
-  Widget _buildTabFade(Widget tab, int index) {
+  /// 16d-2 では [IndexedStack] の各タブを [AnimatedOpacity] で包んだが、
+  /// 実機で **選択タブまで透明になる** （背景色だけ描画され、タップに一切
+  /// 反応しない）不具合が発生した。フィーリング発掘が動かない原因はこれだった。
+  ///
+  /// そのため「フェードスルー」を優先せず、[Stack] + [Offstage] に戻す:
+  /// - [Offstage] は `offstage` でも child を build・layout する
+  ///   （[RenderOffstage.performLayout]）ので、各タブの Navigator 履歴と
+  ///   Widget state はそのまま保持される（[IndexedStack] と同等）。
+  /// - 描画とヒットテストだけがスキップされるため、隠れタブが
+  ///   選択タブのタップを奪うこともない。
+  /// - `offstage: true` の子はテストフレームワークの `skipOffstage` に
+  ///   より「非表示」と判定される（[Offstage] がその基準）ため、
+  ///   タブをまたぐ Widget 検索が従来どおり機能する。
+  ///
+  /// アニメーションが必要な場合は [AppPageTransitionsBuilder]（画面遷移）と
+  /// [HomeSurfaceMode] のヘッダー切替（[AnimatedSwitcher]）が別経路で担う。
+  Widget _buildTabOffstage(Widget tab, int index) {
     final selected = _currentTab == index;
-    return AnimatedOpacity(
-      opacity: selected ? 1.0 : 0.0,
-      // 選択されたタブは enter・非選択になったタブは exit。
-      // IndexedStack が常に全タブを build するため、両者の
-      // duration/curve を少しずらすだけで「フェードスルー」になる。
-      duration: selected ? AppMotion.medium : AppMotion.short,
-      curve: selected ? AppMotion.enter : AppMotion.exit,
-      child: tab,
+    return Offstage(
+      offstage: !selected,
+      child: KeyedSubtree(key: ValueKey('app-shell-tab-$index'), child: tab),
     );
   }
 
@@ -367,11 +379,13 @@ class AppShellState extends State<AppShell> {
       },
       child: Scaffold(
         // appBar も drawer も持たない: 各タブが自分の Scaffold を持つ。
-        body: IndexedStack(
-          index: _currentTab,
+        // 17a: IndexedStack + AnimatedOpacity をやめ Stack + Offstage に戻す。
+        // 前者の組合せが実機で「選択タブが透明になる」原因だったため。
+        body: Stack(
+          fit: StackFit.expand,
           children: [
             for (var i = 0; i < tabs.length; i++)
-              _buildTabFade(_wrapInNavigator(tabs[i], i), i),
+              _buildTabOffstage(_wrapInNavigator(tabs[i], i), i),
           ],
         ),
         bottomNavigationBar: NavigationBar(

@@ -159,7 +159,7 @@ void main() {
       await pumpTwoTabShell(tester, tabs: const [Text('A'), Text('B')]);
       // index 0 が表示されている。
       expect(find.text('A'), findsOneWidget);
-      // index 1 は offstage でもツリーに存在する（IndexedStack が
+      // index 1 は offstage でもツリーに存在する（Offstage が
       // 常に全タブをビルド・状態保持する性質の確認）。
       expect(find.text('B', skipOffstage: false), findsOneWidget);
     });
