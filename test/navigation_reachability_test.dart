@@ -1,4 +1,4 @@
-// Phase 16c-3d: 最終 4 目的地構成の到達性監査と回帰テスト。
+// Phase 16c-3d: 目的地構成の到達性監査と回帰テスト（17c: 3 目的地）。
 //
 // 本番の [AppShell] は [PixivViewerHome]（DB 依存）を含むため pump できないが、
 // 「どこからどこへ行けるか」は静的な構造なのでテスト注入タブで検証できる。
@@ -6,18 +6,19 @@
 // 到達性の監査はコードで行う（新しく導線を作るフェーズではない）:
 //
 // - 保存/履歴/整理の 9 導線 → すべて [LibraryHubScreen]（物理タブ1）
-// - フィーリング発掘・AIレコメンド → ホーム（物理タブ0・feed）
-// - 似た画像を探す → 検索（物理タブ0・search）
+// - フィーリング発掘・AIレコメンド → ホーム（物理タブ0）
+// - 似た画像を探す → SearchAssistView（ホーム検索）の末尾（17c 移設）
 // - AIインデックス管理・バックアップ・ミュート → 設定（物理タブ2）
 // - ログイン/ログアウト → Home AppBar のポップアップメニュー
 // - Google Drive 同期 → バックアップ管理（BackupManagerScreen）
 //
 // 16c-4c で Drawer は完全に削除された。本テストは「二度と
 // 復活しないこと」と「17 導線の受け皿が全て存在すること」を監視する。
+// 17c で検索目的地を削除したが、検索機能・フィーリング発掘・Visual Search
+// はいずれも残している（機能消失なし）。
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pixiv_viewer/screens/home_screen_state.dart';
 import 'package:pixiv_viewer/screens/library_hub_screen.dart';
 import 'package:pixiv_viewer/theme/app_theme.dart';
 import 'package:pixiv_viewer/widgets/app_shell.dart';
@@ -27,13 +28,13 @@ void main() {
   /// [PixivViewerHome] が DB にアクセスするため、ここではダミー画面を
   /// 代用する（本番タブの構造は [AppShellState._effectiveTabs] が持つ）。
   const tabs = <Widget>[
-    _DestinationTab(label: 'ホーム/検索本文'),
+    _DestinationTab(label: 'ホーム本文'),
     _DestinationTab(label: 'ライブラリ本文'),
     _DestinationTab(label: '設定本文'),
   ];
 
-  group('最終 4 目的地の到達性', () {
-    testWidgets('ホーム/検索/ライブラリ/設定の 4 目的地が存在する', (tester) async {
+  group('最終 3 目的地の到達性', () {
+    testWidgets('ホーム/ライブラリ/設定の 3 目的地が存在する', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.lightTheme,
@@ -42,24 +43,26 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // NavigationBar の 4 目的地（本番値）。
-      for (final label in ['ホーム', '検索', 'ライブラリ', '設定']) {
+      // NavigationBar の 3 目的地（本番値）。
+      // 17c: 検索目的地は削除された。
+      expect(find.text('検索'), findsNothing);
+      for (final label in ['ホーム', 'ライブラリ', '設定']) {
         expect(find.text(label), findsOneWidget);
       }
     });
 
-    test('ホームと検索は同じ物理タブを共有する（destinationToTab 本番値）', () {
-      // 本番値の静的監査: [0, 0, 1, 2]。
-      // これにより「検索の State・Controller・結果がホームと同じ」
-      // ことが構造的に保証される（2 つ目の PixivViewerHome が不要）。
+    test('目的地と物理タブは 1:1 に対応する（destinationToTab 本番値）', () {
+      // 本番値の静的監査: [0, 1, 2]（17c: 検索目的地を削除）。
+      // これにより「目的地と物理 Navigator が 1 対 1」ことが
+      // 構造的に保証される。
       const shell = AppShell();
       expect(shell.destinationToTab, isNull);
 
       const shellWithMapping = AppShell(
-        destinationToTab: [0, 0, 1, 2],
+        destinationToTab: [0, 1, 2],
         destinations: [],
       );
-      expect(shellWithMapping.destinationToTab, const [0, 0, 1, 2]);
+      expect(shellWithMapping.destinationToTab, const [0, 1, 2]);
     });
 
     testWidgets('LibraryHub の 9 導線は物理タブ1からアクセスできる', (tester) async {
@@ -82,22 +85,23 @@ void main() {
       expect(find.text('ライブラリ本文'), findsOneWidget);
     });
 
-    test('LibraryHubScreen は onTagTap を通じて検索へ導線を持つ', () {
+    test('LibraryHubScreen は onTagTap を通じてホームへ導線を持つ', () {
       // 本番では AppShell が LibraryHubScreen(onTagTap: _searchForTag)
-      // を構築する。タグ操作 → 検索目的地 → onTagSelected の流れは
-      // app_shell_test.dart が検証済み。
+      // を構築する。タグ操作 → ホーム目的地 → onTagSelected の流れは
+      // app_shell_test.dart が検証済み（17c: 検索目的地は削除）。
       const hub = LibraryHubScreen();
       expect(hub.onTagTap, isNull);
     });
   });
 
-  group('Drawer の完全削除と 17 導線の受け皿（16c-4c）', () {
+  group('Drawer の完全削除と 17 導線の受け皿（16c-4c / 17c）', () {
     // 旧 Drawer が持っていた 17 導線の移設先（機能消失がないことの保証）。
     // 各受け皿の実際の描画は以下のテストファイルが検証済み:
     //   - library_hub_screen_test.dart （9 導線）
     //   - settings_screen_test.dart / ai_recommend_home_entry_test.dart
     //     （ミュート管理・AIインデックス管理・バックアップ管理）
-    //   - home_visual_search_entry_test.dart （似た画像を探す）
+    //   - home_visual_search_entry_test.dart （似た画像を探す：17c で
+    //     SearchAssistView の末尾へ移設）
     const libraryEntries = <String>[
       'しおり一覧',
       'あとで読む',
@@ -156,9 +160,11 @@ void main() {
       //   9   → LibraryHubScreen
       //   3   → SettingsScreen（ミュート/AIインデックス/バックアップ）
       //   1   → HomeSearchSourceChips 末尾チップ（AIレコメンド）
-      //   1   → 検索サーフェスの HomeVisualSearchEntry（似た画像を探す）
+      //   1   → SearchAssistView（ホーム検索）末尾の HomeVisualSearchEntry
+      //         （17c: 検索サーフェス削除に伴い移設。VisualSearchScreen
+      //          自体は残すため機能消失なし）
       //   1   → Home AppBar ポップアップ（ログイン/ログアウト）
-      //   1   → 「設定」そのもの（4 目的地の設定タブ）
+      //   1   → 「設定」そのもの（3 目的地の設定タブ）
       //   1   → Google ドライブ同期（バックアップ管理に集約）
       expect(libraryEntries.length + settingsEntries.length + 5, 17);
     });
@@ -185,17 +191,13 @@ void main() {
 
       // タブの上に重なる。
       expect(find.text('root dialog'), findsOneWidget);
-      expect(find.text('ホーム/検索本文'), findsOneWidget);
+      expect(find.text('ホーム本文'), findsOneWidget);
 
       // 戻るでダイアログだけが閉じ、タブは残る。
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.text('root dialog'), findsNothing);
-      expect(find.text('ホーム/検索本文'), findsOneWidget);
-    });
-
-    test('HomeSurfaceMode は 2 状態（feed/search）を持つ（16c-4b）', () {
-      expect(HomeSurfaceMode.values, hasLength(2));
+      expect(find.text('ホーム本文'), findsOneWidget);
     });
   });
 
@@ -204,7 +206,7 @@ void main() {
         ? AppTheme.darkTheme
         : AppTheme.lightTheme;
 
-    testWidgets('${brightness.name} で 4 目的地がタップ領域基準を満たす', (tester) async {
+    testWidgets('${brightness.name} で 3 目的地がタップ領域基準を満たす', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: themeData,
@@ -225,10 +227,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // NavigationBar の 4 目的地がテキストとして描画される
+      // NavigationBar の 3 目的地がテキストとして描画される
       // （Semantics ツリーは NavigationBar が独自に構築するため、
       //  ここではラベルの Text が存在することで代替する）。
-      for (final label in ['ホーム', '検索', 'ライブラリ', '設定']) {
+      for (final label in ['ホーム', 'ライブラリ', '設定']) {
         expect(find.text(label), findsOneWidget);
       }
       handle.dispose();

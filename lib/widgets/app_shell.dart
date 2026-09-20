@@ -4,21 +4,20 @@ import '../screens/home_screen_widget.dart';
 import '../screens/library_hub_screen.dart';
 import '../screens/settings_screen.dart';
 
-/// アプリの外側を包む「殻」（Phase 16c-3b）。
+/// アプリの外側を包む「殻」（Phase 16c-3b / 17c）。
 ///
-/// 最終的な 4 つの目的地（ホーム / 検索 / ライブラリ / 設定）を
-/// [NavigationBar] で切り替える。ただし **物理 [Navigator] は 3 つ**:
+/// 3 つの目的地（ホーム / ライブラリ / 設定）を [NavigationBar] で
+/// 切り替える。目的地と物理 [Navigator] は 1:1 に対応する:
 ///
 /// ```text
-/// 目的地0 ホーム     ┐
-/// 目的地1 検索       ┴─ 同じ Navigator + 同じ PixivViewerHomeState
-/// 目的地2 ライブラリ ─ Library Navigator
-/// 目的地3 設定       ─ Settings Navigator
+/// 目的地0 ホーム     ─ Home Navigator（PixivViewerHome）
+/// 目的地1 ライブラリ ─ Library Navigator
+/// 目的地2 設定       ─ Settings Navigator
 /// ```
 ///
-/// ホームと検索は [HomeSurfaceMode] だけで表示を切り替えるため、
-/// 検索 Controller・検索結果・フィルタ・履歴を複製しない。
-/// （2 つ目の [PixivViewerHome] を作らない・API リクエストを二重化しない）
+/// 17c で検索目的地を削除した。検索はホーム内の検索バー・SearchAssistView
+/// （[HomeSearchUiMode]）だけで完結するため、ホーム/検索の State 共有
+/// （サーフェスモード）は不要になった。
 ///
 /// - タブを切り替えても各物理 Navigator の履歴と Widget state は保持される
 ///   （[Offstage] が `offstage` でも全タブを build・layout するため。
@@ -28,9 +27,7 @@ import '../screens/settings_screen.dart';
 ///   Phase 17a で `Stack` + [Offstage] に置き換えた）。
 /// - 選択中の目的地をもう一度タップすると、その物理 Navigator の
 ///   ルートまで pop する。
-/// - ホーム/検索の切替時は共通 Navigator をルートまで pop し、
-///   検索ワークスペースを表示する（State は破棄しない）。
-/// - ライブラリ起点のタグ連携は検索目的地へ切り替えてから
+/// - ライブラリ起点のタグ連携はホームへ切り替えてから
 ///   [PixivViewerHomeState.onTagSelected] を呼ぶ。
 class AppShell extends StatefulWidget {
   const AppShell({
@@ -53,13 +50,13 @@ class AppShell extends StatefulWidget {
   /// 自動的に物理タブ専用の [Navigator] で包まれる。
   final List<Widget>? tabs;
 
-  /// [NavigationBar] に表示する目的地。`null` の場合は本番の 4 目的地。
+  /// [NavigationBar] に表示する目的地。`null` の場合は本番の 3 目的地。
   final List<NavigationDestination>? destinations;
 
-  /// 目的地 → 物理 Navigator タブ のマッピング（Phase 16c-3b）。
+  /// 目的地 → 物理 Navigator タブ のマッピング（Phase 16c-3b / 17c）。
   ///
-  /// ホームと検索は同じ物理タブ（同じ [PixivViewerHomeState]）を共有するため、
-  /// 本番構成では `[0, 0, 1, 2]` になる。`null` の場合は本番値。
+  /// 17c で検索目的地を削除したため、本番構成は 1:1 の `[0, 1, 2]` になる。
+  /// `null` の場合は本番値。
   ///
   /// 制約（[AppShellState.initState] で検証）:
   /// - [destinations] と長さが一致すること
@@ -72,17 +69,12 @@ class AppShell extends StatefulWidget {
 }
 
 class AppShellState extends State<AppShell> {
-  /// 最終 4 目的地（Phase 16c-3b）。
+  /// 17c: 検索目的地を削除した 3 目的地。
   static const List<NavigationDestination> _defaultDestinations = [
     NavigationDestination(
       icon: Icon(Icons.home_outlined),
       selectedIcon: Icon(Icons.home),
       label: 'ホーム',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.search),
-      selectedIcon: Icon(Icons.manage_search),
-      label: '検索',
     ),
     NavigationDestination(
       icon: Icon(Icons.collections_bookmark_outlined),
@@ -96,20 +88,19 @@ class AppShellState extends State<AppShell> {
     ),
   ];
 
-  /// 目地道 0(ホーム) と 1(検索) は物理タブ 0 を共有する。
-  static const List<int> _defaultDestinationToTab = [0, 0, 1, 2];
+  /// 17c: 目的地と物理タブは 1:1。
+  static const List<int> _defaultDestinationToTab = [0, 1, 2];
 
   // 目的地インデックス（NavigationBar の selectedIndex）
   static const int homeDestination = 0;
-  static const int searchDestination = 1;
-  static const int libraryDestination = 2;
-  static const int settingsDestination = 3;
+  static const int libraryDestination = 1;
+  static const int settingsDestination = 2;
 
   // 物理 Navigator タブインデックス
   static const int homeTab = 0;
   static const int libraryTab = 1;
 
-  /// 本番の物理タブ数（ホーム/検索共有 / ライブラリ / 設定）。
+  /// 本番の物理タブ数（ホーム / ライブラリ / 設定）。
   static const int _defaultTabCount = 3;
 
   /// ホームの State にアクセスするためのキー。
@@ -120,14 +111,6 @@ class AppShellState extends State<AppShell> {
   /// ライブラリの State。タブ切替時の未読数再取得に使う。
   late final GlobalKey<LibraryHubScreenState> _libraryKey =
       GlobalKey<LibraryHubScreenState>();
-
-  /// ホーム/検索の表示モード（Phase 16c-3b）。
-  ///
-  /// ホームと検索は同じ [PixivViewerHomeState] を共有するため、
-  /// この [ValueNotifier] で表示だけを切り替える。
-  /// [AppShell] が所有するため dispose する。
-  final ValueNotifier<HomeSurfaceMode> _homeSurfaceMode =
-      ValueNotifier<HomeSurfaceMode>(HomeSurfaceMode.feed);
 
   /// 現在表示中の目的地インデックス。
   int _destinationIndex = homeDestination;
@@ -181,12 +164,7 @@ class AppShellState extends State<AppShell> {
     final tabs = widget.tabs;
     if (tabs != null) return tabs;
     return [
-      PixivViewerHome(
-        key: _homeKey,
-        surfaceModeListenable: _homeSurfaceMode,
-        onSearchDestinationRequested: _switchToSearch,
-        onHomeDestinationRequested: _switchToHome,
-      ),
+      PixivViewerHome(key: _homeKey),
       LibraryHubScreen(key: _libraryKey, onTagTap: _searchForTag),
       const SettingsScreen(),
     ];
@@ -200,10 +178,6 @@ class AppShellState extends State<AppShell> {
 
   @override
   void dispose() {
-    // AppShell が生成した Notifier だけを dispose する。
-    // （本番構成でもテスト注入 tabs でも、この Notifier は常に
-    //  AppShell の所有物であるため無条件で解放する）
-    _homeSurfaceMode.dispose();
     super.dispose();
   }
 
@@ -219,28 +193,16 @@ class AppShellState extends State<AppShell> {
     _selectDestination(destination);
   }
 
-  /// 目的地を切り替える（Phase 16c-3b）。
+  /// 目的地を切り替える（Phase 16c-3b / 17c）。
   ///
-  /// ホーム/検索の切替時は **同じ物理 Navigator** をルートまで pop し、
-  /// [HomeSurfaceMode] だけで表示を切り替える（State・検索結果は保持）。
+  /// 17c で検索目的地を削除したため、目的地 ↔ 物理 Navigator は 1:1 で、
+  /// サーフェスモードの切替（[HomeSurfaceMode]）はなくなった。
   /// Library / Settings への切替時は各 Navigator の履歴を維持する。
   void _selectDestination(int destination) {
     final tab = _destinationToTab[destination];
     setState(() {
       _destinationIndex = destination;
-      // ホームと検索は同じ State を共有: モードだけで表示を切り替える。
-      _homeSurfaceMode.value = destination == searchDestination
-          ? HomeSurfaceMode.search
-          : HomeSurfaceMode.feed;
     });
-
-    // ホーム/検索の共通 Navigator は切替時にルートまで戻す
-    // （詳細画面が検索ワークスペースを隠さないように）。
-    if (tab == homeTab) {
-      _navigatorKeys[homeTab].currentState?.popUntil((route) {
-        return route.isFirst;
-      });
-    }
 
     // ライブラリへ切り替えたときは未読数を再取得する
     // （別画面でしおり/あとで読むを操作した直後を想定）。
@@ -249,26 +211,14 @@ class AppShellState extends State<AppShell> {
     }
   }
 
-  /// 検索目的地へ切り替える（[PixivViewerHomeState] からの依頼）。
-  void _switchToSearch() {
-    if (_destinationIndex != searchDestination) {
-      _selectDestination(searchDestination);
-    }
-  }
-
-  /// ホーム目的地へ切り替える（[PixivViewerHomeState] からの依頼）。
-  void _switchToHome() {
-    if (_destinationIndex != homeDestination) {
-      _selectDestination(homeDestination);
-    }
-  }
-
-  /// ライブラリのタグがタップされた: 検索目的地へ切り替えて検索を実行する。
+  /// ライブラリのタグがタップされた: ホームへ切り替えて検索を実行する。
   ///
+  /// 17c: 検索はホーム内の検索バー/SearchAssistView で完結するため、
+  /// ホーム目的地へ戻ってから [PixivViewerHomeState.onTagSelected] を呼ぶ。
   /// [PixivViewerHome] が未構築でも例外を出さない（PostFrameCallback で
   /// build 完了後に呼ぶ）。
   void _searchForTag(String tag) {
-    _selectDestination(searchDestination);
+    _selectDestination(homeDestination);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _homeKey.currentState?.onTagSelected(tag);
     });
@@ -281,13 +231,6 @@ class AppShellState extends State<AppShell> {
   /// `_homeKey.currentState?.onTagSelected` の `?.` で例外を出さない。
   @visibleForTesting
   void searchForTagForTest(String tag) => _searchForTag(tag);
-
-  /// テスト用: ホーム/検索の現在のサーフェスモード。
-  ///
-  /// ホームと検索は同じ [PixivViewerHomeState] を共有しているため、
-  /// これが [HomeSurfaceMode.search] なら検索ワークスペース表示中。
-  @visibleForTesting
-  HomeSurfaceMode get homeSurfaceModeForTest => _homeSurfaceMode.value;
 
   /// 1 タブを、そのタブ専用の [Navigator] で包む。
   ///
@@ -335,8 +278,8 @@ class AppShellState extends State<AppShell> {
   ///   より「非表示」と判定される（[Offstage] がその基準）ため、
   ///   タブをまたぐ Widget 検索が従来どおり機能する。
   ///
-  /// アニメーションが必要な場合は [AppPageTransitionsBuilder]（画面遷移）と
-  /// [HomeSurfaceMode] のヘッダー切替（[AnimatedSwitcher]）が別経路で担う。
+  /// アニメーションが必要な場合は [AppPageTransitionsBuilder]（画面遷移）が
+  /// 別経路で担う。
   Widget _buildTabOffstage(Widget tab, int index) {
     final selected = _currentTab == index;
     return Offstage(
@@ -355,7 +298,7 @@ class AppShellState extends State<AppShell> {
   ///
   /// 優先順位:
   /// 1. 現在の物理 Navigator が pop 可能 → ネスト Navigator が処理
-  /// 2. Search / Library / Settings のルート → ホーム目的地へ切替
+  /// 2. Library / Settings のルート → ホーム目的地へ切替
   /// 3. ホーム目的地のルート → Flutter/OS の通常処理に任せる
   ///    （`SystemNavigator.pop()` は直接呼ばない）
   Future<void> _handleSystemPop() async {

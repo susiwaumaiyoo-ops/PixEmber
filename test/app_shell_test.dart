@@ -1,13 +1,12 @@
-// Phase 16c-1/16c-2c/16c-3b: AppShell の契約テスト。
+// Phase 16c-1/16c-2c/16c-3b: AppShell の契約テスト（17c: 3 目的地）。
 //
 // 本番構成（PixivViewerHome 入り）の pump は、DB/認証依存で
 // home_encyclopedia_card_test 等も Widget pump せず State を直接
 // インスタンス化しているのと同じ理由で要求しない。シェルの構造
-// （4 目的地・3 物理 Navigator・目的地↔物理タブの対応・戻る操作）
-// だけを検証する。
+// （17c: 3 目在地・3 物理 Navigator・目的地↔物理タブの 1:1 対応・
+//  戻る操作）だけを検証する。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pixiv_viewer/screens/home_screen_widget.dart';
 import 'package:pixiv_viewer/theme/app_theme.dart';
 import 'package:pixiv_viewer/widgets/app_shell.dart';
 
@@ -75,19 +74,16 @@ const dummyTwoDestinations = <NavigationDestination>[
   NavigationDestination(icon: Icon(Icons.home), label: 'ダミーB'),
 ];
 
-/// 本番の 3 物理 Navigator に相当するテスト用タブ。
-/// ホーム/検索で共有するタブには NavigationBar のラベルと衝突しない
-/// 文字列を与える（`find.text('ホーム')` が NavigationBar のラベルに
-/// ヒットするのを防ぐため）。
+/// 本番の 3 物理 Navigator に相当するテスト用タブ（17c: 3 タブ構成）。
+/// NavigationBar のラベル（ホーム/ライブラリ/設定）と衝突しないよう
+/// 本文のラベルには「本文」を付ける。
 const threeTabs = <Widget>[
   _TabPage(label: 'ホーム本文'),
   _TabPage(label: 'ライブラリ本文'),
   _TabPage(label: '設定本文'),
 ];
 
-/// カウンタ版の 3 タブ（ホーム State の共有検証用）。
-/// NavigationBar のラベル（ホーム/ライブラリ/設定）と衝突しないよう
-/// 本文のラベルには「本文」を付ける。
+/// カウンタ版の 3 タブ（タブ State の保持検証用）。
 const threeCounterTabs = <Widget>[
   _CounterTab(label: 'ホーム本文'),
   _CounterTab(label: 'ライブラリ本文'),
@@ -221,90 +217,32 @@ void main() {
     });
   });
 
-  group('目的地と物理タブ（Phase 16c-3b）', () {
-    testWidgets('本番の 4 目的地が NavigationBar に表示される', (tester) async {
+  group('目的地と物理タブ（Phase 16c-3b / 17c）', () {
+    testWidgets('本番の 3 目的地が NavigationBar に表示される', (tester) async {
       await pumpShell(tester, tabs: threeTabs);
-      for (final label in ['ホーム', '検索', 'ライブラリ', '設定']) {
+      // 17c: 検索目的地を削除。ホーム/ライブラリ/設定の 3 つだけ。
+      expect(find.text('検索'), findsNothing);
+      for (final label in ['ホーム', 'ライブラリ', '設定']) {
         expect(find.text(label), findsOneWidget);
       }
     });
 
-    testWidgets('ホームと検索は同じ物理タブを共有する', (tester) async {
-      await pumpShell(tester, tabs: threeTabs);
-
-      // 初期状態: ホーム目的地 = 物理 tab 0。
-      expect(find.text('ホーム本文'), findsOneWidget);
-      expect(find.byIcon(Icons.home), findsOneWidget);
-
-      // 検索目的地へ。
-      await tester.tap(find.text('検索'));
-      await tester.pumpAndSettle();
-
-      // 同じ物理タブを使うため、表示中の Widget は切り替わらない。
-      expect(find.text('ホーム本文'), findsOneWidget);
-      expect(find.text('ライブラリ本文'), findsNothing);
-      // NavigationBar の選択状態は検索に移動している。
-      expect(find.byIcon(Icons.manage_search), findsOneWidget);
-      expect(find.byIcon(Icons.home_outlined), findsOneWidget);
-    });
-
-    testWidgets('ホームから検索へ切替えても同じ State を使い続ける', (tester) async {
+    testWidgets('ホームの State はライブラリ/設定への切替後も維持される', (tester) async {
       await pumpShell(tester, tabs: threeCounterTabs);
-      final state = tester.state<AppShellState>(find.byType(AppShell));
 
       await tester.tap(find.byType(FloatingActionButton));
       await tester.pumpAndSettle();
       expect(find.text('ホーム本文-1'), findsOneWidget);
 
-      // 検索目的地へ切替えても、ホーム物理タブの State はそのまま。
-      await tester.tap(find.text('検索'));
+      // ライブラリ物理タブへ切替えても、ホーム物理タブの State はそのまま。
+      await tester.tap(find.text('ライブラリ'));
       await tester.pumpAndSettle();
-      expect(find.text('ホーム本文-1'), findsOneWidget);
-      expect(state.homeSurfaceModeForTest, HomeSurfaceMode.search);
-    });
+      expect(find.text('ライブラリ本文-0'), findsOneWidget);
 
-    testWidgets('検索ワークスペースの State はホームへ戻っても維持される', (tester) async {
-      await pumpShell(tester, tabs: threeCounterTabs);
-      final state = tester.state<AppShellState>(find.byType(AppShell));
-
-      await tester.tap(find.text('検索'));
-      await tester.pumpAndSettle();
-      expect(state.homeSurfaceModeForTest, HomeSurfaceMode.search);
-
-      await tester.tap(find.byType(FloatingActionButton));
-      await tester.pumpAndSettle();
-      expect(find.text('ホーム本文-1'), findsOneWidget);
-
-      // ホームへ戻す: 同じ State なのでカウントは維持される。
+      // ホームへ戻す: 同じ物理 Navigator なのでカウントは維持される。
       await tester.tap(find.text('ホーム'));
       await tester.pumpAndSettle();
       expect(find.text('ホーム本文-1'), findsOneWidget);
-      expect(state.homeSurfaceModeForTest, HomeSurfaceMode.feed);
-
-      // 再び検索へ: カウントもサーフェスモードも維持されたまま。
-      await tester.tap(find.text('検索'));
-      await tester.pumpAndSettle();
-      expect(find.text('ホーム本文-1'), findsOneWidget);
-      expect(state.homeSurfaceModeForTest, HomeSurfaceMode.search);
-    });
-
-    testWidgets('ホーム/検索の切替で詳細 Route はルートまで pop される', (tester) async {
-      await pumpShell(tester, tabs: threeTabs);
-
-      await tester.tap(find.byType(FloatingActionButton));
-      await tester.pumpAndSettle();
-      expect(find.text('pushed-ホーム本文'), findsOneWidget);
-
-      // 検索へ: 検索ワークスペースが詳細画面に隠れないように pop する。
-      await tester.tap(find.text('検索'));
-      await tester.pumpAndSettle();
-      expect(find.text('pushed-ホーム本文'), findsNothing);
-      expect(find.text('ホーム本文'), findsOneWidget);
-
-      // ホームへ戻しても、やはりルートまで pop されている。
-      await tester.tap(find.text('ホーム'));
-      await tester.pumpAndSettle();
-      expect(find.text('pushed-ホーム本文'), findsNothing);
     });
 
     testWidgets('ライブラリと設定の履歴は切替えても保持される', (tester) async {
@@ -318,7 +256,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('pushed-ライブラリ本文'), findsOneWidget);
 
-      // 設定物理タブへ（ホーム/検索と違い pop されない）。
+      // 設定物理タブへ（他タブの履歴は維持される）。
       await tester.tap(find.text('設定'));
       await tester.pumpAndSettle();
       expect(find.text('設定本文'), findsOneWidget);
@@ -329,21 +267,22 @@ void main() {
       expect(find.text('pushed-ライブラリ本文'), findsOneWidget);
     });
 
-    testWidgets('ライブラリのタグ操作で検索目的地へ切り替わる', (tester) async {
+    testWidgets('ライブラリのタグ操作でホーム目的地へ切り替わる', (tester) async {
       await pumpShell(tester, tabs: threeTabs);
       final state = tester.state<AppShellState>(find.byType(AppShell));
 
-      expect(find.text('ホーム本文'), findsOneWidget);
-      expect(state.homeSurfaceModeForTest, HomeSurfaceMode.feed);
+      // 17c: タグ検索はホーム目的地で行う（検索目的地は削除）。
+      // そのため、まずライブラリ目的地へ移動しておく。
+      await tester.tap(find.text('ライブラリ'));
+      await tester.pumpAndSettle();
+      expect(find.text('ライブラリ本文'), findsOneWidget);
 
       // 本番では LibraryHubScreen の onTagTap がこの処理を呼ぶ。
       state.searchForTagForTest('小説');
       await tester.pumpAndSettle();
 
-      expect(state.homeSurfaceModeForTest, HomeSurfaceMode.search);
-      expect(find.byIcon(Icons.manage_search), findsOneWidget);
-      // 同じ物理タブ（ホーム/検索共有）を表示したまま。
       expect(find.text('ホーム本文'), findsOneWidget);
+      expect(find.byIcon(Icons.home), findsOneWidget);
       // テスト注入タブで PixivViewerHome が未構築でも例外を出さない。
       expect(tester.takeException(), isNull);
     });
@@ -396,10 +335,10 @@ void main() {
       expect(find.text('pushed-B'), findsNothing);
     });
 
-    testWidgets('ホーム目的地へ切り替えると共有 Navigator はルートまで pop される', (tester) async {
-      // 16c-3b の設計: ホーム/検索は同じ物理 Navigator を共有するため、
-      // ホーム目的地が選ばれたときは詳細 Route をルートまで pop して
-      // フィードワークスペースを表示する（State は破棄しない）。
+    testWidgets('ホームへ戻してもネスト Navigator の履歴は維持される（17c）', (tester) async {
+      // 17c: ホーム/検索の共有 Navigator とその pop 処理を削除した。
+      // ホーム目的地へ戻るときは他の目的地と同じく履歴を維持する。
+      // （代わりに「選択中タブの再タップ」がルートまで pop する）
       await pumpShell(tester, tabs: threeTabs);
 
       await tester.tap(find.byType(FloatingActionButton));
@@ -411,11 +350,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('ライブラリ本文'), findsOneWidget);
 
-      // ホームへ戻す: 共有 Navigator の詳細 Route はルートまで pop される。
+      // ホームへ戻す: ネスト Navigator の履歴はそのまま残る。
       await tester.tap(find.text('ホーム'));
       await tester.pumpAndSettle();
-      expect(find.text('pushed-ホーム本文'), findsNothing);
-      expect(find.text('ホーム本文'), findsOneWidget);
+      expect(find.text('pushed-ホーム本文'), findsOneWidget);
+      expect(find.text('ホーム本文'), findsNothing);
     });
 
     testWidgets('選択中タブを再タップするとルートまで pop する', (tester) async {
@@ -492,37 +431,13 @@ void main() {
       expect(find.text('A'), findsOneWidget);
     });
 
-    testWidgets('検索のルートで戻るとホームへ切替わる', (tester) async {
-      await pumpShell(tester, tabs: threeTabs);
-      final state = tester.state<AppShellState>(find.byType(AppShell));
-
-      await tester.tap(find.text('検索'));
-      await tester.pumpAndSettle();
-      expect(state.homeSurfaceModeForTest, HomeSurfaceMode.search);
-
-      // OS 戻る: 検索ルートは pop できないので AppShell が消費して
-      // ホーム目的地へ切替える（handlePopRoute はアプリが消費すると true）。
-      final handled = await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
-
-      expect(handled, isTrue, reason: 'AppShell が戻るを消費してホームへ切替');
-      expect(state.homeSurfaceModeForTest, HomeSurfaceMode.feed);
-      expect(find.byIcon(Icons.home), findsOneWidget);
-    });
-
     testWidgets('ライブラリ/設定のルートで戻るとホームへ切替わる', (tester) async {
-      await pumpTwoTabShell(
-        tester,
-        tabs: const [
-          _TabPage(label: 'A'),
-          _TabPage(label: 'B'),
-        ],
-      );
+      await pumpShell(tester, tabs: threeTabs);
 
-      // タブ B（ルート、pop 不可）へ切り替え。
-      await tester.tap(find.text('タブB'));
+      // ライブラリ（ルート、pop 不可）へ切り替え。
+      await tester.tap(find.text('ライブラリ'));
       await tester.pumpAndSettle();
-      expect(find.text('B'), findsOneWidget);
+      expect(find.text('ライブラリ本文'), findsOneWidget);
 
       // OS 戻る: ルートなのでアプリが戻るを処理し、PopScope が
       // ホームへ切替える（handlePopRoute はアプリが消費すると true）。
@@ -530,8 +445,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(handled, isTrue, reason: 'AppShell が戻るを消費してホームへ切替');
-      expect(find.text('A'), findsOneWidget);
-      expect(find.text('B'), findsNothing);
+      expect(find.text('ホーム本文'), findsOneWidget);
+      expect(find.text('ライブラリ本文'), findsNothing);
     });
 
     testWidgets('ホームのルートで戻る操作を握りつぶさない', (tester) async {
@@ -589,12 +504,12 @@ void main() {
           ? AppTheme.darkTheme
           : AppTheme.lightTheme;
 
-      testWidgets('${brightness.name} の 4 目的地がタップ領域基準を満たす', (tester) async {
+      testWidgets('${brightness.name} の 3 目的地がタップ領域基準を満たす', (tester) async {
         await pumpShell(tester, tabs: threeTabs, theme: themeData);
         await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
       });
 
-      testWidgets('${brightness.name} の 4 目的地が textScaleFactor 2.0 でも崩れない', (
+      testWidgets('${brightness.name} の 3 目的地が textScaleFactor 2.0 でも崩れない', (
         tester,
       ) async {
         await pumpShell(
@@ -603,7 +518,7 @@ void main() {
           theme: themeData,
           textScaleFactor: 2.0,
         );
-        for (final label in ['ホーム', '検索', 'ライブラリ', '設定']) {
+        for (final label in ['ホーム', 'ライブラリ', '設定']) {
           expect(find.text(label), findsOneWidget);
         }
         await expectLater(tester, meetsGuideline(textContrastGuideline));

@@ -11,6 +11,7 @@ import '../services/discovery_card_service.dart';
 import '../novel_model.dart';
 import 'novel_detail_screen.dart';
 import 'author_profile_screen.dart';
+import '../widgets/home_visual_search_entry.dart';
 
 /// Phase 3 検索アシストビュー。
 ///
@@ -574,7 +575,11 @@ class _SearchAssistViewState extends State<SearchAssistView> {
                     saturated: true,
                   ),
                 ],
-                const SizedBox(height: 24),
+                const SizedBox(height: 12),
+
+                // 17c: 検索サーフェスの削除に伴い「似た画像を探す」導線を
+                // ここへ移設した（VisualSearchScreen 自体は残す）。
+                HomeVisualSearchEntry(onTap: widget.state.openVisualSearch),
               ],
             ),
     );
@@ -685,34 +690,43 @@ class _SearchAssistViewState extends State<SearchAssistView> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.search,
-              size: 48,
-              color: Colors.grey.withValues(alpha: 0.5),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'まだ検索履歴がありません',
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
+    // 17c: 空状態でも「似た画像を探す」導線を末尾に表示する。
+    return Column(
+      children: [
+        Expanded(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.search,
+                    size: 48,
+                    color: Colors.grey.withValues(alpha: 0.5),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'まだ検索履歴がありません',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    '気になるタグや作品名を検索してみましょう',
+                    style: TextStyle(color: Colors.grey, fontSize: 13),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 6),
-            const Text(
-              '気になるタグや作品名を検索してみましょう',
-              style: TextStyle(color: Colors.grey, fontSize: 13),
-            ),
-          ],
+          ),
         ),
-      ),
+        const SizedBox(height: 12),
+        HomeVisualSearchEntry(onTap: widget.state.openVisualSearch),
+      ],
     );
   }
 }

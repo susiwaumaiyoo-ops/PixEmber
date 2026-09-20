@@ -10,7 +10,6 @@ import '../services/pixiv_api_http.dart';
 import 'feeling_discovery_screen.dart';
 import 'ai_recommend_feed_screen.dart';
 import 'visual_search_screen.dart';
-import '../widgets/home_visual_search_entry.dart';
 import 'home_ui_components.dart';
 import 'home_filter_handler.dart';
 import 'home_search_assist_view.dart';
@@ -27,46 +26,16 @@ import '../services/novel_document_text.dart';
 import '../services/search_preset_service.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:crypto/crypto.dart';
-import '../theme/app_motion.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/home_content_mode_selector.dart';
 
-/// ホーム目的地と検索目的地の表示モード（Phase 16c-3a / 16c-4b）。
+/// 17c: 検索目的地（ボトムナビの「検索」）を削除した。
 ///
-/// ホームと検索は **同じ [PixivViewerHomeState]** を共有し、このモードだけで
-/// 表示を切り替える（State を 2 つ作らない・検索結果を複製しない）。
-///
-/// - [HomeSurfaceMode.feed]: ボトムナビのホーム目的地。
-/// - [HomeSurfaceMode.search]: ボトムナビの検索目的地。
-///
-/// 16c-4b で互換モードの `combined` を廃止した。本番の [PixivViewerHome] は
-/// 必ず [AppShell] 経由で `surfaceModeListenable` を受けるため、
-/// 「モード未指定」の状態が存在しない。
-enum HomeSurfaceMode { feed, search }
-
+/// 検索はホーム内の検索バー・[SearchAssistView]（[HomeSearchUiMode]）
+/// だけで完結する。ホーム/検索でこの [PixivViewerHomeState] を共有していた
+/// サーフェスモード（surface mode）の仕組みは不要になり、削除した。
 class PixivViewerHome extends StatefulWidget {
-  const PixivViewerHome({
-    super.key,
-    required this.surfaceModeListenable,
-    this.onSearchDestinationRequested,
-    this.onHomeDestinationRequested,
-  });
-
-  /// ホーム/検索の表示モードを通知するリスナー（Phase 16c-3a）。
-  ///
-  /// 16c-4b で `combined` を廃止したため、本番は必ず [AppShell] が所有する
-  /// [ValueNotifier] を渡す（モード未指定の状態がない）。
-  final ValueListenable<HomeSurfaceMode> surfaceModeListenable;
-
-  /// 「検索を始める」操作（タグ選択等）で検索目的地へ切り替えるよう
-  /// AppShell に依頼するコールバック。
-  ///
-  /// [PixivViewerHomeState.onTagSelected] 等の先頭で呼ばれる。
-  /// AppShell はこれを受けたら目的地を検索に切り替える（State は維持）。
-  final VoidCallback? onSearchDestinationRequested;
-
-  /// 検索ワークスペースからホームへ戻るよう AppShell に依頼するコールバック。
-  final VoidCallback? onHomeDestinationRequested;
+  const PixivViewerHome({super.key});
 
   @override
   State<PixivViewerHome> createState() => PixivViewerHomeState();
@@ -313,131 +282,27 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   static const int novelIndex = 1;
   static const int feelingDiscoveryIndex = 2;
 
-  // ===== Phase 16c-3a: ホーム/検索の表示モード =====
-  // 16c-4b: combined を廃止し、既定はフィード（ホーム目的地）。
-  HomeSurfaceMode _surfaceMode = HomeSurfaceMode.feed;
-
-  /// 現在の表示モード（公開 getter）。
-  HomeSurfaceMode get surfaceMode => _surfaceMode;
-
-  /// 検索モードで許容するコンテンツ種別の最終値（イラスト/小説）。
+  /// 17c: [SearchAssistView] を表示すべきか。
   ///
-  /// フィーリング発掘中に検索モードへ切り替えた場合、この値へ戻す。
-  int _lastSearchableContentIndex = illustIndex;
-
-  /// テスト注入用（16c-3a）。本番では [changeTab] だけが更新する。
-  @visibleForTesting
-  set lastSearchableContentIndexForTest(int value) {
-    _lastSearchableContentIndex = value;
-  }
-
-  /// 検索モードでフィーリング発掘を選択できるか。
-  bool get _isFeelingDiscoveryAllowed => !isSearchMode;
-
-  /// 検索サーフェス（`PixivViewerHome` が検索ワークスペースとして
-  /// 表示されている）か（16c-4b: boolean へ単純化）。
-  bool get isSearchMode => _surfaceMode == HomeSurfaceMode.search;
-
-  /// フィードサーフェス（ホーム目的地）か。
-  bool get isFeedMode => _surfaceMode == HomeSurfaceMode.feed;
-
-  /// テスト用: [isFeedMode] の公開 getter。
-  @visibleForTesting
-  bool get isFeedSurfaceForTest => isFeedMode;
-
-  /// SearchAssistView を表示すべきか（Phase 16c-3c / 16c-4b）。
-  ///
-  /// - `search`: 検索ワークスペースの「ホーム状態」。
-  ///   検索結果表示中（`results`）以外は常時表示する。
-  /// - `feed`: 検索補助は検索サーフェスの役割なので一切表示しない。
+  /// 検索目的地を削除したため、判定は [homeSearchUiMode] だけになった:
+  /// 検索バーへの明示的フォーカス等で `assisting` になったときだけ表示し、
+  /// 結果一覧（`results`）・通常の閲覧（`browsing`）では表示しない。
   @visibleForTesting
   bool get shouldShowSearchAssistForTest => _shouldShowSearchAssist;
 
-  bool get _shouldShowSearchAssist {
-    if (!isSearchMode) return false;
-    return homeSearchUiMode != HomeSearchUiMode.results;
-  }
+  bool get _shouldShowSearchAssist =>
+      homeSearchUiMode == HomeSearchUiMode.assisting;
 
-  /// AppBar のタイトル（Phase 16c-3c）。
+  /// AppBar のタイトル。
   ///
-  /// - `search`: 「検索」で固定。
-  /// - それ以外: 従来どおりコンテンツ種別のタイトル。
+  /// 17c: 検索サーフェスの固定タイトル「検索」は削除した。
+  /// 常にコンテンツ種別のタイトルを表示する。
   String get _appBarTitle {
-    if (isSearchMode) return '検索';
     return currentIndex == illustIndex
         ? 'Pixiv Illusts'
         : currentIndex == novelIndex
         ? 'Pixiv Novels'
         : 'フィーリング発掘';
-  }
-
-  /// 検索モードで許容するコンテンツ種別へ正規化する（純粋関数・16c-3a）。
-  ///
-  /// [current] が検索モードで許容されない（= [feelingDiscoveryIndex]）場合は
-  /// [lastSearchable]（イラスト/小説の直前の選択）へ戻す。
-  /// [lastSearchable] が許容外なら [illustIndex] になる。
-  /// それ以外は [current] をそのまま返す。
-  @visibleForTesting
-  static int normalizeContentIndex(int current, int lastSearchable) {
-    if (current != feelingDiscoveryIndex) return current;
-    if (lastSearchable == illustIndex || lastSearchable == novelIndex) {
-      return lastSearchable;
-    }
-    return illustIndex;
-  }
-
-  /// 現在のモードで [currentIndex] が許容されるか。
-  bool get _isCurrentIndexAllowedForSurface {
-    if (_isFeelingDiscoveryAllowed) return true;
-    return currentIndex != feelingDiscoveryIndex;
-  }
-
-  /// [_surfaceMode] に合わせて [currentIndex] を正規化する。
-  ///
-  /// 戻り値は「変更があったか」。
-  bool _normalizeContentIndex() {
-    if (_isCurrentIndexAllowedForSurface) return false;
-    final target = normalizeContentIndex(
-      currentIndex,
-      _lastSearchableContentIndex,
-    );
-    if (currentIndex == target) return false;
-    currentIndex = target;
-    return true;
-  }
-
-  /// [surfaceMode] が変わったときの State 側の処理（16c-3a）。
-  ///
-  /// 16c-3a ではモード認識だけを追加し、表示差分は作らない。
-  /// 検索モードへ切り替えたときだけ [currentIndex] の正規化を行う。
-  void _onSurfaceModeChanged() {
-    if (_surfaceMode == HomeSurfaceMode.search) {
-      final normalized = _normalizeContentIndex();
-      if (normalized && mounted) {
-        setState(() {});
-      }
-    }
-  }
-
-  /// 16d-2: Home⇄Search サーフェス切替のフェードスルー。
-  ///
-  /// 検索結果リストとその State は **外** で保持し、ここではサーフェス固有の
-  /// ヘッダー部分（検索バー・ソースチップ・サブモード・フィルター類）だけを
-  /// AnimatedSwitcher で入れ替える。State 破棄を伴う子の差し替えは
-  /// サーフェス全体ではなく、このヘッダー部分だけにとどめる。
-  Widget _buildSurfaceHeader(Widget child) {
-    return AnimatedSwitcher(
-      duration: AppMotion.medium,
-      switchInCurve: AppMotion.enter,
-      switchOutCurve: AppMotion.exit,
-      transitionBuilder: (inner, animation) {
-        return FadeTransition(opacity: animation, child: inner);
-      },
-      child: KeyedSubtree(
-        key: ValueKey('home-surface-header-$_surfaceMode'),
-        child: child,
-      ),
-    );
   }
 
   // イラストタブ内のサブ表示モード (0: おすすめ，1: 検索結果，2: ランキング)
@@ -511,11 +376,12 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   late HomeFilterHandler _filterHandler;
   late HomeUIComponents _uiComponents;
 
-  /// 16c-3c: 検索サーフェスから [VisualSearchScreen] を開く。
+  /// 17c: [SearchAssistView] の末尾から [VisualSearchScreen] を開く。
   ///
   /// 従来は Drawer の項目だった導線。既存の画面をネスト Navigator に
-  /// push するだけで、新検索ロジックは追加しない。
-  void _openVisualSearch() {
+  /// push するだけで、新検索ロジックは追加しない。検索サーフェスが
+  /// 削除されたため [SearchAssistView] が呼び出し元になる。
+  void openVisualSearch() {
     Navigator.push(
       context,
       MaterialPageRoute<void>(builder: (_) => const VisualSearchScreen()),
@@ -525,9 +391,6 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   @override
   void initState() {
     super.initState();
-    // 16c-3a: surfaceMode のリスナー登録。
-    // 二重登録を防ぐため didUpdateWidget と共通の attachSurfaceMode を使う。
-    attachSurfaceMode(widget.surfaceModeListenable);
     searchController = TextEditingController();
     scrollController = ScrollController()
       ..addListener(() {
@@ -595,60 +458,13 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     });
   }
 
-  /// 16c-3a: 新しい [surfaceModeListenable] へ差し替える。
-  ///
-  /// 旧リスナーを解除してから新しいものを登録する（二重登録を防ぐ）。
-  /// 同一インスタンスの場合は何もしない（`identical` で判定）。
-  /// テストからリスナー寿命を検証するため公開（16c-3a）。
-  @visibleForTesting
-  void attachSurfaceMode(ValueListenable<HomeSurfaceMode>? listenable) {
-    final old = _surfaceModeListenable;
-    if (identical(old, listenable)) return;
-    old?.removeListener(_handleSurfaceModeChange);
-    _surfaceModeListenable = listenable;
-    if (listenable != null) {
-      // 購読開始時点の値で即時同期する（feed/search の初期状態を反映）。
-      _surfaceMode = listenable.value;
-      listenable.addListener(_handleSurfaceModeChange);
-    } else {
-      // 16c-4b: combined 廃止。未指定時はフィード（ホーム目的地）。
-      _surfaceMode = HomeSurfaceMode.feed;
-    }
-  }
-
-  /// [surfaceModeListenable] の変更通知を受け取る。
-  void _handleSurfaceModeChange() {
-    final listenable = _surfaceModeListenable;
-    if (listenable == null) return;
-    final next = listenable.value;
-    if (next == _surfaceMode) return;
-    _surfaceMode = next;
-    _onSurfaceModeChanged();
-  }
-
-  /// 16c-3a: 現在購読中の [surfaceModeListenable]。
-  ValueListenable<HomeSurfaceMode>? _surfaceModeListenable;
-
   @override
   void didUpdateWidget(covariant PixivViewerHome oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // 16c-3a: surfaceModeListenable の差し替えに対応する。
-    // リスナーが二重登録されないように attachSurfaceMode が判断する。
-    if (!identical(
-      oldWidget.surfaceModeListenable,
-      widget.surfaceModeListenable,
-    )) {
-      attachSurfaceMode(widget.surfaceModeListenable);
-      // 差し替え直後にモードが変わっていた場合は正規化を挟む。
-      _onSurfaceModeChanged();
-    }
   }
 
   @override
   void dispose() {
-    // 16c-3a: リスナーを解除する（dispose 後の通知で例外を出さない）。
-    _surfaceModeListenable?.removeListener(_handleSurfaceModeChange);
-    _surfaceModeListenable = null;
     searchController.dispose();
     scrollController.dispose();
     searchFocusNode.dispose();
@@ -765,8 +581,8 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
 
   // タグ選択時の処理
   void onTagSelected(String tag) {
-    // 16c-3a: タグ検索は検索ワークスペースで行う。
-    if (mounted) widget.onSearchDestinationRequested?.call();
+    // 17c: 検索目的地を削除したため、AppShell への切り替え依頼は不要。
+    // 検索はホーム内の SearchAssistView で完結する。
     searchController.text = tag;
     onSearchSubmit(tag);
   }
@@ -774,8 +590,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   // 購読タグ一覧からタグが選択されたときの処理。
   // type に応じて適切なタブへ切り替えてから検索を実行する。
   void onSubscribedTagSelected(String tag, String type) {
-    // 16c-3a: 検索目的地へ切り替えてから検索する。
-    if (mounted) widget.onSearchDestinationRequested?.call();
+    // 17c: 検索目的地を削除したため、AppShell への切り替え依頼は不要。
     final targetIndex = type == 'novel' ? novelIndex : illustIndex;
     if (currentIndex != targetIndex) {
       setState(() {
@@ -805,18 +620,7 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   }
 
   void changeTab(int index, [int? subMode]) {
-    // 16c-3a: 検索モードではフィーリング発掘を選べない（セグメント非表示）。
-    // 念のため呼び出し元が指定してきた場合も拒否する。
-    if (!_isFeelingDiscoveryAllowed && index == feelingDiscoveryIndex) {
-      return;
-    }
     if (currentIndex == index) return;
-
-    // 16c-3a: 検索可能なモードを選んだことを記録する。
-    // 正規化は検索モード突入時にこの値を使って行う。
-    if (index == illustIndex || index == novelIndex) {
-      _lastSearchableContentIndex = index;
-    }
 
     searchFocusNode.unfocus();
     setState(() {
@@ -1836,9 +1640,9 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
           ],
         ),
         actions: [
-          // 16c-3c: 検索サーフェスでは更新アクションを出さない
-          // （検索は入力から始まるため。新検索ロジックは追加しない）。
-          if (!isSearchMode)
+          // 17c: 検索サーフェスを削除したため、更新アクションは常時表示。
+          // フィーリング発掘タブは共通の更新対象外（fetchData しない）。
+          if (currentIndex != feelingDiscoveryIndex)
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: isLoading ? null : fetchData,
@@ -1882,8 +1686,6 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
           child: HomeContentModeSelector(
             currentIndex: currentIndex,
             onModeSelected: changeTab,
-            // 16c-3a: 検索モードではフィーリング発掘を出さない。
-            showFeelingDiscovery: _isFeelingDiscoveryAllowed,
           ),
         ),
       ),
@@ -1899,7 +1701,8 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
       //   AIレコメンド・ログイン/ログアウト
       //     → HomeSearchSourceChips の末尾チップ・Home AppBar ポップアップ
       //   似た画像を探す
-      //     → 検索サーフェスの HomeVisualSearchEntry（16c-3c）
+      //     → SearchAssistView（ホーム検索）の末尾（17c で検索サーフェスから
+      //       移設。VisualSearchScreen 自体は残す）
       //   Google ドライブ同期セクション
       //     → バックアップ管理（BackupManagerScreen）へ集約
       //       （即時 HUD は buildSyncProgressHUD がフィードに残る）
@@ -1907,125 +1710,109 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
         children: [
           Column(
             children: [
-              // 16d-2: サーフェス固有のヘッダー要素を AnimatedSwitcher で
-              // フェードスルーさせる。検索結果リスト（下の Expanded）は
-              // このスイッチャーの **外** にあるため State は破棄されない。
-              _buildSurfaceHeader(
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 検索バー (フィルターオプションボタン付き)
-                    // 16c-3c: 検索サーフェスでは常時表示。フィードサーフェスでは
-                    // 検索入力欄を出さない（フィーリング発掘タブを除く）。
-                    // 16c-4b: combined 廃止で isSearchMode だけの分岐になった。
-                    if (isSearchMode || currentIndex != feelingDiscoveryIndex)
-                      Padding(
-                        padding: const EdgeInsets.all(AppSpacing.sm),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: searchController,
-                                focusNode: searchFocusNode,
-                                onTap: () {
-                                  // B3: 明示的タップのみ assisting へ遷移を許可する。
-                                  _searchBarManuallyFocused = true;
-                                },
-                                decoration: InputDecoration(
-                                  hintText: currentIndex == illustIndex
-                                      ? 'イラスト、タグ、キーワードを検索...'
-                                      : currentIndex == novelIndex
-                                      ? '小説、タグ、キーワードを検索...'
-                                      : '気分やキーワードを入力...',
-                                  prefixIcon: const Icon(
-                                    Icons.search,
-                                    size: 20,
-                                  ),
-                                  suffixIcon: searchController.text.isNotEmpty
-                                      ? IconButton(
-                                          icon: const Icon(
-                                            Icons.clear,
-                                            size: 18,
-                                          ),
-                                          onPressed: resetSearch,
-                                        )
-                                      : null,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  filled: true,
-                                  fillColor: Theme.of(context)
-                                      .colorScheme
-                                      .surfaceContainerHighest
-                                      .withValues(alpha: 0.4),
-                                  isDense: true,
-                                ),
-                                textInputAction: TextInputAction.search,
-                                onSubmitted: onSearchSubmit,
-                                onChanged: (val) {
-                                  // Phase 3: フォーカス中はアシストビューが候補を絞込む。
-                                  // ここではクリアボタンの描画だけ再構築する。
-                                  setState(() {});
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            IconButton(
-                              icon: Icon(
-                                Icons.tune,
-                                color: currentIndex == illustIndex
-                                    ? colorScheme.primary
-                                    : currentIndex == novelIndex
-                                    ? colorScheme.secondary
-                                    : colorScheme.tertiary,
-                              ),
-                              onPressed: () {
-                                FocusScope.of(context).unfocus();
-                                if (currentIndex == illustIndex) {
-                                  showFilterBottomSheet();
-                                } else if (currentIndex == novelIndex) {
-                                  showNovelFilterBottomSheet();
-                                }
-                                // フィーリング発掘タブではフィルターなし
+              // 17c: 検索サーフェスを削除し、ヘッダー部分の AnimatedSwitcher
+              // （_buildSurfaceHeader）も廃止した。以下の要素は全て
+              // イラスト/小説タブ（フィーリング発掘以外）で常時表示する。
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 検索バー (フィルターオプションボタン付き)
+                  // 17c: フィーリング発掘タブを除き常時表示。
+                  if (currentIndex != feelingDiscoveryIndex)
+                    Padding(
+                      padding: const EdgeInsets.all(AppSpacing.sm),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: searchController,
+                              focusNode: searchFocusNode,
+                              onTap: () {
+                                // B3: 明示的タップのみ assisting へ遷移を許可する。
+                                _searchBarManuallyFocused = true;
                               },
-                              tooltip: currentIndex == illustIndex
-                                  ? '検索フィルター'
-                                  : currentIndex == novelIndex
-                                  ? '小説検索フィルター'
-                                  : 'フィルターなし',
+                              decoration: InputDecoration(
+                                hintText: currentIndex == illustIndex
+                                    ? 'イラスト、タグ、キーワードを検索...'
+                                    : currentIndex == novelIndex
+                                    ? '小説、タグ、キーワードを検索...'
+                                    : '気分やキーワードを入力...',
+                                prefixIcon: const Icon(Icons.search, size: 20),
+                                suffixIcon: searchController.text.isNotEmpty
+                                    ? IconButton(
+                                        icon: const Icon(Icons.clear, size: 18),
+                                        onPressed: resetSearch,
+                                      )
+                                    : null,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide.none,
+                                ),
+                                filled: true,
+                                fillColor: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceContainerHighest
+                                    .withValues(alpha: 0.4),
+                                isDense: true,
+                              ),
+                              textInputAction: TextInputAction.search,
+                              onSubmitted: onSearchSubmit,
+                              onChanged: (val) {
+                                // Phase 3: フォーカス中はアシストビューが候補を絞込む。
+                                // ここではクリアボタンの描画だけ再構築する。
+                                setState(() {});
+                              },
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          IconButton(
+                            icon: Icon(
+                              Icons.tune,
+                              color: currentIndex == illustIndex
+                                  ? colorScheme.primary
+                                  : currentIndex == novelIndex
+                                  ? colorScheme.secondary
+                                  : colorScheme.tertiary,
+                            ),
+                            onPressed: () {
+                              FocusScope.of(context).unfocus();
+                              if (currentIndex == illustIndex) {
+                                showFilterBottomSheet();
+                              } else if (currentIndex == novelIndex) {
+                                showNovelFilterBottomSheet();
+                              }
+                              // フィーリング発掘タブではフィルターなし
+                            },
+                            tooltip: currentIndex == illustIndex
+                                ? '検索フィルター'
+                                : currentIndex == novelIndex
+                                ? '小説検索フィルター'
+                                : 'フィルターなし',
+                          ),
+                        ],
                       ),
+                    ),
 
-                    // Phase 3: コンテンツソースチップ（おすすめ/新着/フォロー/ブックマーク）
-                    // 16c-3c: フィード専用要素（フィーリング発掘タブを除く）。
-                    // 16c-4b: combined 廃止で `!isSearchMode` へ単純化。
-                    if (!isSearchMode && currentIndex != feelingDiscoveryIndex)
-                      HomeSearchSourceChips(state: this),
+                  // Phase 3: コンテンツソースチップ（おすすめ/新着/フォロー/ブックマーク）
+                  // 17c: イラスト/小説タブ専用要素（フィーリング発掘タブを除く）。
+                  if (currentIndex != feelingDiscoveryIndex)
+                    HomeSearchSourceChips(state: this),
 
-                    // 3. サブモードセレクター (おすすめ / ランキング)。※検索結果時はサブタブは表示しません。
-                    // 16c-3c: フィード専用要素。
-                    if (!isSearchMode &&
-                        currentIndex != feelingDiscoveryIndex &&
-                        activeSubMode != 1)
-                      _uiComponents.buildSubModeSelector(),
+                  // 3. サブモードセレクター (おすすめ / ランキング)。※検索結果時はサブタブは表示しません。
+                  if (currentIndex != feelingDiscoveryIndex &&
+                      activeSubMode != 1)
+                    _uiComponents.buildSubModeSelector(),
 
-                    // 4. ランキング時のモード切替
-                    // 16c-3c: フィード専用要素。
-                    if (!isSearchMode && currentIndex != feelingDiscoveryIndex)
-                      _uiComponents.buildRankingFilterBar(),
+                  // 4. ランキング時のモード切替
+                  if (currentIndex != feelingDiscoveryIndex)
+                    _uiComponents.buildRankingFilterBar(),
 
-                    // 5. 百科事典カード (検索モード時のみ)
-                    // 16c-3c: 検索専用要素。
-                    if (isSearchMode &&
-                        currentIndex != feelingDiscoveryIndex &&
-                        activeSubMode == 1 &&
-                        searchItem != null)
-                      _uiComponents.buildEncyclopediaCard(context),
-                  ],
-                ),
+                  // 5. 百科事典カード (検索結果表示時のみ)
+                  if (currentIndex != feelingDiscoveryIndex &&
+                      activeSubMode == 1 &&
+                      searchItem != null)
+                    _uiComponents.buildEncyclopediaCard(context),
+                ],
               ),
 
               // 6. メインデータコンテンツ ⇄ 検索アシストビュー（Phase 3）
@@ -2047,9 +1834,9 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                       child: FadeTransition(opacity: animation, child: child),
                     );
                   },
-                  // 16c-3c: SearchAssistView の表示判定は
-                  // [_shouldShowSearchAssist] に集約した。
-                  // （search: 検索結果表示中以外は常時 / feed: 一切表示しない）
+                  // 17c: SearchAssistView の表示判定は
+                  // [_shouldShowSearchAssist] に集約している
+                  // （assisting のみ表示。browsing/results では表示しない）。
                   child: _shouldShowSearchAssist
                       ? SearchAssistView(
                           key: const ValueKey('home-search-assist-view'),
@@ -2089,19 +1876,11 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
                         ),
                 ),
               ),
-
-              // 16c-3c: 検索サーフェス専用の「似た画像を探す」導線。
-              //
-              // 従来は Drawer にしかなかった導線を検索ワークスペースに
-              // 置き直す。既存の VisualSearchScreen をネスト Navigator に
-              // push するだけで、新検索ロジックは追加しない。
-              if (isSearchMode) HomeVisualSearchEntry(onTap: _openVisualSearch),
             ],
           ),
 
-          // 16c-3c: フィード専用要素。
           // サブスクリプション同期 HUD はフィードの更新中だけ意味を持つ。
-          if (!isSearchMode && isSyncing && _syncProgress != null)
+          if (isSyncing && _syncProgress != null)
             _uiComponents.buildSyncProgressHUD(),
         ],
       ),
