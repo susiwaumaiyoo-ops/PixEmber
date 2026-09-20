@@ -23,6 +23,7 @@ import '../services/reading_speed_service.dart';
 import '../services/ruri_model_manager.dart';
 import '../services/series_progress_service.dart';
 import '../services/similar_works_service.dart';
+import '../theme/app_theme.dart';
 import '../utils/datetime_format.dart';
 import '../widgets/llm_summary_sheet.dart';
 import '../widgets/pixiv_image.dart';
@@ -603,9 +604,12 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
               ),
             ],
           ] else if (_emotionModelAvailable) ...[
-            const Text(
+            Text(
               'AIが本文を解析し、感情（喜・悲・怖・怒・穏・切なさ）の移ろいを曲線で表示します',
-              style: TextStyle(color: Colors.grey, fontSize: 12),
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
             ),
             const SizedBox(height: 10),
             OutlinedButton.icon(
@@ -613,8 +617,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
               icon: const Icon(Icons.auto_awesome, size: 16),
               label: const Text('感情曲線を生成する'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.pinkAccent,
-                side: const BorderSide(color: Colors.pinkAccent),
+                foregroundColor: colorScheme.primary,
+                side: BorderSide(color: colorScheme.primary),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                 ),
@@ -630,14 +634,15 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   void _showEmotionCurveDialog() {
     final curve = _emotionCurve;
     if (curve == null) return;
+    final colorScheme = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF1C1C1C),
+          backgroundColor: colorScheme.surfaceContainerHigh,
           title: Text(
             '💗 感情曲線${curve.isSimpleMode ? '（簡易モード）' : ''}',
-            style: const TextStyle(color: Colors.white, fontSize: 16),
+            style: TextStyle(color: colorScheme.onSurface, fontSize: 16),
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -687,8 +692,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                           const SizedBox(width: 4),
                           Text(
                             kEmotionNames[label] ?? label,
-                            style: const TextStyle(
-                              color: Colors.white70,
+                            style: TextStyle(
+                              color: colorScheme.onSurfaceVariant,
                               fontSize: 11,
                             ),
                           ),
@@ -697,9 +702,12 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'グラフをタップすると、その位置の本文にジャンプします',
-                  style: TextStyle(color: Colors.grey, fontSize: 11),
+                  style: TextStyle(
+                    color: colorScheme.onSurfaceVariant,
+                    fontSize: 11,
+                  ),
                 ),
               ],
             ),
@@ -707,7 +715,10 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('閉じる', style: TextStyle(color: Colors.grey)),
+              child: Text(
+                '閉じる',
+                style: TextStyle(color: colorScheme.onSurfaceVariant),
+              ),
             ),
           ],
         );
@@ -811,27 +822,31 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
 
   // 購読（サブスクリプション）ダイアログを表示し登録を行う
   void _showSubscriptionDialog(String tag) {
+    final colorScheme = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF222222),
+          backgroundColor: colorScheme.surfaceContainerHigh,
           title: Text(
             'タグ「$tag」の購読登録',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: colorScheme.onSurface,
               fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
           ),
-          content: const Text(
+          content: Text(
             'このタグを購読登録しますか？\n端末内のローカルデータベースに保存され、購読タグ一覧からタップで検索できます。',
-            style: TextStyle(color: Colors.white70, fontSize: 13),
+            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 13),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('キャンセル', style: TextStyle(color: Colors.grey)),
+              child: Text(
+                'キャンセル',
+                style: TextStyle(color: colorScheme.onSurfaceVariant),
+              ),
             ),
             TextButton(
               onPressed: () async {
@@ -844,10 +859,10 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                   _showErrorSnackBar('購読登録に失敗しました: $e');
                 }
               },
-              child: const Text(
+              child: Text(
                 '購読する',
                 style: TextStyle(
-                  color: Colors.pinkAccent,
+                  color: colorScheme.primary,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -860,10 +875,11 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
 
   void _showSuccessSnackBar(String message) {
     if (!mounted) return;
+    final colorScheme = Theme.of(context).colorScheme;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.green.shade800,
+        backgroundColor: colorScheme.primaryContainer,
         duration: const Duration(seconds: 4),
         // 「あとで読む」追加時は一覧へ直接飛べるアクションを付与
         action: _isReadLaterAction,
@@ -875,9 +891,10 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   /// 未登録の成功メッセージ（削除等）には null を返してアクション非表示。
   SnackBarAction? get _isReadLaterAction {
     if (!_isReadLater) return null;
+    final colorScheme = Theme.of(context).colorScheme;
     return SnackBarAction(
       label: '一覧を見る',
-      textColor: Colors.white,
+      textColor: colorScheme.onPrimaryContainer,
       onPressed: () {
         Navigator.push(
           context,
@@ -889,10 +906,11 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
 
   void _showErrorSnackBar(String message) {
     if (!mounted) return;
+    final colorScheme = Theme.of(context).colorScheme;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red.shade800,
+        backgroundColor: colorScheme.errorContainer,
         duration: const Duration(seconds: 4),
       ),
     );
@@ -940,6 +958,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     final progress = _seriesProgress!;
     final next = progress.nextUnreadWork;
     final isComplete = progress.readCount >= progress.totalCount;
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Column(
@@ -947,16 +966,12 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.auto_stories,
-                size: 14,
-                color: Colors.pinkAccent,
-              ),
+              Icon(Icons.auto_stories, size: 14, color: colorScheme.primary),
               const SizedBox(width: 6),
               Text(
                 '${progress.readCount}/${progress.totalCount}話',
-                style: const TextStyle(
-                  color: Colors.pinkAccent,
+                style: TextStyle(
+                  color: colorScheme.primary,
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
                 ),
@@ -967,9 +982,9 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                   borderRadius: BorderRadius.circular(2),
                   child: LinearProgressIndicator(
                     value: progress.progressRatio,
-                    backgroundColor: Colors.white12,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      Colors.pinkAccent,
+                    backgroundColor: colorScheme.surfaceContainerHighest,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      colorScheme.primary,
                     ),
                     minHeight: 3,
                   ),
@@ -977,12 +992,12 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
               ),
               if (isComplete) ...[
                 const SizedBox(width: 8),
-                const Icon(Icons.check_circle, size: 14, color: Colors.green),
+                Icon(Icons.check_circle, size: 14, color: colorScheme.primary),
                 const SizedBox(width: 2),
-                const Text(
+                Text(
                   '読了',
                   style: TextStyle(
-                    color: Colors.green,
+                    color: colorScheme.primary,
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1002,18 +1017,18 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                       children: [
                         Text(
                           '次: ${next.title}',
-                          style: const TextStyle(
-                            color: Colors.pinkAccent,
+                          style: TextStyle(
+                            color: colorScheme.primary,
                             fontSize: 11,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(width: 2),
-                        const Icon(
+                        Icon(
                           Icons.play_arrow,
                           size: 14,
-                          color: Colors.pinkAccent,
+                          color: colorScheme.primary,
                         ),
                       ],
                     ),
@@ -1156,26 +1171,27 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   @override
   Widget build(BuildContext context) {
     debugPrint('📍 [DEBUG Detail] build 開始');
+    final colorScheme = Theme.of(context).colorScheme;
     final String caption = widget.novel.caption;
     final Widget result = Scaffold(
-      backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
         title: const Text('小説詳細'),
-        backgroundColor: Colors.black87,
         actions: [
           IconButton(
             icon: _isToggling
-                ? const SizedBox(
+                ? SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.pinkAccent,
+                      color: colorScheme.primary,
                     ),
                   )
                 : Icon(
                     _isBookmarked ? Icons.favorite : Icons.favorite_border,
-                    color: _isBookmarked ? Colors.pinkAccent : Colors.white,
+                    color: _isBookmarked
+                        ? colorScheme.primary
+                        : colorScheme.onSurface,
                   ),
             onPressed: _toggleBookmark,
             tooltip: 'ブックマーク',
@@ -1183,7 +1199,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
           IconButton(
             icon: Icon(
               _isReadLater ? Icons.bookmark_added : Icons.bookmark_add_outlined,
-              color: _isReadLater ? Colors.pinkAccent : Colors.white,
+              color: _isReadLater ? colorScheme.primary : colorScheme.onSurface,
             ),
             onPressed: _toggleReadLater,
             tooltip: _isReadLater ? 'あとで読むから削除' : 'あとで読むに追加',
@@ -1196,7 +1212,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
             // 1. 小説カバーと簡易紹介
             Container(
               padding: const EdgeInsets.all(20.0),
-              color: const Color(0xFF1E1E1E),
+              color: colorScheme.surfaceContainer,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1204,7 +1220,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                     width: 90,
                     height: 125,
                     decoration: BoxDecoration(
-                      color: Colors.black,
+                      color: colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     clipBehavior: Clip.antiAlias,
@@ -1213,13 +1229,17 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             url: widget.novel.coverUrl,
                             fit: BoxFit.cover,
                             isThumbnail: true,
-                            errorWidget: const Icon(
+                            errorWidget: Icon(
                               Icons.book,
                               size: 40,
-                              color: Colors.grey,
+                              color: colorScheme.onSurfaceVariant,
                             ),
                           )
-                        : const Icon(Icons.book, size: 40, color: Colors.grey),
+                        : Icon(
+                            Icons.book,
+                            size: 40,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -1228,8 +1248,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                       children: [
                         Text(
                           widget.novel.title,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: colorScheme.onSurface,
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1273,8 +1293,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                               Expanded(
                                 child: Text(
                                   widget.novel.author.name,
-                                  style: const TextStyle(
-                                    color: Colors.pinkAccent,
+                                  style: TextStyle(
+                                    color: colorScheme.primary,
                                     fontSize: 13,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -1288,8 +1308,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                         const SizedBox(height: 12),
                         Text(
                           '📄 ${widget.novel.pageCount}P  |  ✍️ ${widget.novel.textLength}文字',
-                          style: const TextStyle(
-                            color: Colors.grey,
+                          style: TextStyle(
+                            color: colorScheme.onSurfaceVariant,
                             fontSize: 12,
                           ),
                         ),
@@ -1299,8 +1319,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                           Text(
                             '⏱ 読了目安 ${formatReadingTime(_estReadingMinutes!)}'
                             '${_estReadingIsDefault ? '（推定）' : ''}',
-                            style: const TextStyle(
-                              color: Colors.white70,
+                            style: TextStyle(
+                              color: colorScheme.onSurfaceVariant,
                               fontSize: 12,
                             ),
                           ),
@@ -1309,16 +1329,16 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                           const SizedBox(height: 8),
                           Row(
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.bookmark_added,
                                 size: 14,
-                                color: Colors.green,
+                                color: colorScheme.primary,
                               ),
                               const SizedBox(width: 4),
                               Text(
                                 '読書進捗: ${((_readingProgress ?? 0.0) * 100).toStringAsFixed(0)}%',
-                                style: const TextStyle(
-                                  color: Colors.green,
+                                style: TextStyle(
+                                  color: colorScheme.primary,
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -1327,10 +1347,10 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                               IconButton(
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
-                                icon: const Icon(
+                                icon: Icon(
                                   Icons.delete_outline,
                                   size: 16,
-                                  color: Colors.grey,
+                                  color: colorScheme.onSurfaceVariant,
                                 ),
                                 tooltip: 'しおりを削除',
                                 onPressed: () => _confirmDeleteBookmark(),
@@ -1362,8 +1382,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             _readingProgress != null ? '続きから読む' : '小説を読む',
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.pinkAccent,
-                            foregroundColor: Colors.white,
+                            backgroundColor: colorScheme.primary,
+                            foregroundColor: colorScheme.onPrimary,
                             padding: const EdgeInsets.symmetric(
                               horizontal: 16,
                               vertical: 8,
@@ -1381,8 +1401,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             icon: const Icon(Icons.auto_awesome, size: 16),
                             label: const Text('AI要約（実験）'),
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.pinkAccent,
-                              side: const BorderSide(color: Colors.pinkAccent),
+                              foregroundColor: colorScheme.primary,
+                              side: BorderSide(color: colorScheme.primary),
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: 8,
@@ -1422,8 +1442,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             ),
                             label: const Text('話数の一覧を見る'),
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.pinkAccent,
-                              side: const BorderSide(color: Colors.pinkAccent),
+                              foregroundColor: colorScheme.primary,
+                              side: BorderSide(color: colorScheme.primary),
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: 8,
@@ -1467,27 +1487,29 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                           showDialog(
                             context: context,
                             builder: (context) => AlertDialog(
-                              backgroundColor: const Color(0xFF1C1C1C),
-                              title: const Text(
+                              backgroundColor: colorScheme.surfaceContainerHigh,
+                              title: Text(
                                 '作者をミュート',
                                 style: TextStyle(
-                                  color: Colors.white,
+                                  color: colorScheme.onSurface,
                                   fontSize: 16,
                                 ),
                               ),
                               content: Text(
                                 '${widget.novel.author.name} さんをミュートしますか？\n今後この作者の作品は表示されなくなります。',
-                                style: const TextStyle(
-                                  color: Colors.grey,
+                                style: TextStyle(
+                                  color: colorScheme.onSurfaceVariant,
                                   fontSize: 13,
                                 ),
                               ),
                               actions: [
                                 TextButton(
                                   onPressed: () => Navigator.pop(context),
-                                  child: const Text(
+                                  child: Text(
                                     'キャンセル',
-                                    style: TextStyle(color: Colors.grey),
+                                    style: TextStyle(
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
                                   ),
                                 ),
                                 TextButton(
@@ -1495,30 +1517,30 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                                     Navigator.pop(context);
                                     _muteAuthor();
                                   },
-                                  child: const Text(
+                                  child: Text(
                                     'ミュートする',
-                                    style: TextStyle(color: Colors.redAccent),
+                                    style: TextStyle(color: colorScheme.error),
                                   ),
                                 ),
                               ],
                             ),
                           );
                         },
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.block,
                           size: 14,
-                          color: Colors.redAccent,
+                          color: colorScheme.error,
                         ),
-                        label: const Text(
+                        label: Text(
                           '作者をミュート',
                           style: TextStyle(
-                            color: Colors.redAccent,
+                            color: colorScheme.error,
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         style: TextButton.styleFrom(
-                          backgroundColor: Colors.redAccent.withValues(
+                          backgroundColor: colorScheme.error.withValues(
                             alpha: 0.1,
                           ),
                           shape: RoundedRectangleBorder(
@@ -1532,10 +1554,10 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
 
                   // あらすじ
                   if (caption.isNotEmpty) ...[
-                    const Text(
+                    Text(
                       '📖 あらすじ',
                       style: TextStyle(
-                        color: Colors.grey,
+                        color: colorScheme.onSurfaceVariant,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
@@ -1545,13 +1567,13 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E1E1E),
+                        color: colorScheme.surfaceContainer,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         _cleanHTML(caption),
-                        style: const TextStyle(
-                          color: Colors.white70,
+                        style: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
                           fontSize: 13,
                           height: 1.5,
                         ),
@@ -1563,50 +1585,50 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                   // 統計情報
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.remove_red_eye_outlined,
                         size: 16,
-                        color: Colors.grey,
+                        color: colorScheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         '${widget.novel.totalView}',
-                        style: const TextStyle(
-                          color: Colors.grey,
+                        style: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
                           fontSize: 12,
                         ),
                       ),
                       const SizedBox(width: 16),
-                      const Icon(
+                      Icon(
                         Icons.favorite,
                         size: 16,
-                        color: Colors.pinkAccent,
+                        color: colorScheme.primary,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         '${widget.novel.totalBookmarks + _bookmarkCountOffset}',
-                        style: const TextStyle(
-                          color: Colors.grey,
+                        style: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
                           fontSize: 12,
                         ),
                       ),
                       const Spacer(),
                       Text(
                         _formatDate(widget.novel.createDate),
-                        style: const TextStyle(
-                          color: Colors.grey,
+                        style: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
                           fontSize: 12,
                         ),
                       ),
                     ],
                   ),
-                  const Divider(color: Colors.grey, height: 32),
+                  Divider(color: colorScheme.outlineVariant, height: 32),
 
                   // タグ
-                  const Text(
+                  Text(
                     '🏷️ タグ一覧 (タップで検索 / 長押しで自動同期・購読登録)',
                     style: TextStyle(
-                      color: Colors.grey,
+                      color: colorScheme.onSurfaceVariant,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
@@ -1627,14 +1649,16 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                         child: Chip(
                           label: Text(
                             tag,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: Colors.pinkAccent,
+                              color: colorScheme.onSurface,
                             ),
                           ),
-                          backgroundColor: Colors.pink.withValues(alpha: 0.1),
-                          side: const BorderSide(
-                            color: Colors.pinkAccent,
+                          backgroundColor: colorScheme.primary.withValues(
+                            alpha: 0.1,
+                          ),
+                          side: BorderSide(
+                            color: colorScheme.primary.withValues(alpha: 0.5),
                             width: 0.5,
                           ),
                           padding: const EdgeInsets.symmetric(
@@ -1674,7 +1698,7 @@ class _EmotionCurvePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final bgPaint = Paint()..color = const Color(0xFF161616);
+    final bgPaint = Paint()..color = _bgColor;
     canvas.drawRRect(
       RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(8)),
       bgPaint,
@@ -1683,7 +1707,7 @@ class _EmotionCurvePainter extends CustomPainter {
     // 0 ライン（中心線）
     final midY = size.height / 2;
     final baselinePaint = Paint()
-      ..color = const Color(0xFFFFFFFF).withValues(alpha: 0.15)
+      ..color = _baselineColor
       ..strokeWidth = 1;
     canvas.drawLine(Offset(0, midY), Offset(size.width, midY), baselinePaint);
 
@@ -1722,6 +1746,12 @@ class _EmotionCurvePainter extends CustomPainter {
   bool shouldRepaint(covariant _EmotionCurvePainter oldDelegate) {
     return oldDelegate.curve != curve;
   }
+
+  /// 17d: キャンバス描画色も ColorScheme トークンから取る。ダーク/ライト両対応。
+  static Color get _bgColor =>
+      AppTheme.darkTheme.colorScheme.surfaceContainerHighest;
+  static Color get _baselineColor =>
+      AppTheme.darkTheme.colorScheme.onSurface.withValues(alpha: 0.15);
 }
 
 /// 似た作品カード（Phase D）。表紙 + タイトル + 「なぜ似ているか」の一行理由。
@@ -1753,6 +1783,7 @@ class _SimilarWorkCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cover = _coverUrl();
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       width: 100,
       margin: const EdgeInsets.only(right: 10),
@@ -1773,13 +1804,19 @@ class _SimilarWorkCard extends StatelessWidget {
                         fit: BoxFit.cover,
                         isThumbnail: true,
                         errorWidget: Container(
-                          color: Colors.grey[800],
-                          child: const Icon(Icons.book, color: Colors.grey),
+                          color: colorScheme.surfaceContainerHighest,
+                          child: Icon(
+                            Icons.book,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       )
                     : Container(
-                        color: Colors.grey[800],
-                        child: const Icon(Icons.book, color: Colors.grey),
+                        color: colorScheme.surfaceContainerHighest,
+                        child: Icon(
+                          Icons.book,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                       ),
               ),
             ),
@@ -1788,13 +1825,13 @@ class _SimilarWorkCard extends StatelessWidget {
               _title(),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white, fontSize: 11),
+              style: TextStyle(color: colorScheme.onSurface, fontSize: 11),
             ),
             Text(
               work.reason,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.pinkAccent, fontSize: 9),
+              style: TextStyle(color: colorScheme.primary, fontSize: 9),
             ),
           ],
         ),
@@ -1846,13 +1883,12 @@ class _SimilarWorksScreenState extends State<SimilarWorksScreen> {
   Widget build(BuildContext context) {
     final axes = ['総合', '意味', 'タグ', '視覚'];
     final works = _sorted();
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
         title: Text(
           '「${widget.baseTitle}」に似た作品',
-          style: const TextStyle(color: Colors.white, fontSize: 15),
+          style: TextStyle(color: colorScheme.onSurface, fontSize: 15),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -1869,9 +1905,11 @@ class _SimilarWorksScreenState extends State<SimilarWorksScreen> {
                     label: Text(a),
                     selected: _axis == a,
                     onSelected: (_) => setState(() => _axis = a),
-                    selectedColor: Colors.pinkAccent.withValues(alpha: 0.25),
+                    selectedColor: colorScheme.primary.withValues(alpha: 0.25),
                     labelStyle: TextStyle(
-                      color: _axis == a ? Colors.pinkAccent : Colors.white70,
+                      color: _axis == a
+                          ? colorScheme.primary
+                          : colorScheme.onSurfaceVariant,
                       fontSize: 12,
                     ),
                   ),
@@ -1880,10 +1918,10 @@ class _SimilarWorksScreenState extends State<SimilarWorksScreen> {
           ),
           Expanded(
             child: works.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
                       '似た作品はありません',
-                      style: TextStyle(color: Colors.grey),
+                      style: TextStyle(color: colorScheme.onSurfaceVariant),
                     ),
                   )
                 : ListView.builder(
@@ -1894,8 +1932,8 @@ class _SimilarWorksScreenState extends State<SimilarWorksScreen> {
                         onTap: () => widget.onOpen(w),
                         title: Text(
                           w.row['title']?.toString() ?? '無題',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: colorScheme.onSurface,
                             fontSize: 14,
                           ),
                           maxLines: 1,
@@ -1906,15 +1944,15 @@ class _SimilarWorksScreenState extends State<SimilarWorksScreen> {
                           '意味 ${(w.semanticScore * 100).toStringAsFixed(0)} '
                           'タグ ${(w.tagScore * 100).toStringAsFixed(0)} '
                           '視覚 ${(w.visualScore * 100).toStringAsFixed(0)}',
-                          style: const TextStyle(
-                            color: Colors.grey,
+                          style: TextStyle(
+                            color: colorScheme.onSurfaceVariant,
                             fontSize: 11,
                           ),
                         ),
                         trailing: Text(
                           w.reason,
-                          style: const TextStyle(
-                            color: Colors.pinkAccent,
+                          style: TextStyle(
+                            color: colorScheme.primary,
                             fontSize: 10,
                           ),
                         ),
