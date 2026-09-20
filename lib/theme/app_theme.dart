@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'app_page_transitions.dart';
+
 /// デザインシステム基盤（Phase 11b → 16a 刷新）。
 ///
 /// ライト/ダーク両方の [ThemeData] を提供する。main.dart の MaterialApp が
@@ -300,15 +302,17 @@ class AppTheme {
         ),
       ),
 
-      // --- Motion: 全プラットフォーム Fade-Up で統一 ---
+      // --- Motion: 16d-1 で AppPageTransitionsBuilder に統一 ---
+      // 16a では FadeUpwards だったが、16d でアプリ固有の強調減速遷移
+      // （縦 24px + scale 0.98 + フェード）に差し替えた。
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
-          TargetPlatform.fuchsia: FadeUpwardsPageTransitionsBuilder(),
-          TargetPlatform.iOS: FadeUpwardsPageTransitionsBuilder(),
-          TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
-          TargetPlatform.macOS: FadeUpwardsPageTransitionsBuilder(),
-          TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.android: AppPageTransitionsBuilder(),
+          TargetPlatform.fuchsia: AppPageTransitionsBuilder(),
+          TargetPlatform.iOS: AppPageTransitionsBuilder(),
+          TargetPlatform.linux: AppPageTransitionsBuilder(),
+          TargetPlatform.macOS: AppPageTransitionsBuilder(),
+          TargetPlatform.windows: AppPageTransitionsBuilder(),
         },
       ),
 

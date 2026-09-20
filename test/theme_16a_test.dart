@@ -1,5 +1,9 @@
 // Phase 16a: Warm Earthy Neutral パレットの契約テスト。
 //
+// 16d-1: PageTransitions のアサートを FadeUpwards から
+// AppPageTransitionsBuilder に差し替えた。遷移演出の詳細な契約は
+// test/app_motion_test.dart が持つ。
+//
 // 1. dark/light 双方で primary/onPrimary, surface/onSurface のコントラスト比が
 //    WCAG AA（4.5:1）以上であることを相対輝度から計算で検証。
 // 2. CardTheme が elevation 0・半径 20・outlineVariant 枠であること。
@@ -8,6 +12,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pixiv_viewer/theme/app_page_transitions.dart';
 import 'package:pixiv_viewer/theme/app_spacing.dart';
 import 'package:pixiv_viewer/theme/app_theme.dart';
 
@@ -240,12 +245,14 @@ void main() {
         expect(bar.titleTextStyle?.fontWeight, FontWeight.w600);
       });
 
-      test('$name: PageTransitions は全プラットフォーム Fade-Up', () {
+      test('$name: PageTransitions は全プラットフォーム AppPageTransitionsBuilder', () {
+        // 16d-1: FadeUpwards から AppPageTransitionsBuilder に差し替えた。
+        // 詳細な遷移演出の契約は test/app_motion_test.dart が持つ。
         final builders = theme.pageTransitionsTheme.builders;
         for (final platform in TargetPlatform.values) {
           expect(
             builders[platform],
-            isA<FadeUpwardsPageTransitionsBuilder>(),
+            isA<AppPageTransitionsBuilder>(),
             reason: '$platform',
           );
         }
