@@ -26,6 +26,7 @@ void main() {
     required ValueChanged<int> onModeSelected,
     ThemeData? theme,
     double textScaleFactor = 1.0,
+    bool showFeelingDiscovery = true,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -40,6 +41,7 @@ void main() {
           body: HomeContentModeSelector(
             currentIndex: currentIndex,
             onModeSelected: onModeSelected,
+            showFeelingDiscovery: showFeelingDiscovery,
           ),
         ),
       ),
@@ -68,6 +70,42 @@ void main() {
     // 選択中アイコンは表示しない（NavigationBar の selectedIcon に相当する
     // 装飾を持たせない設計）。
     expect(button.showSelectedIcon, isFalse);
+  });
+
+  // 16c-3a: 検索モードではフィーリング発掘を出さない
+  testWidgets('showFeelingDiscovery=false だとセグメントが 2 つになる', (tester) async {
+    await pumpSelector(
+      tester,
+      currentIndex: PixivViewerHomeState.illustIndex,
+      onModeSelected: (_) {},
+      showFeelingDiscovery: false,
+    );
+    final button = tester.widget<SegmentedButton<int>>(
+      find.byType(SegmentedButton<int>),
+    );
+    expect(button.segments.length, 2);
+    expect(button.segments.map((s) => s.value), [
+      PixivViewerHomeState.illustIndex,
+      PixivViewerHomeState.novelIndex,
+    ]);
+    expect(find.text('フィーリング発掘'), findsNothing);
+    expect(find.text('イラスト'), findsOneWidget);
+    expect(find.text('小説'), findsOneWidget);
+  });
+
+  testWidgets('showFeelingDiscovery=false で小説をタップすると novelIndex が通知される', (
+    tester,
+  ) async {
+    int? selected;
+    await pumpSelector(
+      tester,
+      currentIndex: PixivViewerHomeState.illustIndex,
+      onModeSelected: (i) => selected = i,
+      showFeelingDiscovery: false,
+    );
+    await tester.tap(find.text('小説'));
+    await tester.pump();
+    expect(selected, PixivViewerHomeState.novelIndex);
   });
 
   for (final (index, label, _) in modes) {

@@ -19,6 +19,7 @@ class HomeContentModeSelector extends StatelessWidget {
     super.key,
     required this.currentIndex,
     required this.onModeSelected,
+    this.showFeelingDiscovery = true,
   });
 
   /// 現在選択中のモードインデックス
@@ -28,6 +29,12 @@ class HomeContentModeSelector extends StatelessWidget {
 
   /// モードが選択されたときに呼ばれる。`changeTab` に渡す。
   final ValueChanged<int> onModeSelected;
+
+  /// フィーリング発掘セグメントを表示するか（Phase 16c-3a）。
+  ///
+  /// 検索モードではフィーリング発掘を選べないため `false` にする。
+  /// デフォルトは `true`（[AppShell] 外での単独利用 = 従来表示）。
+  final bool showFeelingDiscovery;
 
   /// AppBar の `bottom` に指定するための推定高さ。
   ///
@@ -48,23 +55,37 @@ class HomeContentModeSelector extends StatelessWidget {
         ),
         child: SegmentedButton<int>(
           showSelectedIcon: false,
-          segments: const [
-            ButtonSegment(
-              value: PixivViewerHomeState.illustIndex,
-              icon: Icon(Icons.image_outlined),
-              label: Text('イラスト'),
-            ),
-            ButtonSegment(
-              value: PixivViewerHomeState.novelIndex,
-              icon: Icon(Icons.book_outlined),
-              label: Text('小説'),
-            ),
-            ButtonSegment(
-              value: PixivViewerHomeState.feelingDiscoveryIndex,
-              icon: Icon(Icons.auto_awesome_outlined),
-              label: Text('フィーリング発掘'),
-            ),
-          ],
+          // 16c-3a: 検索モードではフィーリング発掘を出さない（2 セグメント）。
+          segments: showFeelingDiscovery
+              ? const [
+                  ButtonSegment(
+                    value: PixivViewerHomeState.illustIndex,
+                    icon: Icon(Icons.image_outlined),
+                    label: Text('イラスト'),
+                  ),
+                  ButtonSegment(
+                    value: PixivViewerHomeState.novelIndex,
+                    icon: Icon(Icons.book_outlined),
+                    label: Text('小説'),
+                  ),
+                  ButtonSegment(
+                    value: PixivViewerHomeState.feelingDiscoveryIndex,
+                    icon: Icon(Icons.auto_awesome_outlined),
+                    label: Text('フィーリング発掘'),
+                  ),
+                ]
+              : const [
+                  ButtonSegment(
+                    value: PixivViewerHomeState.illustIndex,
+                    icon: Icon(Icons.image_outlined),
+                    label: Text('イラスト'),
+                  ),
+                  ButtonSegment(
+                    value: PixivViewerHomeState.novelIndex,
+                    icon: Icon(Icons.book_outlined),
+                    label: Text('小説'),
+                  ),
+                ],
           selected: {currentIndex},
           onSelectionChanged: (selection) => onModeSelected(selection.first),
         ),

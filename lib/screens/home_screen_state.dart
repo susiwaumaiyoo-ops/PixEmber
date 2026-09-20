@@ -43,8 +43,40 @@ import 'package:crypto/crypto.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/home_content_mode_selector.dart';
 
+/// ホーム目的地と検索目的地の表示モード（Phase 16c-3a）。
+///
+/// ホームと検索は **同じ [PixivViewerHomeState]** を共有し、このモードだけで
+/// 表示を切り替える（State を 2 つ作らない・検索結果を複製しない）。
+///
+/// - [HomeSurfaceMode.combined]: AppShell 外で単独利用した場合の互換モード。
+///   従来の表示を完全に維持する（`surfaceModeListenable` が `null` のとき）。
+/// - [HomeSurfaceMode.feed]: ボトムナビのホーム目的地。
+/// - [HomeSurfaceMode.search]: ボトムナビの検索目的地。
+enum HomeSurfaceMode { combined, feed, search }
+
 class PixivViewerHome extends StatefulWidget {
-  const PixivViewerHome({super.key});
+  const PixivViewerHome({
+    super.key,
+    this.surfaceModeListenable,
+    this.onSearchDestinationRequested,
+    this.onHomeDestinationRequested,
+  });
+
+  /// ホーム/検索の表示モードを通知するリスナー（Phase 16c-3a）。
+  ///
+  /// `null` の場合は [HomeSurfaceMode.combined] となり、従来の表示を完全に
+  /// 維持する。AppShell が所有する [ValueNotifier] を渡す。
+  final ValueListenable<HomeSurfaceMode>? surfaceModeListenable;
+
+  /// 「検索を始める」操作（タグ選択等）で検索目的地へ切り替えるよう
+  /// AppShell に依頼するコールバック。
+  ///
+  /// [PixivViewerHomeState.onTagSelected] 等の先頭で呼ばれる。
+  /// AppShell はこれを受けたら目的地を検索に切り替える（State は維持）。
+  final VoidCallback? onSearchDestinationRequested;
+
+  /// 検索ワークスペースからホームへ戻るよう AppShell に依頼するコールバック。
+  final VoidCallback? onHomeDestinationRequested;
 
   @override
   State<PixivViewerHome> createState() => PixivViewerHomeState();
@@ -292,6 +324,77 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   static const int novelIndex = 1;
   static const int feelingDiscoveryIndex = 2;
 
+  // ===== Phase 16c-3a: ホーム/検索の表示モード =====
+  HomeSurfaceMode _surfaceMode = HomeSurfaceMode.combined;
+
+  /// 現在の表示モード（公開 getter）。
+  ///
+  /// `surfaceModeListenable` が `null` なら [HomeSurfaceMode.combined] で
+  /// 従来の表示を維持する。
+  HomeSurfaceMode get surfaceMode => _surfaceMode;
+
+  /// 検索モードで許容するコンテンツ種別の最終値（イラスト/小説）。
+  ///
+  /// フィーリング発掘中に検索モードへ切り替えた場合、この値へ戻す。
+  int _lastSearchableContentIndex = illustIndex;
+
+  /// テスト注入用（16c-3a）。本番では [changeTab] だけが更新する。
+  @visibleForTesting
+  set lastSearchableContentIndexForTest(int value) {
+    _lastSearchableContentIndex = value;
+  }
+
+  /// 検索モードでフィーリング発掘を選択できるか。
+  bool get _isFeelingDiscoveryAllowed => _surfaceMode != HomeSurfaceMode.search;
+
+  /// 検索モードで許容するコンテンツ種別へ正規化する（純粋関数・16c-3a）。
+  ///
+  /// [current] が検索モードで許容されない（= [feelingDiscoveryIndex]）場合は
+  /// [lastSearchable]（イラスト/小説の直前の選択）へ戻す。
+  /// [lastSearchable] が許容外なら [illustIndex] になる。
+  /// それ以外は [current] をそのまま返す。
+  @visibleForTesting
+  static int normalizeContentIndex(int current, int lastSearchable) {
+    if (current != feelingDiscoveryIndex) return current;
+    if (lastSearchable == illustIndex || lastSearchable == novelIndex) {
+      return lastSearchable;
+    }
+    return illustIndex;
+  }
+
+  /// 現在のモードで [currentIndex] が許容されるか。
+  bool get _isCurrentIndexAllowedForSurface {
+    if (_isFeelingDiscoveryAllowed) return true;
+    return currentIndex != feelingDiscoveryIndex;
+  }
+
+  /// [_surfaceMode] に合わせて [currentIndex] を正規化する。
+  ///
+  /// 戻り値は「変更があったか」。
+  bool _normalizeContentIndex() {
+    if (_isCurrentIndexAllowedForSurface) return false;
+    final target = normalizeContentIndex(
+      currentIndex,
+      _lastSearchableContentIndex,
+    );
+    if (currentIndex == target) return false;
+    currentIndex = target;
+    return true;
+  }
+
+  /// [surfaceMode] が変わったときの State 側の処理（16c-3a）。
+  ///
+  /// 16c-3a ではモード認識だけを追加し、表示差分は作らない。
+  /// 検索モードへ切り替えたときだけ [currentIndex] の正規化を行う。
+  void _onSurfaceModeChanged() {
+    if (_surfaceMode == HomeSurfaceMode.search) {
+      final normalized = _normalizeContentIndex();
+      if (normalized && mounted) {
+        setState(() {});
+      }
+    }
+  }
+
   // イラストタブ内のサブ表示モード (0: おすすめ，1: 検索結果，2: ランキング)
   int illustSubMode = 0;
   // 小説タブ内のサブ表示モード (0: おすすめ，1: 検索結果，2: ランキング)
@@ -365,6 +468,9 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   @override
   void initState() {
     super.initState();
+    // 16c-3a: surfaceMode のリスナー登録。
+    // 二重登録を防ぐため didUpdateWidget と共通の attachSurfaceMode を使う。
+    attachSurfaceMode(widget.surfaceModeListenable);
     searchController = TextEditingController();
     scrollController = ScrollController()
       ..addListener(() {
@@ -433,8 +539,61 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
     });
   }
 
+  /// 16c-3a: 新しい [surfaceModeListenable] へ差し替える。
+  ///
+  /// 旧リスナーを解除してから新しいものを登録する（二重登録を防ぐ）。
+  /// 同一インスタンスの場合は何もしない（`identical` で判定）。
+  /// テストからリスナー寿命を検証するため公開（16c-3a）。
+  @visibleForTesting
+  void attachSurfaceMode(ValueListenable<HomeSurfaceMode>? listenable) {
+    final old = _surfaceModeListenable;
+    if (identical(old, listenable)) return;
+    old?.removeListener(_handleSurfaceModeChange);
+    _surfaceModeListenable = listenable;
+    if (listenable != null) {
+      // 購読開始時点の値で即時同期する（feed/search の初期状態を反映）。
+      _surfaceMode = listenable.value;
+      listenable.addListener(_handleSurfaceModeChange);
+    } else {
+      _surfaceMode = HomeSurfaceMode.combined;
+    }
+  }
+
+  /// [surfaceModeListenable] の変更通知を受け取る。
+  void _handleSurfaceModeChange() {
+    final listenable = _surfaceModeListenable;
+    if (listenable == null) return;
+    final next = listenable.value;
+    if (next == _surfaceMode) return;
+    _surfaceMode = next;
+    _onSurfaceModeChanged();
+  }
+
+  /// 16c-3a: 現在購読中の [surfaceModeListenable]。
+  ///
+  /// `null` のときは [HomeSurfaceMode.combined] で動作する。
+  ValueListenable<HomeSurfaceMode>? _surfaceModeListenable;
+
+  @override
+  void didUpdateWidget(covariant PixivViewerHome oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 16c-3a: surfaceModeListenable の差し替えに対応する。
+    // リスナーが二重登録されないように attachSurfaceMode が判断する。
+    if (!identical(
+      oldWidget.surfaceModeListenable,
+      widget.surfaceModeListenable,
+    )) {
+      attachSurfaceMode(widget.surfaceModeListenable);
+      // 差し替え直後にモードが変わっていた場合は正規化を挟む。
+      _onSurfaceModeChanged();
+    }
+  }
+
   @override
   void dispose() {
+    // 16c-3a: リスナーを解除する（dispose 後の通知で例外を出さない）。
+    _surfaceModeListenable?.removeListener(_handleSurfaceModeChange);
+    _surfaceModeListenable = null;
     searchController.dispose();
     scrollController.dispose();
     searchFocusNode.dispose();
@@ -551,6 +710,8 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
 
   // タグ選択時の処理
   void onTagSelected(String tag) {
+    // 16c-3a: タグ検索は検索ワークスペースで行う。
+    if (mounted) widget.onSearchDestinationRequested?.call();
     searchController.text = tag;
     onSearchSubmit(tag);
   }
@@ -558,6 +719,8 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   // 購読タグ一覧からタグが選択されたときの処理。
   // type に応じて適切なタブへ切り替えてから検索を実行する。
   void onSubscribedTagSelected(String tag, String type) {
+    // 16c-3a: 検索目的地へ切り替えてから検索する。
+    if (mounted) widget.onSearchDestinationRequested?.call();
     final targetIndex = type == 'novel' ? novelIndex : illustIndex;
     if (currentIndex != targetIndex) {
       setState(() {
@@ -587,7 +750,18 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
   }
 
   void changeTab(int index, [int? subMode]) {
+    // 16c-3a: 検索モードではフィーリング発掘を選べない（セグメント非表示）。
+    // 念のため呼び出し元が指定してきた場合も拒否する。
+    if (!_isFeelingDiscoveryAllowed && index == feelingDiscoveryIndex) {
+      return;
+    }
     if (currentIndex == index) return;
+
+    // 16c-3a: 検索可能なモードを選んだことを記録する。
+    // 正規化は検索モード突入時にこの値を使って行う。
+    if (index == illustIndex || index == novelIndex) {
+      _lastSearchableContentIndex = index;
+    }
 
     searchFocusNode.unfocus();
     setState(() {
@@ -1714,6 +1888,8 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
           child: HomeContentModeSelector(
             currentIndex: currentIndex,
             onModeSelected: changeTab,
+            // 16c-3a: 検索モードではフィーリング発掘を出さない。
+            showFeelingDiscovery: _isFeelingDiscoveryAllowed,
           ),
         ),
       ),
