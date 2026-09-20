@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../screens/home_screen_widget.dart';
 import '../screens/library_hub_screen.dart';
 import '../screens/settings_screen.dart';
+import '../theme/app_motion.dart';
 
 /// アプリの外側を包む「殻」（Phase 16c-3b）。
 ///
@@ -315,6 +316,23 @@ class AppShellState extends State<AppShell> {
     );
   }
 
+  /// 16d-2: タブ切替のフェードスルー。
+  ///
+  /// [IndexedStack] は維持したまま、**選択タブだけ** opacity 1 にする。
+  /// AnimatedSwitcher で子を差し替えると State が破棄されるため禁止。
+  Widget _buildTabFade(Widget tab, int index) {
+    final selected = _currentTab == index;
+    return AnimatedOpacity(
+      opacity: selected ? 1.0 : 0.0,
+      // 選択されたタブは enter・非選択になったタブは exit。
+      // IndexedStack が常に全タブを build するため、両者の
+      // duration/curve を少しずらすだけで「フェードスルー」になる。
+      duration: selected ? AppMotion.medium : AppMotion.short,
+      curve: selected ? AppMotion.enter : AppMotion.exit,
+      child: tab,
+    );
+  }
+
   /// 現在タブのネスト Navigator が pop 可能か（= ルートより上に画面があるか）。
   bool get _currentTabCanPop {
     final navigator = _navigatorKeys[_currentTab].currentState;
@@ -352,7 +370,8 @@ class AppShellState extends State<AppShell> {
         body: IndexedStack(
           index: _currentTab,
           children: [
-            for (var i = 0; i < tabs.length; i++) _wrapInNavigator(tabs[i], i),
+            for (var i = 0; i < tabs.length; i++)
+              _buildTabFade(_wrapInNavigator(tabs[i], i), i),
           ],
         ),
         bottomNavigationBar: NavigationBar(

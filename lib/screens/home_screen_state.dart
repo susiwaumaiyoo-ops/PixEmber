@@ -27,6 +27,7 @@ import '../services/novel_document_text.dart';
 import '../services/search_preset_service.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:crypto/crypto.dart';
+import '../theme/app_motion.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/home_content_mode_selector.dart';
 
@@ -416,6 +417,27 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
         setState(() {});
       }
     }
+  }
+
+  /// 16d-2: Home⇄Search サーフェス切替のフェードスルー。
+  ///
+  /// 検索結果リストとその State は **外** で保持し、ここではサーフェス固有の
+  /// ヘッダー部分（検索バー・ソースチップ・サブモード・フィルター類）だけを
+  /// AnimatedSwitcher で入れ替える。State 破棄を伴う子の差し替えは
+  /// サーフェス全体ではなく、このヘッダー部分だけにとどめる。
+  Widget _buildSurfaceHeader(Widget child) {
+    return AnimatedSwitcher(
+      duration: AppMotion.medium,
+      switchInCurve: AppMotion.enter,
+      switchOutCurve: AppMotion.exit,
+      transitionBuilder: (inner, animation) {
+        return FadeTransition(opacity: animation, child: inner);
+      },
+      child: KeyedSubtree(
+        key: ValueKey('home-surface-header-$_surfaceMode'),
+        child: child,
+      ),
+    );
   }
 
   // イラストタブ内のサブ表示モード (0: おすすめ，1: 検索結果，2: ランキング)
@@ -1885,110 +1907,126 @@ class PixivViewerHomeState extends State<PixivViewerHome> {
         children: [
           Column(
             children: [
-              // 検索バー (フィルターオプションボタン付き)
-              // 16c-3c: 検索サーフェスでは常時表示。フィードサーフェスでは
-              // 検索入力欄を出さない（フィーリング発掘タブを除く）。
-              // 16c-4b: combined 廃止で isSearchMode だけの分岐になった。
-              if (isSearchMode || currentIndex != feelingDiscoveryIndex)
-                Padding(
-                  padding: const EdgeInsets.all(AppSpacing.sm),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: searchController,
-                          focusNode: searchFocusNode,
-                          onTap: () {
-                            // B3: 明示的タップのみ assisting へ遷移を許可する。
-                            _searchBarManuallyFocused = true;
-                          },
-                          decoration: InputDecoration(
-                            hintText: currentIndex == illustIndex
-                                ? 'イラスト、タグ、キーワードを検索...'
-                                : currentIndex == novelIndex
-                                ? '小説、タグ、キーワードを検索...'
-                                : '気分やキーワードを入力...',
-                            prefixIcon: const Icon(Icons.search, size: 20),
-                            suffixIcon: searchController.text.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(Icons.clear, size: 18),
-                                    onPressed: resetSearch,
-                                  )
-                                : null,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
+              // 16d-2: サーフェス固有のヘッダー要素を AnimatedSwitcher で
+              // フェードスルーさせる。検索結果リスト（下の Expanded）は
+              // このスイッチャーの **外** にあるため State は破棄されない。
+              _buildSurfaceHeader(
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 検索バー (フィルターオプションボタン付き)
+                    // 16c-3c: 検索サーフェスでは常時表示。フィードサーフェスでは
+                    // 検索入力欄を出さない（フィーリング発掘タブを除く）。
+                    // 16c-4b: combined 廃止で isSearchMode だけの分岐になった。
+                    if (isSearchMode || currentIndex != feelingDiscoveryIndex)
+                      Padding(
+                        padding: const EdgeInsets.all(AppSpacing.sm),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: searchController,
+                                focusNode: searchFocusNode,
+                                onTap: () {
+                                  // B3: 明示的タップのみ assisting へ遷移を許可する。
+                                  _searchBarManuallyFocused = true;
+                                },
+                                decoration: InputDecoration(
+                                  hintText: currentIndex == illustIndex
+                                      ? 'イラスト、タグ、キーワードを検索...'
+                                      : currentIndex == novelIndex
+                                      ? '小説、タグ、キーワードを検索...'
+                                      : '気分やキーワードを入力...',
+                                  prefixIcon: const Icon(
+                                    Icons.search,
+                                    size: 20,
+                                  ),
+                                  suffixIcon: searchController.text.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(
+                                            Icons.clear,
+                                            size: 18,
+                                          ),
+                                          onPressed: resetSearch,
+                                        )
+                                      : null,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  filled: true,
+                                  fillColor: Theme.of(context)
+                                      .colorScheme
+                                      .surfaceContainerHighest
+                                      .withValues(alpha: 0.4),
+                                  isDense: true,
+                                ),
+                                textInputAction: TextInputAction.search,
+                                onSubmitted: onSearchSubmit,
+                                onChanged: (val) {
+                                  // Phase 3: フォーカス中はアシストビューが候補を絞込む。
+                                  // ここではクリアボタンの描画だけ再構築する。
+                                  setState(() {});
+                                },
+                              ),
                             ),
-                            filled: true,
-                            fillColor: Theme.of(context)
-                                .colorScheme
-                                .surfaceContainerHighest
-                                .withValues(alpha: 0.4),
-                            isDense: true,
-                          ),
-                          textInputAction: TextInputAction.search,
-                          onSubmitted: onSearchSubmit,
-                          onChanged: (val) {
-                            // Phase 3: フォーカス中はアシストビューが候補を絞込む。
-                            // ここではクリアボタンの描画だけ再構築する。
-                            setState(() {});
-                          },
+                            const SizedBox(width: AppSpacing.sm),
+                            IconButton(
+                              icon: Icon(
+                                Icons.tune,
+                                color: currentIndex == illustIndex
+                                    ? colorScheme.primary
+                                    : currentIndex == novelIndex
+                                    ? colorScheme.secondary
+                                    : colorScheme.tertiary,
+                              ),
+                              onPressed: () {
+                                FocusScope.of(context).unfocus();
+                                if (currentIndex == illustIndex) {
+                                  showFilterBottomSheet();
+                                } else if (currentIndex == novelIndex) {
+                                  showNovelFilterBottomSheet();
+                                }
+                                // フィーリング発掘タブではフィルターなし
+                              },
+                              tooltip: currentIndex == illustIndex
+                                  ? '検索フィルター'
+                                  : currentIndex == novelIndex
+                                  ? '小説検索フィルター'
+                                  : 'フィルターなし',
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: AppSpacing.sm),
-                      IconButton(
-                        icon: Icon(
-                          Icons.tune,
-                          color: currentIndex == illustIndex
-                              ? colorScheme.primary
-                              : currentIndex == novelIndex
-                              ? colorScheme.secondary
-                              : colorScheme.tertiary,
-                        ),
-                        onPressed: () {
-                          FocusScope.of(context).unfocus();
-                          if (currentIndex == illustIndex) {
-                            showFilterBottomSheet();
-                          } else if (currentIndex == novelIndex) {
-                            showNovelFilterBottomSheet();
-                          }
-                          // フィーリング発掘タブではフィルターなし
-                        },
-                        tooltip: currentIndex == illustIndex
-                            ? '検索フィルター'
-                            : currentIndex == novelIndex
-                            ? '小説検索フィルター'
-                            : 'フィルターなし',
-                      ),
-                    ],
-                  ),
+
+                    // Phase 3: コンテンツソースチップ（おすすめ/新着/フォロー/ブックマーク）
+                    // 16c-3c: フィード専用要素（フィーリング発掘タブを除く）。
+                    // 16c-4b: combined 廃止で `!isSearchMode` へ単純化。
+                    if (!isSearchMode && currentIndex != feelingDiscoveryIndex)
+                      HomeSearchSourceChips(state: this),
+
+                    // 3. サブモードセレクター (おすすめ / ランキング)。※検索結果時はサブタブは表示しません。
+                    // 16c-3c: フィード専用要素。
+                    if (!isSearchMode &&
+                        currentIndex != feelingDiscoveryIndex &&
+                        activeSubMode != 1)
+                      _uiComponents.buildSubModeSelector(),
+
+                    // 4. ランキング時のモード切替
+                    // 16c-3c: フィード専用要素。
+                    if (!isSearchMode && currentIndex != feelingDiscoveryIndex)
+                      _uiComponents.buildRankingFilterBar(),
+
+                    // 5. 百科事典カード (検索モード時のみ)
+                    // 16c-3c: 検索専用要素。
+                    if (isSearchMode &&
+                        currentIndex != feelingDiscoveryIndex &&
+                        activeSubMode == 1 &&
+                        searchItem != null)
+                      _uiComponents.buildEncyclopediaCard(context),
+                  ],
                 ),
-
-              // Phase 3: コンテンツソースチップ（おすすめ/新着/フォロー/ブックマーク）
-              // 16c-3c: フィード専用要素（フィーリング発掘タブを除く）。
-              // 16c-4b: combined 廃止で `!isSearchMode` へ単純化。
-              if (!isSearchMode && currentIndex != feelingDiscoveryIndex)
-                HomeSearchSourceChips(state: this),
-
-              // 3. サブモードセレクター (おすすめ / ランキング)。※検索結果時はサブタブは表示しません。
-              // 16c-3c: フィード専用要素。
-              if (!isSearchMode &&
-                  currentIndex != feelingDiscoveryIndex &&
-                  activeSubMode != 1)
-                _uiComponents.buildSubModeSelector(),
-
-              // 4. ランキング時のモード切替
-              // 16c-3c: フィード専用要素。
-              if (!isSearchMode && currentIndex != feelingDiscoveryIndex)
-                _uiComponents.buildRankingFilterBar(),
-
-              // 5. 百科事典カード (検索モード時のみ)
-              // 16c-3c: 検索専用要素。
-              if (isSearchMode &&
-                  currentIndex != feelingDiscoveryIndex &&
-                  activeSubMode == 1 &&
-                  searchItem != null)
-                _uiComponents.buildEncyclopediaCard(context),
+              ),
 
               // 6. メインデータコンテンツ ⇄ 検索アシストビュー（Phase 3）
               // Stack の Positioned オーバーレイではなく同一領域の置換。
