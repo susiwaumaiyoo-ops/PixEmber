@@ -7,6 +7,7 @@ import 'package:pixiv_viewer/theme/app_spacing.dart';
 import 'package:pixiv_viewer/utils/datetime_format.dart';
 import 'package:pixiv_viewer/widgets/design_system/app_state_view.dart';
 import 'package:pixiv_viewer/widgets/design_system/app_status_banner.dart';
+import 'package:pixiv_viewer/widgets/design_system/app_success_check.dart';
 
 /// Google Drive バックアップ管理画面。
 ///
@@ -301,6 +302,10 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
             AppStatusBanner(
               type: AppStatusType.success,
               title: _lastActionMessage!,
+              leading: AppSuccessCheck(
+                size: 20,
+                visible: _lastActionMessage != null,
+              ),
               margin: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.lg,
                 vertical: AppSpacing.sm,

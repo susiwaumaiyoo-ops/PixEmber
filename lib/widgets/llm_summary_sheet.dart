@@ -14,6 +14,7 @@ import '../services/llm_model_preset.dart' show LlmModelChoice;
 import '../services/llm_summary_cache_service.dart';
 import '../services/llm_summary_service.dart';
 import '../theme/app_spacing.dart';
+import 'design_system/app_success_check.dart';
 
 /// 小説のAI要約を表示するボトムシート（実験機能）。
 ///
@@ -953,6 +954,15 @@ class _LlmSummarySheetState extends State<LlmSummarySheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 16d-4: 生成完了の完了演出。size 32・1 度だけ。
+        // _phase が done に移行したとき 1 度だけ再生し、再生成で
+        // 別インスタンスが作られるまで再発動しない。
+        AppSuccessCheck(
+          size: 32,
+          visible: _phase == _SheetPhase.done,
+          onCompleted: () {},
+        ),
+        const SizedBox(height: AppSpacing.md),
         _buildModelMeta(result),
         if (result.bodySourceNote != null)
           Padding(

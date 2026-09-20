@@ -4,6 +4,7 @@ import '../services/database_service.dart';
 import '../services/download_service.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/design_system/app_state_view.dart';
+import '../widgets/design_system/app_success_check.dart';
 
 /// ダウンロードキュー管理画面
 ///
@@ -28,6 +29,11 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
   bool _isLoading = true;
   int _completedCount = 0;
   int _novelCacheBytes = 0;
+
+  /// 16d-4: 直近に完了したグループ ID。AppSuccessCheck は
+  /// この ID に対応するタイルにだけ 1 度だけ描かれる。
+  /// _svc.onComplete で立て、_load が DB に反映したらクリアする。
+  int? _justCompletedGroupId;
   final DownloadService _svc = DownloadService();
 
   @override
@@ -43,7 +49,11 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
       if (mounted) _scheduleRefresh();
     };
     _svc.onComplete = (groupId, workId, workType) {
-      if (mounted) _scheduleRefresh();
+      if (mounted) {
+        // 16d-4: 完了遷移だけを記録し、refresh で DB が反映されたら消す。
+        _justCompletedGroupId = groupId;
+        _scheduleRefresh();
+      }
     };
     _svc.onError = (groupId, workId, workType, errorCode, errorMessage) {
       if (mounted) _scheduleRefresh();
@@ -71,6 +81,10 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
           _groups = groups;
           _completedCount = completed;
           _novelCacheBytes = novelBytes;
+          // 16d-4: 完了が DB に反映されたので1回限りのフラグを下ろす。
+          // 以降の build（スクロール再描画・画面の開き直し）では
+          // AppSuccessCheck は最終状態を即表示するだけ。
+          _justCompletedGroupId = null;
         });
       }
     } catch (e) {
@@ -468,11 +482,24 @@ class _DownloadQueueScreenState extends State<DownloadQueueScreen> {
                 ],
               )
             else if (status == 'completed')
-              Text(
-                '$pageTotal ページ完了',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+              Row(
+                children: [
+                  // 16d-4: 完了に遷移したこのタイルだけ 1 度だけ再生する。
+                  // _justCompletedGroupId は DB への完了反映後に残らない
+                  // （次の _load でリリースされる）ので、スクロールで再び
+                  // 登場したときや画面を開き直したときには発動しない。
+                  AppSuccessCheck(
+                    size: 20,
+                    visible: _justCompletedGroupId == groupId,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Text(
+                    '$pageTotal ページ完了',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               )
             else if (status == 'failed')
               Column(

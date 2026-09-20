@@ -13,6 +13,7 @@ class AppStatusBanner extends StatelessWidget {
     required this.title,
     this.message,
     this.icon,
+    this.leading,
     this.actionLabel,
     this.onAction,
     this.margin,
@@ -29,6 +30,10 @@ class AppStatusBanner extends StatelessWidget {
 
   /// 任意のアイコン。未指定時は種別の既定値。
   final IconData? icon;
+
+  /// アイコンの代わりに描画する Widget（16d-4: AppSuccessCheck 用）。
+  /// [icon] より優先する。
+  final Widget? leading;
 
   /// action のラベル。[onAction] とともに指定した場合のみ表示。
   final String? actionLabel;
@@ -93,7 +98,7 @@ class AppStatusBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon ?? _defaultIcon, size: 20, color: colors.icon),
+          leading ?? Icon(icon ?? _defaultIcon, size: 20, color: colors.icon),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
