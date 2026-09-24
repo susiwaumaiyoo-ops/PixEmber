@@ -9,6 +9,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pixiv_viewer/screens/home_screen_state.dart';
+import 'package:pixiv_viewer/theme/app_motion.dart';
 import 'package:pixiv_viewer/theme/app_theme.dart';
 import 'package:pixiv_viewer/widgets/home_content_mode_selector.dart';
 
@@ -157,4 +158,98 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  // -------------------------------------------------------------------------
+  // 17e: HomeContentModeSelectorCollapse（スクロール連動の折りたたみ）
+  // ------------------------------------------------------------------------
+  group('HomeContentModeSelectorCollapse（17e）', () {
+    Future<void> pumpCollapse(
+      WidgetTester tester, {
+      required double collapse,
+      required int currentIndex,
+      required ValueChanged<int> onModeSelected,
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.darkTheme,
+          home: Scaffold(
+            body: HomeContentModeSelectorCollapse(
+              collapse: AnimationController(
+                vsync: tester,
+                value: collapse,
+                duration: AppMotion.medium,
+              ),
+              currentIndex: currentIndex,
+              onModeSelected: onModeSelected,
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('collapse=0.0 では完全に展開し、子がタップできる', (tester) async {
+      int? selected;
+      await pumpCollapse(
+        tester,
+        collapse: 0.0,
+        currentIndex: PixivViewerHomeState.illustIndex,
+        onModeSelected: (i) => selected = i,
+      );
+      // 外側の SizedBox がこの Widget の高さを決める。SegmentedButton の
+      // 内部にも SizedBox があるので .first で外側を一意に特定する。
+      final box = tester.widget<SizedBox>(
+        find
+            .descendant(
+              of: find.byType(HomeContentModeSelectorCollapse),
+              matching: find.byType(SizedBox),
+            )
+            .first,
+      );
+      expect(box.height, HomeContentModeSelector.preferredHeight);
+
+      // 折りたたまれていないので「小説」セグメントをタップできる。
+      await tester.tap(find.text('小説'));
+      await tester.pump();
+      expect(selected, PixivViewerHomeState.novelIndex);
+    });
+
+    testWidgets('collapse=1.0 では高さ 0 に縮み、タップできなくなる', (tester) async {
+      int? selected;
+      await pumpCollapse(
+        tester,
+        collapse: 1.0,
+        currentIndex: PixivViewerHomeState.illustIndex,
+        onModeSelected: (i) => selected = i,
+      );
+      final box = tester.widget<SizedBox>(
+        find
+            .descendant(
+              of: find.byType(HomeContentModeSelectorCollapse),
+              matching: find.byType(SizedBox),
+            )
+            .first,
+      );
+      expect(box.height, 0.0);
+      // OverflowBox が中身を固定高さで保持するため、テキストは
+      // ツリーに存在する。ただし ClipRect が完全に切り取っているので
+      // ヒットテストには到達せず、タップしてもコールバックが飛ばない。
+      await tester.tap(find.text('小説'), warnIfMissed: false);
+      await tester.pump();
+      expect(selected, isNull);
+      expect(tester.takeException(), isNull);
+    });
+
+    test('折りたたみ量は 96px のスクロールで 1.0 になる（距離の定数）', () {
+      // 17e: 距離の定数は本体の振る舞いを決める重要な値なので、
+      // 勝手に変わらないように契約化する。
+      expect(
+        PixivViewerHomeState.selectorCollapseDistance,
+        greaterThanOrEqualTo(64.0),
+      );
+      expect(
+        (96.0 / PixivViewerHomeState.selectorCollapseDistance).clamp(0.0, 1.0),
+        1.0,
+      );
+    });
+  });
 }

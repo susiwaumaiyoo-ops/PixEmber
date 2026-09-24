@@ -17,6 +17,11 @@ import '../theme/app_spacing.dart';
 ///
 /// 17c: 検索目的地を削除してフィーリング発掘の抑止（`showFeelingDiscovery`）
 /// は不要になった。常に 3 セグメントを表示する。
+///
+/// 17e: [HomeContentModeSelectorCollapse] で包むと、本文の縦スクロール量に
+/// 連動して高さが縮む（省スペース化）。本物の SliverAppBar + floating は
+/// ボディ構造の載せ替えが大きすぎるため、PreferredSize の高さをアニメーション
+/// させる形で等価な体感を実現する。
 class HomeContentModeSelector extends StatelessWidget {
   const HomeContentModeSelector({
     super.key,
@@ -71,6 +76,61 @@ class HomeContentModeSelector extends StatelessWidget {
           selected: {currentIndex},
           onSelectionChanged: (selection) => onModeSelected(selection.first),
         ),
+      ),
+    );
+  }
+}
+
+/// 17e: [HomeContentModeSelector] を包み、縦スクロール量に応じて高さを縮める。
+///
+/// [AppBar.bottom] には [PreferredSizeWidget] しか指定できないため、
+/// [SizeTransition] を直接は渡せない。このラッパーが [PreferredSize] の
+/// `preferredSize.height` をアニメーション値に合わせて縮めることで、
+/// セレクターが「スクロールで隠れる」体感を与える。完全に折りたたまれた
+/// 状態でもタッチ判定が残らないよう、高さ 0 のときは自身を描画しない。
+class HomeContentModeSelectorCollapse extends StatelessWidget
+    implements PreferredSizeWidget {
+  const HomeContentModeSelectorCollapse({
+    super.key,
+    required this.collapse,
+    required this.currentIndex,
+    required this.onModeSelected,
+  });
+
+  /// 折りたたみ量（0.0 = 展開 / 1.0 = 完全に折りたたみ）。
+  final Animation<double> collapse;
+
+  final int currentIndex;
+
+  final ValueChanged<int> onModeSelected;
+
+  @override
+  Size get preferredSize => Size.fromHeight(
+    (1.0 - collapse.value) * HomeContentModeSelector.preferredHeight,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: collapse,
+      builder: (context, child) {
+        final height =
+            (1.0 - collapse.value) * HomeContentModeSelector.preferredHeight;
+        return SizedBox(
+          height: height,
+          child: ClipRect(
+            child: OverflowBox(
+              minHeight: HomeContentModeSelector.preferredHeight,
+              maxHeight: HomeContentModeSelector.preferredHeight,
+              alignment: Alignment.topCenter,
+              child: child!,
+            ),
+          ),
+        );
+      },
+      child: HomeContentModeSelector(
+        currentIndex: currentIndex,
+        onModeSelected: onModeSelected,
       ),
     );
   }
