@@ -3,8 +3,9 @@
 // 検証対象:
 // - AppMotion.of が Reduce Motion 時に Duration.zero を返す
 // - AppPageTransitionsBuilder が MaterialPageRoute で例外なく動く
-// - 遷移中のツリーに Transform / FadeTransition が含まれる
-// - disableAnimations: true の配下ではフェードのみ（Slide/Scale が無い）
+// - 17f: 遷移はクロスフェードのみ（Slide / Scale / Transform が無い）
+// - 17f: 遷移中間は両画面が半透明（0 < opacity < 1）
+// - 遷移中のツリーに FadeTransition が含まれる
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pixiv_viewer/theme/app_motion.dart';
@@ -133,7 +134,7 @@ void main() {
       expect(find.text('root'), findsNothing);
     });
 
-    testWidgets('遷移中のツリーに Transform と FadeTransition が含まれる', (tester) async {
+    testWidgets('17f: 遷移中のツリーに FadeTransition が含まれる', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: _themeWithAppTransitions(),
@@ -148,18 +149,24 @@ void main() {
       );
       await _pushNext(tester);
 
-      expect(
-        find.byType(Transform),
-        findsWidgets,
-        reason: 'Slide/Scale が Transform を生成する',
-      );
+      // 17f: クロスフェードのみ。FadeTransition だけが出現する。
       expect(find.byType(FadeTransition), findsWidgets);
-      expect(find.byType(SlideTransition), findsOneWidget);
-      expect(find.byType(ScaleTransition), findsOneWidget);
+      expect(
+        find.byType(SlideTransition),
+        findsNothing,
+        reason: '17f: スライドを使わない',
+      );
+      expect(
+        find.byType(ScaleTransition),
+        findsNothing,
+        reason: '17f: スケールを使わない',
+      );
     });
 
-    testWidgets('disableAnimations 配下では Slide/Scale が適用されない', (tester) async {
-      // Reduce Motion 時はフェードのみ。Slide/Scale が出現しないことを検証する。
+    testWidgets('17f: クロスフェードは Reduce Motion でも同じ表示', (tester) async {
+      // 17f: 常にフェードだけなので、Reduce Motion の有無で
+      // 出力ウィジェットが変わらない。disableAnimations 配下でも
+      // Slide/Scale が出ないことを再確認する。
       // MaterialApp.builder で既存の MediaQuery に disableAnimations を上書きする
       // （WidgetsApp は View 経由で MediaQuery を作るので、 MaterialApp の外に
       //  MediaQuery を置いても上書きされてしまう。builder は Navigator より
@@ -189,13 +196,54 @@ void main() {
       expect(
         find.byType(SlideTransition),
         findsNothing,
-        reason: 'Reduce Motion 時は Slide をスキップする',
+        reason: '17f: 常にスライドを使わない',
       );
       expect(
         find.byType(ScaleTransition),
         findsNothing,
-        reason: 'Reduce Motion 時は Scale をスキップする',
+        reason: '17f: 常にスケールを使わない',
       );
+    });
+
+    testWidgets('17f: 遷移の中間で両画面が半透明になる（クロスフェード）', (tester) async {
+      // 16d-1 までの演出は「出ていく画面を動かさない」設計だったが、
+      // 17f では出ていく画面も同じ速度でフェードアウトする。
+      // 遷移の中間で、両方の画面が完全に不透明ではないことを確認する。
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: _themeWithAppTransitions(),
+          home: const _Placeholder(title: 'root'),
+          onGenerateRoute: (settings) {
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (_) => const _Placeholder(title: 'pushed'),
+            );
+          },
+        ),
+      );
+      tester
+          .element(find.byType(_Placeholder))
+          .findAncestorStateOfType<NavigatorState>()!
+          .pushNamed('next');
+      // push を 1 フレーム目で取り込んでから時間を進める。pump 1 回だけでは
+      // push 先の Route がまだツリーに無いので注意（_pushNext も同様）。
+      await tester.pump(Duration.zero);
+      // MaterialPageRoute のデフォルト遷移時間は 300ms。中間まで進める。
+      await tester.pump(const Duration(milliseconds: 150));
+
+      // 両画面ともツリーに残り、なおかつフェードの途中である。
+      expect(find.text('root'), findsOneWidget);
+      expect(find.text('pushed'), findsOneWidget);
+
+      // 17f: 入ってくる画面も出ていく画面も 0 < opacity < 1 になる。
+      final semiTransparent = tester
+          .widgetList<FadeTransition>(find.byType(FadeTransition))
+          .where((f) => f.opacity.value > 0.0 && f.opacity.value < 1.0);
+      expect(semiTransparent, isNotEmpty);
+
+      // Transform が無いことで位置・拡縮が変化していないことを担保する。
+      expect(find.byType(Transform), findsNothing);
+      expect(tester.takeException(), isNull);
     });
   });
 }

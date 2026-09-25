@@ -303,8 +303,8 @@ class AppTheme {
       ),
 
       // --- Motion: 16d-1 で AppPageTransitionsBuilder に統一 ---
-      // 16a では FadeUpwards だったが、16d でアプリ固有の強調減速遷移
-      // （縦 24px + scale 0.98 + フェード）に差し替えた。
+      // 17f: 実機フィードバック「遷移が少し重い」を受けて、シンプルな
+      // クロスフェード（フェードのみ）に差し替えた。
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
           TargetPlatform.android: AppPageTransitionsBuilder(),
