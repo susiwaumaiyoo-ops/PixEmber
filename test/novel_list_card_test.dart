@@ -6,10 +6,15 @@
 // カバー画像のサイズ計算に使い SizedBox(∞, ∞) を生成するため、
 // 「RenderBox was given an infinite size during layout」でクラッシュ
 // していた（タブレットの2列グリッド＝高さ固定では発生しない端末依存障害）。
+//
+// 17g: 透明感の契約（背景 α0.85・枠線 α0.5・ブラー無し）もここで検証する。
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pixiv_viewer/illust_model.dart';
 import 'package:pixiv_viewer/novel_model.dart';
+import 'package:pixiv_viewer/theme/app_theme.dart';
 import 'package:pixiv_viewer/widgets/novel_list_card.dart';
 
 Novel _buildNovel() => Novel(
@@ -30,6 +35,67 @@ Novel _buildNovel() => Novel(
 );
 
 void main() {
+  group('NovelListCard 透明感（17g）', () {
+    for (final (name, theme) in [
+      ('light', AppTheme.lightTheme),
+      ('dark', AppTheme.darkTheme),
+    ]) {
+      testWidgets('$name: 背景は surfaceContainer α0.85・枠線は α0.5', (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: theme,
+            home: Scaffold(
+              body: ListView(children: [NovelListCard(novel: _buildNovel())]),
+            ),
+          ),
+        );
+
+        final card = tester.widget<Card>(find.byType(Card));
+        final scheme = theme.colorScheme;
+
+        // 17g: 背景は surfaceContainer を α0.85 した色。
+        expect(
+          card.color,
+          scheme.surfaceContainer.withValues(alpha: NovelListCard.surfaceAlpha),
+        );
+        // 17g: 完全に不透明ではない（0 < alpha < 1）。
+        final bgAlpha = card.color!.a;
+        expect(bgAlpha, lessThan(1.0));
+        expect(bgAlpha, greaterThan(0.0));
+
+        // 17g: 影は完全に無くなった（透明背景に影は浮く）。
+        expect(card.elevation, 0.0);
+
+        // 17g: 枠線は outlineVariant を α0.5 に薄めた色。
+        final shape = card.shape! as RoundedRectangleBorder;
+        final border = shape.side;
+        expect(
+          border.color,
+          scheme.outlineVariant.withValues(alpha: NovelListCard.outlineAlpha),
+        );
+        // 17g: 枠線の角丸は AppTheme の CardTheme(=20) と一致。
+        expect(
+          (shape.borderRadius as BorderRadius).topLeft,
+          Radius.circular(NovelListCard.cardRadius),
+        );
+      });
+
+      testWidgets('$name: BackdropFilter / ImageFilter を使わない', (tester) async {
+        // 17g: ブラーは電量と性能の観点で禁止。装飾は色の半透明化のみ。
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: theme,
+            home: Scaffold(
+              body: ListView(children: [NovelListCard(novel: _buildNovel())]),
+            ),
+          ),
+        );
+        expect(find.byType(BackdropFilter), findsNothing);
+        expect(find.byType(ui.ImageFilter), findsNothing);
+      });
+    }
+  });
+
   group('NovelListCard レイアウト', () {
     testWidgets('高さ無制限（SliverList＝スマホ1列）でも無限サイズ制約でクラッシュしない', (tester) async {
       await tester.pumpWidget(

@@ -10,6 +10,12 @@ import 'pixiv_image.dart';
 /// - 類似度は [similarity] が null でない場合のみバッジ表示する。
 /// - 「意味近め%」表記は出さない（数値%のみ）。
 ///
+/// 17g: 透明感（実機フィードバック「カードがのっぺりして重たい」）:
+/// - 背景は [ColorScheme.surfaceContainer] を [surfaceAlpha] まで半透明化する。
+/// - 枠線は [ColorScheme.outlineVariant] を [outlineAlpha] に薄める。
+/// - ブラー（BackdropFilter / ImageFilter）は電量と性能の観点で使わない。
+///   背面コンテンツは滲まず「わずかに透ける」だけに留める。
+///
 /// ANR 防止規約（絶対）:
 /// - Column の children に Spacer / Expanded / Flexible を入れない。
 ///   （無限レイアウト → ANR を防ぐため）
@@ -55,12 +61,35 @@ class NovelListCard extends StatelessWidget {
   static const double _hGap = AppSpacing.sm;
   static const double _vGap = AppSpacing.sm - 2;
 
+  /// 17g: カードの角丸（AppTheme の CardTheme と同じ 20）。
+  @visibleForTesting
+  static const double cardRadius = 20.0;
+
+  /// 17g: カード背景の不透明度。surfaceContainer を半透明化し、
+  /// 背面のコンテンツがわずかに透けるようにする。
+  @visibleForTesting
+  static const double surfaceAlpha = 0.85;
+
+  /// 17g: カード枠線の不透明度。outlineVariant を半分に薄める。
+  @visibleForTesting
+  static const double outlineAlpha = 0.5;
+
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Card(
       clipBehavior: Clip.antiAlias,
-      elevation: 3,
+      // 17g: 影（elevation）は半透明背景と相性が悪いので完全にフラットにする。
+      elevation: 0,
       margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs - 2),
+      // 17g: 透明感。背景を α0.85・枠線を α0.5 にする。
+      color: colorScheme.surfaceContainer.withValues(alpha: surfaceAlpha),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(cardRadius),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: outlineAlpha),
+        ),
+      ),
       child: InkWell(
         onTap: onTap,
         child: Padding(
