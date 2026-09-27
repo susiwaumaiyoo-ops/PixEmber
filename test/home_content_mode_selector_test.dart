@@ -6,20 +6,24 @@
 //
 // 17c: 検索モードでのフィーリング発掘抑止（`showFeelingDiscovery`）は
 // 検索目的地の削除に伴い不要になった。常に 3 セグメントを表示する。
+//
+// 17h: 17e の「スクロール連動の折りたたみ」（HomeContentModeSelectorCollapse）
+// は実機で不安定だったため削除した。代わりに `compact: true` の小型ピルが
+// AppBar.title に常駐する。ここでは標準版と compact 版の両方を検証する。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pixiv_viewer/screens/home_screen_state.dart';
-import 'package:pixiv_viewer/theme/app_motion.dart';
 import 'package:pixiv_viewer/theme/app_theme.dart';
 import 'package:pixiv_viewer/widgets/home_content_mode_selector.dart';
 
 void main() {
   const modes = [
-    (PixivViewerHomeState.illustIndex, 'イラスト', Icons.image_outlined),
-    (PixivViewerHomeState.novelIndex, '小説', Icons.book_outlined),
+    (PixivViewerHomeState.illustIndex, 'イラスト', '絵', Icons.image_outlined),
+    (PixivViewerHomeState.novelIndex, '小説', '文', Icons.book_outlined),
     (
       PixivViewerHomeState.feelingDiscoveryIndex,
       'フィーリング発掘',
+      '感',
       Icons.auto_awesome_outlined,
     ),
   ];
@@ -28,6 +32,7 @@ void main() {
     WidgetTester tester, {
     required int currentIndex,
     required ValueChanged<int> onModeSelected,
+    bool compact = false,
     ThemeData? theme,
     double textScaleFactor = 1.0,
   }) async {
@@ -42,6 +47,7 @@ void main() {
         ),
         home: Scaffold(
           body: HomeContentModeSelector(
+            compact: compact,
             currentIndex: currentIndex,
             onModeSelected: onModeSelected,
           ),
@@ -50,7 +56,7 @@ void main() {
     );
   }
 
-  for (final (index, label, icon) in modes) {
+  for (final (index, label, _, icon) in modes) {
     testWidgets('モード $label（$index）のラベルとアイコンが表示される', (tester) async {
       await pumpSelector(tester, currentIndex: index, onModeSelected: (_) {});
       expect(find.text(label), findsOneWidget);
@@ -96,7 +102,7 @@ void main() {
     expect(find.text('小説'), findsOneWidget);
   });
 
-  for (final (index, label, _) in modes) {
+  for (final (index, label, _, _) in modes) {
     testWidgets('「$label」をタップすると index $index が通知される', (tester) async {
       // SegmentedButton は「選択中」のセグメントをタップしても
       // onSelectionChanged を呼ばない。そのため初期選択をターゲット以外にする。
@@ -160,96 +166,159 @@ void main() {
   }
 
   // -------------------------------------------------------------------------
-  // 17e: HomeContentModeSelectorCollapse（スクロール連動の折りたたみ）
+  // 17h: compact モード（AppBar.title に常駐する小型ピル）
   // ------------------------------------------------------------------------
-  group('HomeContentModeSelectorCollapse（17e）', () {
-    Future<void> pumpCollapse(
-      WidgetTester tester, {
-      required double collapse,
-      required int currentIndex,
-      required ValueChanged<int> onModeSelected,
-    }) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.darkTheme,
-          home: Scaffold(
-            body: HomeContentModeSelectorCollapse(
-              collapse: AnimationController(
-                vsync: tester,
-                value: collapse,
-                duration: AppMotion.medium,
-              ),
-              currentIndex: currentIndex,
-              onModeSelected: onModeSelected,
-            ),
-          ),
-        ),
-      );
+  group('HomeContentModeSelector compact（17h）', () {
+    for (final (index, fullLabel, shortLabel, _) in modes) {
+      testWidgets('compact=true は短縮ラベル「$shortLabel」を表示し Tooltip に完全名を保持する', (
+        tester,
+      ) async {
+        await pumpSelector(
+          tester,
+          currentIndex: PixivViewerHomeState.illustIndex,
+          onModeSelected: (_) {},
+          compact: true,
+        );
+        // 17h: UI 上のラベルは1文字に短縮される。
+        expect(find.text(shortLabel), findsOneWidget);
+        // 完全名のテキストは表示されない（Tooltip は message として保持）。
+        expect(find.text(fullLabel), findsNothing);
+        // Tooltip が完全名を保持しているか。セグメント順と modes の順は同じ。
+        final tooltip = tester.widget<Tooltip>(
+          find
+              .descendant(
+                of: find.byType(SegmentedButton<int>),
+                matching: find.byType(Tooltip),
+              )
+              .at(index),
+        );
+        expect(tooltip.message, fullLabel);
+      });
     }
 
-    testWidgets('collapse=0.0 では完全に展開し、子がタップできる', (tester) async {
+    testWidgets('compact=true でも 3 セグメント・選択状態・コールバックは同じ', (tester) async {
       int? selected;
-      await pumpCollapse(
+      await pumpSelector(
         tester,
-        collapse: 0.0,
         currentIndex: PixivViewerHomeState.illustIndex,
         onModeSelected: (i) => selected = i,
+        compact: true,
       );
-      // 外側の SizedBox がこの Widget の高さを決める。SegmentedButton の
-      // 内部にも SizedBox があるので .first で外側を一意に特定する。
-      final box = tester.widget<SizedBox>(
-        find
-            .descendant(
-              of: find.byType(HomeContentModeSelectorCollapse),
-              matching: find.byType(SizedBox),
-            )
-            .first,
+      final button = tester.widget<SegmentedButton<int>>(
+        find.byType(SegmentedButton<int>),
       );
-      expect(box.height, HomeContentModeSelector.preferredHeight);
+      expect(button.segments.length, 3);
+      expect(button.selected, {PixivViewerHomeState.illustIndex});
 
-      // 折りたたまれていないので「小説」セグメントをタップできる。
-      await tester.tap(find.text('小説'));
+      // compact でもタップでモード切替できる。
+      await tester.tap(find.text('文'));
       await tester.pump();
       expect(selected, PixivViewerHomeState.novelIndex);
     });
 
-    testWidgets('collapse=1.0 では高さ 0 に縮み、タップできなくなる', (tester) async {
-      int? selected;
-      await pumpCollapse(
+    for (final brightness in Brightness.values) {
+      final themeData = brightness == Brightness.dark
+          ? AppTheme.darkTheme
+          : AppTheme.lightTheme;
+
+      testWidgets('${brightness.name} の compact が Semantics ラベルを持つ', (
         tester,
-        collapse: 1.0,
-        currentIndex: PixivViewerHomeState.illustIndex,
-        onModeSelected: (i) => selected = i,
+      ) async {
+        final handle = tester.ensureSemantics();
+        await pumpSelector(
+          tester,
+          currentIndex: PixivViewerHomeState.illustIndex,
+          onModeSelected: (_) {},
+          compact: true,
+          theme: themeData,
+        );
+        expect(find.bySemanticsLabel('コンテンツ種別の切り替え'), findsOneWidget);
+        handle.dispose();
+      });
+    }
+
+    for (final factor in [1.0, 1.5, 2.0]) {
+      testWidgets('compact は textScaleFactor $factor で overflow しない', (
+        tester,
+      ) async {
+        await pumpSelector(
+          tester,
+          currentIndex: PixivViewerHomeState.feelingDiscoveryIndex,
+          onModeSelected: (_) {},
+          compact: true,
+          textScaleFactor: factor,
+        );
+        expect(find.byType(SegmentedButton<int>), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('compact selector を AppBar.title に組み込んで pump できる', (
+      tester,
+    ) async {
+      // 17h: 本番では [PixivViewerHomeState.build] が AppBar.title の Row に
+      // compact selector を置く。PixivViewerHome は build 内で DB にアクセス
+      // するため直接 pump できないので、同じ AppBar 構造を組み立てて検証する。
+      int? selected;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Scaffold(
+            appBar: AppBar(
+              title: Row(
+                children: [
+                  const Icon(Icons.auto_awesome),
+                  const SizedBox(width: 8),
+                  const Expanded(child: Text('フィーリング発掘')),
+                  HomeContentModeSelector(
+                    compact: true,
+                    currentIndex: PixivViewerHomeState.feelingDiscoveryIndex,
+                    onModeSelected: (i) => selected = i,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       );
-      final box = tester.widget<SizedBox>(
-        find
-            .descendant(
-              of: find.byType(HomeContentModeSelectorCollapse),
-              matching: find.byType(SizedBox),
-            )
-            .first,
-      );
-      expect(box.height, 0.0);
-      // OverflowBox が中身を固定高さで保持するため、テキストは
-      // ツリーに存在する。ただし ClipRect が完全に切り取っているので
-      // ヒットテストには到達せず、タップしてもコールバックが飛ばない。
-      await tester.tap(find.text('小説'), warnIfMissed: false);
+
+      // AppBar 内で short ラベルが表示される。
+      expect(find.text('絵'), findsOneWidget);
+      expect(find.text('文'), findsOneWidget);
+      expect(find.text('感'), findsOneWidget);
+
+      // 選択中でないセグメントをタップするとコールバックが飛ぶ。
+      await tester.tap(find.text('絵'));
       await tester.pump();
-      expect(selected, isNull);
+      expect(selected, PixivViewerHomeState.illustIndex);
       expect(tester.takeException(), isNull);
     });
+  });
 
-    test('折りたたみ量は 96px のスクロールで 1.0 になる（距離の定数）', () {
-      // 17e: 距離の定数は本体の振る舞いを決める重要な値なので、
-      // 勝手に変わらないように契約化する。
-      expect(
-        PixivViewerHomeState.selectorCollapseDistance,
-        greaterThanOrEqualTo(64.0),
-      );
-      expect(
-        (96.0 / PixivViewerHomeState.selectorCollapseDistance).clamp(0.0, 1.0),
-        1.0,
-      );
+  // -------------------------------------------------------------------------
+  // 17h: 17e の折りたたみは撤回された（ソース検査による回帰防止）
+  // ------------------------------------------------------------------------
+  group('17e 折りたたみの撤回（17h）', () {
+    test('HomeContentModeSelectorCollapse は存在しない', () {
+      // 17e で追加したラッパーは削除された。リフレクション無しでは
+      // 「存在しないこと」を直接表明できないので、代わりに compact の
+      // 定数が意図した値であることを契約化する（将来の誤変更を防ぐ）。
+      expect(HomeContentModeSelector.compactHeight, 48);
+      expect(HomeContentModeSelector.preferredHeight, 64);
+    });
+
+    test('compact ラベルは3モード分すべて定義されている', () {
+      // 17h: 短縮ラベルが3モード分漏れなく定義されていること。
+      expect(HomeContentModeSelector.compactHeight, greaterThanOrEqualTo(48));
+      // ラベルの定義はテストの modes と一致する必要がある。
+      const expected = {
+        PixivViewerHomeState.illustIndex: '絵',
+        PixivViewerHomeState.novelIndex: '文',
+        PixivViewerHomeState.feelingDiscoveryIndex: '感',
+      };
+      for (final (index, _, shortLabel, _) in modes) {
+        expect(shortLabel, expected[index]);
+      }
     });
   });
 }

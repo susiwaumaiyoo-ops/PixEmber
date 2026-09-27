@@ -26,7 +26,6 @@ import '../services/novel_document_text.dart';
 import '../services/search_preset_service.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:crypto/crypto.dart';
-import '../theme/app_motion.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/home_content_mode_selector.dart';
 
@@ -42,8 +41,7 @@ class PixivViewerHome extends StatefulWidget {
   State<PixivViewerHome> createState() => PixivViewerHomeState();
 }
 
-class PixivViewerHomeState extends State<PixivViewerHome>
-    with SingleTickerProviderStateMixin {
+class PixivViewerHomeState extends State<PixivViewerHome> {
   /// ハンドラー／UI コンポーネントから安全に状態更新するための公開 API。
   void applyState(VoidCallback fn) {
     if (mounted) {
@@ -344,21 +342,6 @@ class PixivViewerHomeState extends State<PixivViewerHome>
   // スクロールコントローラー（無限スクロール用）
   late final ScrollController scrollController;
 
-  /// 17e: 本文の縦スクロール量に応じてセレクター領域を折りたたむ。
-  ///
-  /// 本物の [SliverAppBar] + floating は、現状の Column + Expanded の
-  /// ボディ構造（コンテンツが box widget として自前スクロールを持つ）
-  /// では載せ替えが大きすぎるため、スクロール量から計算する
-  /// 「追従型折りたたみ」で等価な体感を実現する。値は 0.0（展開）〜
-  /// 1.0（完全に折りたたみ）。[AppBar.bottom] の高さをこの値で縮める。
-  /// Reduce Motion 時はアニメーションさせず値を直接セットする。
-  late final AnimationController selectorCollapseController;
-
-  /// 17e: セレクターを完全に折りたたむまでのスクロール距離（px）。
-  /// 短すぎるとチラつき、長すぎると反応が鈍い。ヘッダー全体が
-  /// スクロールアウトする前に折りたたみを完了させる。
-  static const double selectorCollapseDistance = 96.0;
-
   // ランキング用のアクティブモード設定
   String selectedIllustRankMode = 'day';
   String selectedNovelRankMode = 'day';
@@ -408,32 +391,10 @@ class PixivViewerHomeState extends State<PixivViewerHome>
   @override
   void initState() {
     super.initState();
-    selectorCollapseController = AnimationController(
-      vsync: this,
-      duration: AppMotion.medium,
-      value: 0.0,
-    );
     searchController = TextEditingController();
     scrollController = ScrollController()
       ..addListener(() {
-        // 17e: 本文の縦スクロール量に応じてセレクターを折りたたむ。
-        // 上方向へスクロールを戻すとすぐに展開に戻る。
         final pixels = scrollController.position.pixels;
-        final target = (pixels / selectorCollapseDistance).clamp(0.0, 1.0);
-        if ((selectorCollapseController.value - target).abs() >= 0.01) {
-          if (AppMotion.reduce(context)) {
-            // Reduce Motion: アニメーションせず値を直接セットする。
-            selectorCollapseController.value = target;
-          } else {
-            // animateTo で滑らかに追従させる（指の動きに対する追従）。
-            selectorCollapseController.animateTo(
-              target,
-              duration: AppMotion.short,
-              curve: AppMotion.enter,
-            );
-          }
-        }
-
         if (pixels >= scrollController.position.maxScrollExtent - 200 &&
             !isLoading &&
             nextOffset != null) {
@@ -506,7 +467,6 @@ class PixivViewerHomeState extends State<PixivViewerHome>
   void dispose() {
     searchController.dispose();
     scrollController.dispose();
-    selectorCollapseController.dispose();
     searchFocusNode.dispose();
     minTextLengthController?.dispose();
     maxTextLengthController?.dispose();
@@ -663,10 +623,7 @@ class PixivViewerHomeState extends State<PixivViewerHome>
     if (currentIndex == index) return;
 
     searchFocusNode.unfocus();
-    // 17e: タブ切替直後はスクロール位置がリセットされていなくても、
-    // セレクターは展開状態から始める（前のタブの折りたたみを引き継がない）。
-    selectorCollapseController.value = 0.0;
-    // スクロール位置も先頭に戻す（前のタブの読み進め位置を引き継がない）。
+    // スクロール位置を先頭に戻す（前のタブの読み進め位置を引き継がない）。
     if (scrollController.hasClients) {
       scrollController.jumpTo(0.0);
     }
@@ -1678,11 +1635,21 @@ class PixivViewerHomeState extends State<PixivViewerHome>
               color: colorScheme.primary,
             ),
             const SizedBox(width: AppSpacing.sm),
-            Text(
-              _appBarTitle,
-              style: textTheme.titleLarge?.copyWith(
-                color: colorScheme.onSurface,
+            Expanded(
+              child: Text(
+                _appBarTitle,
+                style: textTheme.titleLarge?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
               ),
+            ),
+            // 17h: コンテンツ種別の切替は AppBar の title 行右側に常駐させる。
+            // 17e の折りたたみは「セレクターだけが動いて本文が動かない」
+            // 不具合だったため廃止。常時表示で到達性を保つ。
+            HomeContentModeSelector(
+              compact: true,
+              currentIndex: currentIndex,
+              onModeSelected: changeTab,
             ),
           ],
         ),
@@ -1723,17 +1690,6 @@ class PixivViewerHomeState extends State<PixivViewerHome>
             ],
           ),
         ],
-        // 16c-2a: コンテンツ種別の切替はボトムナビから AppBar 直下の
-        // セグメントコントロールへ移動した。Scaffold.bottomNavigationBar は
-        // 16c-2c で殻（AppShell）の NavigationBar に明渡すため空ける。
-        //
-        // 17e: 本文スクロール量に連動してこの領域を折りたたみ、縦方向の
-        // スペースを回収する（画面下部のタブは固定なので AppBar 側だけ動く）。
-        bottom: HomeContentModeSelectorCollapse(
-          collapse: selectorCollapseController,
-          currentIndex: currentIndex,
-          onModeSelected: changeTab,
-        ),
       ),
       // 16c-4c: 旧 Drawer は完全に削除した（ハンバーガーアイコンも
       // Scaffold.drawer がなくなったことで自動的に消滅）。
