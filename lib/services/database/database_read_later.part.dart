@@ -50,15 +50,37 @@ abstract class DatabaseServiceReadLater extends DatabaseServiceDownloadQueue {
   }
 
   /// 一覧を取得する。[status] が null なら全件、指定ならフィルタ。
+  /// [query] が非空（trim 後）なら、title / author_name / tags_json の
+  /// いずれかに部分一致（LIKE %query%）する行のみを返す。
+  /// [query] が null・空・空白のみなら従来（フィルタなし）と完全に同一の SQL。
   /// 追加日時の新しい順でソート。
-  Future<List<Map<String, dynamic>>> getReadLaterList({int? status}) async {
+  Future<List<Map<String, dynamic>>> getReadLaterList({
+    int? status,
+    String? query,
+  }) async {
     final db = await database;
+    final where = <String>[];
+    final args = <Object?>[];
+    if (status != null) {
+      where.add('status = ?');
+      args.add(status);
+    }
+    // LIKE は searchNovelsLexical（database_search.dart）と同一のパターン。
+    // ワイルドカード（% / _）のエスケープは行わない（検索 UI では稀であり、
+    // 過剰実装を避ける）。既定の LIKE 挙動（ASCII は大文字小文字無視）を
+    // test/read_later_search_test.dart で固定する。
+    final trimmedQuery = query?.trim() ?? '';
+    if (trimmedQuery.isNotEmpty) {
+      final like = '%$trimmedQuery%';
+      where.add('(title LIKE ? OR author_name LIKE ? OR tags_json LIKE ?)');
+      args.addAll([like, like, like]);
+    }
     // sqflite の db.query() は read-only（Unmodifiable）リストを返すため、
     // 呼び出し側で書き換え・破壊的操作される前提で可変コピーを返す。
     final rows = await db.query(
       'read_later',
-      where: status == null ? null : 'status = ?',
-      whereArgs: status == null ? null : [status],
+      where: where.isEmpty ? null : where.join(' AND '),
+      whereArgs: where.isEmpty ? null : args,
       orderBy: 'added_at DESC, id DESC',
     );
     return List<Map<String, dynamic>>.from(rows);
