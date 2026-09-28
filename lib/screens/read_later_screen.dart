@@ -34,11 +34,19 @@ class _ReadLaterScreenState extends State<ReadLaterScreen>
   bool _isLoading = false;
   bool _showR18 = false;
 
+  // 18b: コレクション内検索（タイトル・作者名・タグの部分一致）。
+  // 検索語はタブ切替を跨いで維持し、検索モード解除時にのみクリアする。
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  bool _searchMode = false;
+  String _searchQuery = '';
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
     _tabController.addListener(_onTabChanged);
+    _searchController.addListener(_onSearchChanged);
     _loadAll();
   }
 
@@ -46,7 +54,53 @@ class _ReadLaterScreenState extends State<ReadLaterScreen>
   void dispose() {
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  /// LIKE はローカル DB に対して十分速いため、デバウンスなしで即時反映する。
+  void _onSearchChanged() {
+    final query = _searchController.text;
+    if (query == _searchQuery) return;
+    _searchQuery = query;
+    setState(() {});
+    _applySearch();
+  }
+
+  /// 検索語を適用して全タブを再取得する（全画面の loading を出さない）。
+  Future<void> _applySearch() async {
+    try {
+      for (final status in _tabs) {
+        _cache[status] = await DatabaseService().getReadLaterList(
+          status: status,
+          query: _queryArg(),
+        );
+      }
+      if (mounted) setState(() {});
+    } catch (e) {
+      _showSnackBar('一覧の読み込みに失敗しました: $e');
+    }
+  }
+
+  /// DB 層に渡す query（空・空白のみは null=フィルタなし）。
+  String? _queryArg() {
+    final trimmed = _searchQuery.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  void _toggleSearchMode() {
+    setState(() => _searchMode = true);
+  }
+
+  /// 検索モード解除：検索語をクリアし全件表示に戻す。
+  Future<void> _exitSearchMode() async {
+    _searchFocusNode.unfocus();
+    _searchQuery = '';
+    _searchController.clear();
+    setState(() => _searchMode = false);
+    await _applySearch();
   }
 
   void _onTabChanged() {
@@ -58,9 +112,11 @@ class _ReadLaterScreenState extends State<ReadLaterScreen>
   Future<void> _loadAll() async {
     setState(() => _isLoading = true);
     try {
+      final query = _queryArg();
       for (final status in _tabs) {
         _cache[status] = await DatabaseService().getReadLaterList(
           status: status,
+          query: query,
         );
       }
     } catch (e) {
@@ -72,7 +128,10 @@ class _ReadLaterScreenState extends State<ReadLaterScreen>
 
   Future<void> _load(int? status) async {
     try {
-      _cache[status] = await DatabaseService().getReadLaterList(status: status);
+      _cache[status] = await DatabaseService().getReadLaterList(
+        status: status,
+        query: _queryArg(),
+      );
       if (mounted) setState(() {});
     } catch (e) {
       _showSnackBar('一覧の読み込みに失敗しました: $e');
@@ -189,7 +248,27 @@ class _ReadLaterScreenState extends State<ReadLaterScreen>
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
-        title: const Text('あとで読む'),
+        // 18b: 検索モード中は title を TextField に差し替える。
+        // actions の IconButton 群と共存しやすく、通常時のレイアウトを
+        // 一切変えない。検索モード中は close ボタンのみ表示し、
+        // 解除で従来の actions に戻る。
+        title: _searchMode
+            ? TextField(
+                controller: _searchController,
+                focusNode: _searchFocusNode,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  hintText: 'タイトル・作者・タグで検索',
+                  hintStyle: TextStyle(color: Colors.white54),
+                  border: InputBorder.none,
+                  isCollapsed: true,
+                  contentPadding: EdgeInsets.zero,
+                  prefixIcon: Icon(Icons.search, color: Colors.white54),
+                ),
+                onSubmitted: (_) => _searchFocusNode.unfocus(),
+              )
+            : const Text('あとで読む'),
         backgroundColor: Colors.black87,
         bottom: TabBar(
           controller: _tabController,
@@ -201,21 +280,37 @@ class _ReadLaterScreenState extends State<ReadLaterScreen>
             Tab(text: '読了 (${_visibleItems(2).length})'),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.auto_fix_high, color: Colors.pinkAccent),
-            onPressed: _showOrganizeSheet,
-            tooltip: 'あとで読む整理提案',
-          ),
-          IconButton(
-            icon: Icon(
-              _showR18 ? Icons.visibility : Icons.visibility_off,
-              color: _showR18 ? Colors.pinkAccent : Colors.white70,
-            ),
-            onPressed: () => setState(() => _showR18 = !_showR18),
-            tooltip: _showR18 ? 'R-18 を表示' : 'R-18 を非表示',
-          ),
-        ],
+        actions: _searchMode
+            ? [
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white70),
+                  onPressed: _exitSearchMode,
+                  tooltip: '検索を終了',
+                ),
+              ]
+            : [
+                IconButton(
+                  icon: const Icon(Icons.search, color: Colors.white70),
+                  onPressed: _toggleSearchMode,
+                  tooltip: '検索',
+                ),
+                IconButton(
+                  icon: const Icon(
+                    Icons.auto_fix_high,
+                    color: Colors.pinkAccent,
+                  ),
+                  onPressed: _showOrganizeSheet,
+                  tooltip: 'あとで読む整理提案',
+                ),
+                IconButton(
+                  icon: Icon(
+                    _showR18 ? Icons.visibility : Icons.visibility_off,
+                    color: _showR18 ? Colors.pinkAccent : Colors.white70,
+                  ),
+                  onPressed: () => setState(() => _showR18 = !_showR18),
+                  tooltip: _showR18 ? 'R-18 を表示' : 'R-18 を非表示',
+                ),
+              ],
       ),
       body: _isLoading
           ? const AppStateView(type: AppStateViewType.loading)
@@ -241,6 +336,14 @@ class _ReadLaterScreenState extends State<ReadLaterScreen>
   }
 
   Widget _buildEmptyState(int? status) {
+    // 18b: 検索語が非空で結果 0 件の場合は「見つかりません」を表示する。
+    if (_searchQuery.trim().isNotEmpty) {
+      return AppStateView(
+        type: AppStateViewType.empty,
+        icon: Icons.search_off,
+        title: '該当する作品が見つかりません',
+      );
+    }
     final label = status == 0
         ? '未読の作品'
         : status == 1
