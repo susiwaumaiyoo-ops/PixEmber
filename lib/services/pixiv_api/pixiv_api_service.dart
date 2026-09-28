@@ -50,6 +50,24 @@ class NovelNotFoundException implements Exception {
 
 class PixivApiService {
   static final PixivApiService _instance = PixivApiService._internal();
+
+  /// 19A-1: AI作品ミュートの判定を1箇所に集約する。
+  ///
+  /// 戻り値は「その作品を残すか」。
+  /// - `aiMuteValue == '1'`: AI作品を非表示にする（非AIのみ残す）
+  /// - `aiMuteValue == '2'`: **AI作品のみにする（逆フィルタ）**。
+  ///   旧実装はここで全件を `continue` して全作品を非表示にするバグだった。
+  /// - `null` / `'0'` / その他: 除外しない（すべて残す）。
+  ///
+  /// `'2'` のとき非AIを除外する（AIのみ残す）のが mute_settings_screen の
+  /// ラベル「AI作品のみにする (逆フィルタ)」と一致する挙動。
+  @visibleForTesting
+  static bool shouldKeepAiWork(String? aiMuteValue, bool isAiWork) {
+    if (aiMuteValue == '1') return !isAiWork;
+    if (aiMuteValue == '2') return isAiWork;
+    return true;
+  }
+
   factory PixivApiService() => _instance;
   PixivApiService._internal();
 
@@ -158,10 +176,10 @@ class PixivApiService {
         .whereType<int>()
         .toSet();
 
-    // AI作品ミュート設定
-    // '0': AI以外（AI作品をミュート）
-    // '1': AI作品（AI以外をミュート）
-    // '2': すべてをミュート
+    // AI作品ミュート設定（19A-1: 判定は shouldKeepAiWork を参照）
+    // '0': 除外しない（すべて表示）
+    // '1': AI作品を非表示にする
+    // '2': AI作品のみにする（逆フィルタ）
     final aiMuteRecord = mutes.firstWhere(
       (m) => m['mute_type'] == 'ai',
       orElse: () => {},
@@ -195,10 +213,10 @@ class PixivApiService {
         .whereType<int>()
         .toSet();
 
-    // AI作品ミュート設定
-    // '0': AI以外（AI作品をミュート）
-    // '1': AI作品（AI以外をミュート）
-    // '2': すべてをミュート
+    // AI作品ミュート設定（19A-1: 判定は shouldKeepAiWork を参照）
+    // '0': 除外しない（すべて表示）
+    // '1': AI作品を非表示にする
+    // '2': AI作品のみにする（逆フィルタ）
     final aiMuteRecord = mutes.firstWhere(
       (m) => m['mute_type'] == 'ai',
       orElse: () => {},
@@ -262,21 +280,11 @@ class PixivApiService {
           continue;
         }
 
-        // 3. AI作品ミュート
-        // pixivのイラストデータ構造: item['illust_ai_type'] == 2 がAI作品
+        // 3. AI作品ミュート（illust_ai_type == 2 がAI作品）
+        // 19A-1: 判定は shouldKeepAiWork に集約（'2'=AIのみ残す）。
         final int aiType = itemMap['illust_ai_type'] as int? ?? 0;
-        final bool isAiWork = aiType == 2;
-        if (aiMuteValue != null) {
-          if (aiMuteValue == '1' && isAiWork) {
-            // AI作品をミュート
-            continue;
-          } else if (aiMuteValue == '0' && !isAiWork) {
-            // AI以外をミュート
-            continue;
-          } else if (aiMuteValue == '2') {
-            // すべてミュート
-            continue;
-          }
+        if (!PixivApiService.shouldKeepAiWork(aiMuteValue, aiType == 2)) {
+          continue;
         }
 
         final illust = Illust.fromJson(itemMap);
@@ -403,18 +411,11 @@ class PixivApiService {
           continue;
         }
 
-        // 3. AI作品ミュート
-        // 小説の構造: novel_ai_type == 2 がAI作品
+        // 3. AI作品ミュート（novel_ai_type == 2 がAI作品）
+        // 19A-1: 判定は shouldKeepAiWork に集約（'2'=AIのみ残す）。
         final int aiType = itemMap['novel_ai_type'] as int? ?? 0;
-        final bool isAiWork = aiType == 2;
-        if (aiMuteValue != null) {
-          if (aiMuteValue == '1' && isAiWork) {
-            continue;
-          } else if (aiMuteValue == '0' && !isAiWork) {
-            continue;
-          } else if (aiMuteValue == '2') {
-            continue;
-          }
+        if (!PixivApiService.shouldKeepAiWork(aiMuteValue, aiType == 2)) {
+          continue;
         }
 
         final novel = Novel.fromJson(itemMap);
@@ -1992,16 +1993,10 @@ List<Map<String, dynamic>> _filterIllustsInIsolate(
       }
       if (hasMutedTag) continue;
 
+      // AI作品ミュート（19A-1: shouldKeepAiWork に集約）
       final int aiType = itemMap['illust_ai_type'] as int? ?? 0;
-      final bool isAiWork = aiType == 2;
-      if (aiMuteValue != null) {
-        if (aiMuteValue == '1' && isAiWork) {
-          continue;
-        } else if (aiMuteValue == '0' && !isAiWork) {
-          continue;
-        } else if (aiMuteValue == '2') {
-          continue;
-        }
+      if (!PixivApiService.shouldKeepAiWork(aiMuteValue, aiType == 2)) {
+        continue;
       }
 
       filtered.add(itemMap);
@@ -2084,16 +2079,10 @@ List<Map<String, dynamic>> _filterNovelsInIsolate(
       }
       if (hasMutedTag) continue;
 
+      // AI作品ミュート（19A-1: shouldKeepAiWork に集約）
       final int aiType = itemMap['novel_ai_type'] as int? ?? 0;
-      final bool isAiWork = aiType == 2;
-      if (aiMuteValue != null) {
-        if (aiMuteValue == '1' && isAiWork) {
-          continue;
-        } else if (aiMuteValue == '0' && !isAiWork) {
-          continue;
-        } else if (aiMuteValue == '2') {
-          continue;
-        }
+      if (!PixivApiService.shouldKeepAiWork(aiMuteValue, aiType == 2)) {
+        continue;
       }
 
       filtered.add(itemMap);

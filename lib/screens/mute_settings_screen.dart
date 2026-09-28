@@ -126,6 +126,11 @@ class _MuteSettingsScreenState extends State<MuteSettingsScreen> {
                     style: const TextStyle(color: Colors.white),
                     initialValue: '1',
                     items: const [
+                      // 19A-1: '0'=除外しないが到達不可だったため選択肢に復旧。
+                      DropdownMenuItem(
+                        value: '0',
+                        child: Text('除外しない (すべて表示)'),
+                      ),
                       DropdownMenuItem(
                         value: '1',
                         child: Text('AI作品を完全に非表示にする'),
@@ -278,7 +283,13 @@ class _MuteSettingsScreenState extends State<MuteSettingsScreen> {
 
                   String valueLabel = '';
                   if (mute['mute_type'] == 'ai') {
-                    valueLabel = mute['value'] == '1' ? 'AI作品非表示' : 'AI作品のみ表示';
+                    // 19A-1: '0'=除外しないも一覧表示に対応。
+                    final aiVal = mute['value'].toString();
+                    valueLabel = aiVal == '1'
+                        ? 'AI作品非表示'
+                        : aiVal == '2'
+                        ? 'AI作品のみ表示'
+                        : '除外しない (すべて表示)';
                   } else {
                     final label = mute['label'];
                     if (label != null && label.toString().isNotEmpty) {
