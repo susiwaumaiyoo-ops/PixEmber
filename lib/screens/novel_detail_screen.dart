@@ -1362,20 +1362,20 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                         ElevatedButton.icon(
                           onPressed: () async {
                             // 17b: リーダーは root Navigator に積みボトムナビを隠す。
-                            final res =
-                                await Navigator.of(
-                                  context,
-                                  rootNavigator: true,
-                                ).push(
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        NovelReaderScreen(novel: widget.novel),
-                                  ),
-                                );
+                            // 19A-2: リーダーは戻り値を返さずに pop するため、
+                            // res の値に関わらず常に進捗を再読込する。
+                            // （従来は res == true のみ再読込で、実質発火しなかった）
+                            await Navigator.of(
+                              context,
+                              rootNavigator: true,
+                            ).push(
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    NovelReaderScreen(novel: widget.novel),
+                              ),
+                            );
                             if (!mounted) return;
-                            if (res == true) {
-                              _loadReadingProgress();
-                            }
+                            _loadReadingProgress();
                           },
                           icon: const Icon(Icons.chrome_reader_mode, size: 16),
                           label: Text(
